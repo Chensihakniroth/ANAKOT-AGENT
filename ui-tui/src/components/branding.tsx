@@ -2,7 +2,7 @@ import { Box, Text, useStdout } from '@anakot/ink'
 import { useEffect, useState } from 'react'
 import unicodeSpinners from 'unicode-animations'
 
-import { logo, LOGO_WIDTH } from '../banner.js'
+import { artWidth, logo, LOGO_WIDTH } from '../banner.js'
 import { flat } from '../lib/text.js'
 import type { Theme } from '../theme.js'
 import type { PanelSection, SessionInfo } from '../types.js'
