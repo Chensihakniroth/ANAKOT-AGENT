@@ -39,45 +39,26 @@ export function ArtLines({ lines }: { lines: [string, string][] }) {
   )
 }
 
-// Responsive Banner: full art → compact rule → text → hidden.
-//
-// Terminals can't scale glyphs, so "responsive" means picking a layout that
-// fits the available columns. Thresholds are picked so each tier reads
-// comfortably without forcing wrap or truncation drift on box-drawing edges.
-const TAG_FULL = 'Anakot · Agent of the Future'
-const TAG_MID = 'Agent of the Future'
+// Responsive Banner: full art → compact → text → hidden.
+const TAG_FULL = 'Agent of the Future'
 const TAG_TINY = 'Anakot'
 const HIDE_BELOW = 34
 const COMPACT_FROM = 58
 
-const clip = (s: string, w: number) =>
-  w <= 0 ? '' : s.length > w ? `${s.slice(0, Math.max(0, w - 1))}…` : s
-
 const centerIn = (s: string, w: number) => {
-  const f = clip(s, w)
-  const slack = Math.max(0, w - f.length)
+  const slack = Math.max(0, w - s.length)
   const left = slack >> 1
 
-  return `${' '.repeat(left)}${f}${' '.repeat(slack - left)}`
-}
-
-const ruleIn = (label: string, w: number) => {
-  const f = clip(label, Math.max(1, w - 4))
-  const slack = Math.max(0, w - f.length - 2)
-  const left = slack >> 1
-
-  return `${'─'.repeat(left)} ${f} ${'─'.repeat(slack - left)}`
+  return `${' '.repeat(left)}${s}${' '.repeat(slack - left)}`
 }
 
 function CompactBanner({ cols, t }: { cols: number; t: Theme }) {
-  // -4 keeps a margin so exact-edge rows don't trip terminal pending-wrap.
+  // Minimal header: just the name centered
   const w = Math.max(28, cols - 4)
 
   return (
-    <Box flexDirection="column" height={3} marginBottom={1} opaque width={w}>
-      <Text bold color={t.color.primary}>{ruleIn(t.brand.name, w)}</Text>
-      <Text color={t.color.muted}>{centerIn(TAG_FULL, w)}</Text>
-      <Text color={t.color.primary}>{'─'.repeat(w)}</Text>
+    <Box flexDirection="column" height={1} marginBottom={1} opaque width={w}>
+      <Text bold color={t.color.primary}>{centerIn(t.brand.name, w)}</Text>
     </Box>
   )
 }
@@ -109,7 +90,7 @@ export function Banner({ maxWidth, t }: { maxWidth?: number; t: Theme }) {
   }
 
   const name = cols >= 52 ? t.brand.name : (t.brand.name.split(' ')[0] ?? t.brand.name)
-  const tag = cols >= 64 ? TAG_FULL : cols >= 46 ? TAG_MID : TAG_TINY
+  const tag = cols >= 64 ? TAG_FULL : TAG_TINY
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -307,25 +288,28 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
           <Box justifyContent="center" marginBottom={1}>
             <Text bold color={t.color.primary}>
               {t.brand.name}
-              {info.version ? ` v${info.version}` : ''}
+            </Text>
+            <Text color={t.color.textMuted}>
+              {info.version ? `v${info.version}` : ''}
               {info.release_date ? ` (${info.release_date})` : ''}
             </Text>
           </Box>
         ) : (
-          // Narrow layout hides the hero column; surface model/cwd/session
-          // here so they aren't lost.
+          // Narrow layout: show model, path, session each on own line
           <Box flexDirection="column" marginBottom={1}>
             <Text color={t.color.accent} wrap="truncate-end">
               {info.model.split('/').pop()}
-              <Text color={t.color.muted}> · Anakot</Text>
             </Text>
-            <Text color={t.color.muted} wrap="truncate-end">
+            <Text color={t.color.textMuted} wrap="truncate-end">
+              {info.version ? `v${info.version}` : ''}
+              {info.release_date ? ` (${info.release_date})` : ''}
+            </Text>
+            <Text color={t.color.textMuted} wrap="truncate-end">
               {info.cwd || process.cwd()}
             </Text>
             {sid && (
-              <Text wrap="truncate-end">
-                <Text color={t.color.sessionLabel}>Session: </Text>
-                <Text color={t.color.sessionBorder}>{sid}</Text>
+              <Text color={t.color.textMuted} wrap="truncate-end">
+                {sid}
               </Text>
             )}
           </Box>

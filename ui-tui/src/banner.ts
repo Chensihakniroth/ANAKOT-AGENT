@@ -44,15 +44,16 @@ export function parseRichMarkup(markup: string): Line[] {
 }
 
 // ── ASCII Art Logo ─────────────────────────────────────────────────────
-// Plain ASCII for maximum terminal compatibility.
-// "ANAKOT" in block letters using # characters.
+// "ANAKOT" in block letters using Unicode box-drawing characters.
+// 52 columns wide, 6 tall. Each line is padded to the same display width.
 
 const LOGO_ART = [
-  ' ###  ## ##   ##  ##  ##  ##  #  # ',
-  ' #    # # #  #  # #  # #  # ## #  ',
-  ' #### # # #  #### #### #### # ##   ',
-  '    # # # #  #  # # ##  # ## #  #  ',
-  ' ###  #  ##  #  # #  # #  # #   # ',
+  ' █████╗ ███╗   ██╗ █████╗ ██╗  ██╗ ██████╗ ████████╗',
+  '██╔══██╗████╗  ██║██╔══██╗██║ ██╔╝██╔═══██╗╚══██╔══╝',
+  '███████║██╔██╗ ██║███████║█████╔╝ ██║   ██║   ██║   ',
+  '██╔══██║██║╚██╗██║██╔══██║██╔═██╗ ██║   ██║   ██║   ',
+  '██║  ██║██║ ╚████║██║  ██║██║  ██╗╚██████╔╝   ██║   ',
+  '╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝    ╚═╝   ',
 ]
 
 const LOGO_GRADIENT = [0, 0, 1, 1, 2, 2] as const
@@ -63,8 +64,9 @@ const colorize = (art: string[], gradient: readonly number[], c: ThemeColors): L
   return art.map((text, i) => [p[gradient[i]!] ?? c.muted, text])
 }
 
-export const LOGO_WIDTH = Math.max(...LOGO_ART.map(line => line.length))
+import { stringWidth } from '@anakot/ink'
 
+export const LOGO_WIDTH = Math.max(...LOGO_ART.map(line => stringWidth(line)))
 export const CADUCEUS_WIDTH = 0
 
 export const logo = (c: ThemeColors, customLogo?: string): Line[] =>
