@@ -3222,7 +3222,7 @@ def run_setup_wizard(args):
     )
     print(
         color(
- "│ Anakot Agent Setup Wizard │", Colors.MAGENTA
+            "│ Anakot Agent Setup Wizard │", Colors.MAGENTA
         )
     )
     print(

@@ -15,7 +15,7 @@ import { buildSubagentTree, treeTotals, widthByDepth } from '../lib/subagentTree
 import { fmtK } from '../lib/text.js'
 import { useScrollbarSnapshot, useViewportSnapshot } from '../lib/viewportStore.js'
 import type { Theme } from '../theme.js'
-import type { Msg, Usage } from '../types.js'
+import type { Msg, Usage, SpinnerStyle } from '../types.js'
 
 const FACE_TICK_MS = 2500
 const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
@@ -28,7 +28,8 @@ export const padVerb = (verb: string) => `${verb}…`.padEnd(VERB_PAD_LEN, ' ')
 // Compact alternates for the `emoji` and `ascii` indicator styles.
 // Each entry is a fixed-width (display-width) glyph.
 const EMOJI_FRAMES = [' ', '🌀', '🤔', '✨', '🍵', '🔮']
-const ASCII_FRAMES = ['|', '/', '-', '\\']
+const ASCII_FRAMES = ['|', '/', '-', '\\\\']
+const DIAMOND_FRAMES = ['◇', '◈', '◆', '◈']
 
 // Faster tick for spinner-style indicators — they read as motion only
 // at frame rates closer to their authored interval.
@@ -65,6 +66,14 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
     }
   }
 
+  if (style === 'diamond') {
+    return {
+      frame: DIAMOND_FRAMES[tick % DIAMOND_FRAMES.length] ?? '◇',
+      intervalMs: SPINNER_TICK_MS * 3,
+      showVerb: false
+    }
+  }
+
   // 'unicode' — braille spinner (fixed 1-col).  Authored interval is
   // ~80ms; honour it but bound below at a safe minimum so React
   // re-renders stay reasonable.  This style is for users who want
@@ -89,7 +98,7 @@ const indicatorFrameWidth = (style: IndicatorStyle): number => {
     return EMOJI_FRAME_WIDTH
   }
 
-  // 'ascii' and 'unicode' are single-column glyphs.
+  // 'ascii', 'unicode', and 'diamond' are single-column glyphs.
   return 1
 }
 
@@ -164,22 +173,18 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
 
 function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {
-    return t.color.muted
+    return t.color.textMuted
   }
 
-  if (pct >= 95) {
-    return t.color.statusCritical
+  if (pct >= 90) {
+    return t.color.ctxCritical
   }
 
-  if (pct > 80) {
-    return t.color.statusBad
+  if (pct > 70) {
+    return t.color.ctxWarn
   }
 
-  if (pct >= 50) {
-    return t.color.statusWarn
-  }
-
-  return t.color.statusGood
+  return t.color.ctxHealthy
 }
 
 function statusSessionCountLabel(count: number) {

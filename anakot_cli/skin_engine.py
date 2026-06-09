@@ -67,7 +67,7 @@ All fields are optional. Missing values inherit from the ``default`` skin.
     branding:
       agent_name: "Anakot Agent"          # Banner title, status display
       welcome: "Welcome message"          # Shown at CLI startup
- goodbye: "Goodbye! " # Shown on exit
+      goodbye: "Goodbye! " # Shown on exit
  response_label: " Anakot " # Response box header label
       prompt_symbol: "❯"                 # Input prompt symbol (bare token; renderers add trailing space)
       help_header: "(^_^)? Commands"      # /help header text

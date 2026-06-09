@@ -4,6 +4,7 @@ import { Fragment, memo, useMemo, useRef } from 'react'
 
 import { useGateway } from '../app/gatewayContext.js'
 import type { AppLayoutProps } from '../app/interfaces.js'
+import type { Theme } from '../theme.js'
 import { $isBlocked, $overlayState, patchOverlayState } from '../app/overlayStore.js'
 import { $uiState } from '../app/uiStore.js'
 import { INLINE_MODE, SHOW_FPS, TERMUX_TUI_MODE } from '../config/env.js'
@@ -327,6 +328,9 @@ const ComposerPane = memo(function ComposerPane({
 
  {!composer.empty && !ui.sid && <Text color={ui.theme.color.muted}> {ui.status}</Text>}
 
+      {/* Input footer: mode indicator + context hint */}
+      <InputFooter composer={composer} status={status} t={ui.theme} />
+
       <StatusRulePane at="bottom" composer={composer} status={status} />
     </NoSelect>
   )
@@ -344,6 +348,44 @@ const AgentsOverlayPane = memo(function AgentsOverlayPane() {
       onClose={() => patchOverlayState({ agents: false, agentsInitialHistoryIndex: 0 })}
       t={ui.theme}
     />
+  )
+})
+
+// ── Input Footer ───────────────────────────────────────────────────────
+
+const InputFooter = memo(function InputFooter({
+  composer,
+  status,
+  t
+}: {
+  composer: AppLayoutProps['composer']
+  status: AppLayoutProps['status']
+  t: Theme
+}) {
+  const ui = useStore($uiState)
+  const sh = (composer.inputBuf[0] ?? composer.input).startsWith('!')
+
+  // Show context % on the right side of the input footer
+  const pct = ui.usage?.context_percent
+  const ctxHint = pct != null ? `${pct}%` : ''
+
+  // Mode indicator
+  const modeLabel = sh ? 'bash' : ''
+  const profileName = ui.info?.profile_name
+  const modeText = profileName ? `profile: ${profileName}` : modeLabel
+
+  if (!modeText && !ctxHint) {
+    return null
+  }
+
+  return (
+    <Box flexDirection="row">
+      <Text color={t.color.textDim}>
+        {modeText && <Text color={t.color.accentDim}>{modeText}</Text>}
+        {modeText && ctxHint && <Text color={t.color.textDim}> │ </Text>}
+        {ctxHint && <Text color={t.color.textMuted}>{ctxHint}</Text>}
+      </Text>
+    </Box>
   )
 })
 

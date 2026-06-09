@@ -233,7 +233,13 @@ export const MessageLine = memo(function MessageLine({
           </Text>
         </NoSelect>
 
-        <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+        {msg.role === 'user' ? (
+          <Box backgroundColor={t.color.userMsgBg} paddingX={1} width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>
+            {content}
+          </Box>
+        ) : (
+          <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+        )}
       </Box>
     </Box>
   )

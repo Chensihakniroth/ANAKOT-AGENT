@@ -38,8 +38,8 @@ import type {
   ThinkingMode
 } from '../types.js'
 
-const THINK: BrailleSpinnerName[] = ['helix', 'breathe', 'orbit', 'dna', 'waverows', 'snake', 'pulse']
-const TOOL: BrailleSpinnerName[] = ['cascade', 'scan', 'diagswipe', 'fillsweep', 'rain', 'columns', 'sparkle']
+const THINK: BrailleSpinnerName[] = ['waverows', 'helix', 'breathe', 'orbit', 'dna', 'snake', 'pulse']
+const TOOL: BrailleSpinnerName[] = ['fillsweep', 'cascade', 'scan', 'diagswipe', 'rain', 'columns', 'sparkle']
 
 const fmtElapsed = (ms: number) => {
   const sec = Math.max(0, ms) / 1000
@@ -467,7 +467,7 @@ function SubagentAccordion({
               color={t.color.text}
               content={
                 <>
-                  <Text color={t.color.accent}>● </Text>
+                  <Text color={t.color.accent}>◆ </Text>
                   {line}
                 </>
               }
@@ -1085,7 +1085,7 @@ export const ToolTrail = memo(function ToolTrail({
                   color={group.color}
                   content={
                     <>
-                      <Text color={t.color.accent}>● </Text>
+                      <Text color={t.color.accent}>◆ </Text>
                       {toolLabel(group)}
                       {isDelegateGroup ? (
                         <Text color={t.color.statusFg} dim>

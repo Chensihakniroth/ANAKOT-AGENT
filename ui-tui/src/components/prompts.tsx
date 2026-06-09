@@ -78,9 +78,9 @@ export function ApprovalPrompt({ onChoice, req, t }: ApprovalPromptProps) {
   const overflow = rawLines.length - shown.length
 
   return (
-    <Box borderColor={t.color.warn} borderStyle="double" flexDirection="column" paddingX={1}>
+    <Box borderColor={t.color.borderWarn} borderStyle="single" flexDirection="column" paddingX={1}>
       <Text bold color={t.color.warn}>
-        ⚠ approval required · {req.description}
+        ⚡ approval required — {req.description}
       </Text>
 
       <Box flexDirection="column" paddingLeft={1}>
@@ -91,8 +91,8 @@ export function ApprovalPrompt({ onChoice, req, t }: ApprovalPromptProps) {
         ))}
 
         {overflow > 0 ? (
-          <Text color={t.color.muted}>
-            … +{overflow} more line{overflow === 1 ? '' : 's'} (full text above)
+          <Text color={t.color.textMuted}>
+            … +{overflow} more line{overflow === 1 ? '' : 's'}
           </Text>
         ) : null}
       </Box>
@@ -101,14 +101,14 @@ export function ApprovalPrompt({ onChoice, req, t }: ApprovalPromptProps) {
 
       {OPTS.map((o, i) => (
         <Text key={o}>
-          <Text bold={sel === i} color={sel === i ? t.color.warn : t.color.muted} inverse={sel === i}>
+          <Text bold={sel === i} color={sel === i ? t.color.warn : t.color.textMuted} inverse={sel === i}>
             {sel === i ? '▸ ' : '  '}
             {i + 1}. {LABELS[o]}
           </Text>
         </Text>
       ))}
 
-      <Text color={t.color.muted}>↑/↓ select · Enter confirm · 1-4 quick pick · Esc/Ctrl+C deny</Text>
+      <Text color={t.color.textMuted}>↑↓ navigate · Enter confirm · 1-4 pick · Esc deny</Text>
     </Box>
   )
 }

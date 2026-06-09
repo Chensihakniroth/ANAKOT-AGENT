@@ -5747,7 +5747,7 @@ def show_config():
     
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.CYAN))
- print(color("│ Anakot Configuration │", Colors.CYAN))
+    print(color("│ Anakot Configuration │", Colors.CYAN))
     print(color("└─────────────────────────────────────────────────────────┘", Colors.CYAN))
     
     # Paths
