@@ -298,7 +298,7 @@ gateway:
     not_git_repo:            "✗ Nie 'n git-bewaarplek nie — kan nie opdateer nie."
     anakot_cmd_not_found:    "✗ Kon nie die `anakot`-opdrag vind nie. Anakot loop, maar die opdateeropdrag kon nie die uitvoerbare lêer op PATH of via die huidige Python-vertolker vind nie. Probeer `anakot update` met die hand in jou terminale uitvoer."
     start_failed:            "✗ Kon nie opdatering begin nie: {error}"
-    starting:                "⚕ Begin Anakot-opdatering… Ek sal vordering hier stroom."
+ starting: " Begin Anakot-opdatering… Ek sal vordering hier stroom."
 
   usage:
     rate_limits:              "⏱️ **Tariefperke:** {state}"

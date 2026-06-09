@@ -298,7 +298,7 @@ gateway:
     not_git_repo:            "✗ Git deposu değil — güncellenemiyor."
     anakot_cmd_not_found:    "✗ `anakot` komutu bulunamadı. Anakot çalışıyor, ancak güncelleme komutu yürütülebilir dosyayı PATH'te veya mevcut Python yorumlayıcısı aracılığıyla bulamadı. Terminalde `anakot update` komutunu manuel olarak çalıştırmayı deneyin."
     start_failed:            "✗ Güncelleme başlatılamadı: {error}"
-    starting:                "⚕ Anakot güncellemesi başlatılıyor… İlerlemeyi buraya akıtacağım."
+ starting: " Anakot güncellemesi başlatılıyor… İlerlemeyi buraya akıtacağım."
 
   usage:
     rate_limits:              "⏱️ **Hız Sınırları:** {state}"

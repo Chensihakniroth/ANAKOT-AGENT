@@ -210,7 +210,7 @@ print_banner() {
     echo ""
     echo -e "${MAGENTA}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│             ⚕ Anakot Agent Installer                    │"
+ echo "│ Anakot Agent Installer │"
     echo "├─────────────────────────────────────────────────────────┤"
     echo "│  An open source AI agent by callmemo.              │"
     echo "└─────────────────────────────────────────────────────────┘"
