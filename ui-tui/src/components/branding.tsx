@@ -268,18 +268,21 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
         </Box>
 
         {/* Model */}
-        <Text color={t.color.accent} wrap="truncate-end">
+        <Text color={t.color.textMuted} wrap="truncate-end">
+          <Text color={t.color.accent}>MODEL: </Text>
           {info.model.split('/').pop()}
         </Text>
 
-        {/* Path */}
+        {/* Repo */}
         <Text color={t.color.textMuted} wrap="truncate-end">
+          <Text color={t.color.accent}>REPO: </Text>
           {info.cwd || process.cwd()}
         </Text>
 
         {/* Session */}
         {sid && (
           <Text color={t.color.textMuted} wrap="truncate-end">
+            <Text color={t.color.accent}>SESSION ID: </Text>
             {sid}
           </Text>
         )}
