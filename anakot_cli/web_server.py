@@ -8009,14 +8009,14 @@ async def get_models_analytics(days: int = 30):
 # though uvicorn binds to 127.0.0.1.
 # ---------------------------------------------------------------------------
 
-# PTY bridge is POSIX-only (depends on fcntl/termios/ptyprocess).  On native
-# Windows the import raises; catch and leave PtyBridge=None so the rest of
-# the dashboard (sessions, jobs, metrics, config editor) still loads and the
-# /api/pty endpoint cleanly refuses with a WSL-suggested message.
+# PTY bridge — cross-platform.  On POSIX we use ptyprocess; on Windows we
+# use pywinpty (ConPTY).  The import can still fail if neither backend's
+# dependency is installed; catch and leave PtyBridge=None so the rest of the
+# dashboard still loads and the /api/pty endpoint cleanly refuses.
 try:
     from anakot_cli.pty_bridge import PtyBridge, PtyUnavailableError
     _PTY_BRIDGE_AVAILABLE = True
-except ImportError as _pty_import_err:  # pragma: no cover - Windows-only path
+except ImportError as _pty_import_err:  # pragma: no cover - missing dep
     PtyBridge = None  # type: ignore[assignment]
     _PTY_BRIDGE_AVAILABLE = False
 
@@ -8451,14 +8451,13 @@ async def pty_ws(ws: WebSocket) -> None:
     await ws.accept()
     _log.info("pty accepted peer=%s mode=%s cred=%s", peer, mode, cred)
 
-    # On native Windows, the POSIX PTY bridge can't be imported.  Tell the
-    # client and close cleanly rather than pretending the feature works.
     if not _PTY_BRIDGE_AVAILABLE:
         await ws.send_text(
-            "\r\n\x1b[31mChat unavailable: the embedded terminal requires a "
-            "POSIX PTY, which native Windows Python doesn't provide.\x1b[0m\r\n"
-            "\x1b[33mInstall Anakot inside WSL2 to use the dashboard's /chat "
-            "tab — the rest of the dashboard works here.\x1b[0m\r\n"
+            "\r\n\x1b[31mChat unavailable: pseudo-terminal support is not "
+            "available.\x1b[0m\r\n"
+            "\x1b[33mInstall the platform PTY package: "
+            "pip install pywinpty (Windows) or pip install ptyprocess "
+            "(Linux/macOS).\x1b[0m\r\n"
         )
         await ws.close(code=1011)
         return

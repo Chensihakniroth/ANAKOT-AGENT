@@ -2617,7 +2617,7 @@ class TelegramAdapter(BasePlatformAdapter):
             return SendResult(success=False, error="Not connected")
         try:
             default_hint = f" (default: {default})" if default else ""
- text = self.format_message(f" *Update needs your input:*\n\n{prompt}{default_hint}")
+            text = self.format_message(f" *Update needs your input:*\n\n{prompt}{default_hint}")
             keyboard = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton("✓ Yes", callback_data="update_prompt:y"),

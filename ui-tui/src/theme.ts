@@ -338,7 +338,7 @@ export const DARK_THEME: Theme = {
     borderWarn: '#ffa726',
     ctxHealthy: '#4caf50',
     ctxWarn: '#ffa726',
-    ctxCritical: '#ff6b80',
+    ctxCritical: '#FF6B6B',
     userMsgBg: '#1e1e32'
   },
 

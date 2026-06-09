@@ -3392,7 +3392,7 @@ def check_for_skill_updates(
 # Anakot centralized index source
 # ---------------------------------------------------------------------------
 
-ANAKOT_INDEX_URL = "https://anakot-agent.callmemo.ai/docs/api/skills-index.json"
+ANAKOT_INDEX_URL = "https://hermes-agent.nousresearch.com/docs/api/skills-index.json"
 ANAKOT_INDEX_CACHE_FILE = INDEX_CACHE_DIR / "anakot-index.json"
 ANAKOT_INDEX_TTL = 6 * 3600  # 6 hours
 
