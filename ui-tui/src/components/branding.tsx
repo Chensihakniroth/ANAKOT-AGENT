@@ -285,7 +285,7 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
 
       <Box flexDirection="column" width={w}>
         {wide ? (
-          <Box justifyContent="center" marginBottom={1}>
+          <Box flexDirection="column" marginBottom={1}>
             <Text bold color={t.color.primary}>
               {t.brand.name}
             </Text>
