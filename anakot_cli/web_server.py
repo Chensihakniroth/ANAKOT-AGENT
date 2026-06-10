@@ -8291,6 +8291,10 @@ def _resolve_chat_argv(
     # the dashboard PTY path.
     env.setdefault("ANAKOT_TUI_DISABLE_MOUSE", "1")
     env.setdefault("ANAKOT_TUI_INLINE", "1")
+    # Force UTF-8 I/O encoding for Python subprocesses spawned by the TUI
+    # (gateway, agent, tools).  On Windows the default is cp1252 which
+    # crashes on UTF-8 bytes that the Node.js TUI writes to the PTY.
+    env.setdefault("PYTHONIOENCODING", "utf-8")
 
     if resume:
         latest_resume, _latest_path = _session_latest_descendant(resume)
@@ -8501,6 +8505,18 @@ async def pty_ws(ws: WebSocket) -> None:
                 await asyncio.sleep(0)
                 continue
             try:
+                # Log a short preview for debugging PTY → WebSocket forwarding.
+                try:
+                    preview = chunk[:256]
+                    # Prefer a UTF-8 preview when printable, otherwise hex.
+                    try:
+                        s = preview.decode("utf-8")
+                        _log.info("pty->ws chunk len=%d preview=%r", len(chunk), s)
+                    except Exception:
+                        _log.info("pty->ws chunk len=%d preview_hex=%s", len(chunk), binascii.hexlify(preview))
+                except Exception:
+                    _log.info("pty->ws chunk len=%d (preview unavailable)", len(chunk))
+
                 await ws.send_bytes(chunk)
             except Exception:
                 return

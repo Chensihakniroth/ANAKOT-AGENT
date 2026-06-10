@@ -280,7 +280,7 @@ class _WinPtyBridge:
             merged.update(env)
             win_env = "\0".join(f"{k}={v}" for k, v in merged.items()) + "\0"
 
-        pty.spawn(appname, cmdline=cmdline, cwd=cwd, env=win_env)
+        pty.spawn(appname, cmdline=cmdline, cwd=str(cwd) if cwd else None, env=win_env)
         return cls(pty)
 
     @property

@@ -1581,6 +1581,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             env={**os.environ, "CI": "1"},
         )
         if result.returncode != 0:
@@ -1605,6 +1607,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             cwd=str(ink_dir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             combined = f"{result.stdout or ''}{result.stderr or ''}".strip()
@@ -1764,6 +1768,10 @@ def _launch_tui(
     import tempfile
 
     env = os.environ.copy()
+    # Force UTF-8 I/O encoding for Python subprocesses spawned inside the TUI
+    # (gateway, agent, tools).  On Windows the default is cp1252 which crashes
+    # on UTF-8 bytes that the Node.js TUI writes to the PTY.
+    env.setdefault("PYTHONIOENCODING", "utf-8")
     active_session_fd, active_session_file = tempfile.mkstemp(
         prefix="anakot-tui-active-session-", suffix=".json"
     )
@@ -1949,7 +1957,7 @@ def _resolve_use_tui(args) -> bool:
       1. ``--cli`` flag         → always classic REPL
       2. ``--tui`` flag / ``ANAKOT_TUI=1`` → always TUI
       3. ``display.interface`` config value ("cli" | "tui")
-      4. default → classic REPL
+      4. default → TUI
 
     Explicit flags always win over config so muscle memory and scripts keep
     working regardless of the configured default.
@@ -1961,10 +1969,10 @@ def _resolve_use_tui(args) -> bool:
     try:
         from anakot_cli.config import load_config
 
-        iface = (load_config().get("display", {}) or {}).get("interface", "cli")
+        iface = (load_config().get("display", {}) or {}).get("interface", "tui")
         return isinstance(iface, str) and iface.strip().lower() == "tui"
     except Exception:
-        return False
+        return True
 
 
 def cmd_chat(args):
@@ -13826,12 +13834,6 @@ def main():
     )
 
     webhook_parser.set_defaults(func=cmd_webhook)
-
-    # =========================================================================
-    # portal command — callmemo Portal status + Tool Gateway routing
-    # =========================================================================
-    from anakot_cli.portal_cli import add_parser as _add_portal_parser
-    _add_portal_parser(subparsers)
 
     # =========================================================================
     # kanban command — multi-profile collaboration board
