@@ -8081,7 +8081,7 @@ def _update_via_zip(args):
         )
         sys.exit(1)
     zip_url = (
-        f"https://github.com/callmemo/anakot-agent/archive/refs/heads/{branch}.zip"
+        f"https://github.com/Chensihakniroth/ANAKOT-AGENT/archive/refs/heads/{branch}.zip"
     )
 
     print("→ Downloading latest version...")
@@ -8479,8 +8479,12 @@ OFFICIAL_REPO_URLS = {
     "git@github.com:callmemo/anakot-agent.git",
     "https://github.com/callmemo/anakot-agent",
     "git@github.com:callmemo/anakot-agent",
+    "https://github.com/Chensihakniroth/ANAKOT-AGENT.git",
+    "git@github.com:Chensihakniroth/ANAKOT-AGENT.git",
+    "https://github.com/Chensihakniroth/ANAKOT-AGENT",
+    "git@github.com:Chensihakniroth/ANAKOT-AGENT",
 }
-OFFICIAL_REPO_URL = "https://github.com/callmemo/anakot-agent.git"
+OFFICIAL_REPO_URL = "https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
 SKIP_UPSTREAM_PROMPT_FILE = ".skip_upstream_prompt"
 
 
@@ -8614,7 +8618,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
         # Ask user if they want to add upstream
         print()
         print("ℹ Your fork is not tracking the official Anakot repository.")
-        print("  This means you may miss updates from callmemo/anakot-agent.")
+        print("  This means you may miss updates from Chensihakniroth/ANAKOT-AGENT.")
         print()
         try:
             response = (
@@ -8628,7 +8632,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
             print("→ Adding upstream remote...")
             if _add_upstream_remote(git_cmd, cwd):
                 print(
-                    "  ✓ Added upstream: https://github.com/callmemo/anakot-agent.git"
+                    "  ✓ Added upstream: https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
                 )
                 has_upstream = True
             else:
@@ -8636,7 +8640,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
                 return
         else:
             print(
-                "  Skipped. Run 'git remote add upstream https://github.com/callmemo/anakot-agent.git' to add later."
+                "  Skipped. Run 'git remote add upstream https://github.com/Chenshakniroth/ANAKOT-AGENT.git' to add later."
             )
             _mark_skip_upstream_prompt()
             return
@@ -10361,9 +10365,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if method == "pip":
                 _cmd_update_pip(args)
                 return
-            print("✗ Not a git repository. Please reinstall:")
+            print("✗ Not a git repository. Please reinstall from:")
             print(
-                "  curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash"
+                "  https://github.com/Chensihakniroth/ANAKOT-AGENT"
             )
             sys.exit(1)
 
@@ -12437,9 +12441,23 @@ def cmd_dashboard(args):
     # backend is the desktop's primary entrypoint and needs the same.
     _sync_bundled_skills_quietly()
 
+    # Build the web UI if needed. In a dev checkout the source is at
+    # PROJECT_ROOT/web and we run npm. In a system-wide install the dist
+    # should already be pre-built; skip the npm step and just verify.
     if "ANAKOT_WEB_DIST" not in os.environ and not getattr(args, "skip_build", False):
-        if not _build_web_ui(PROJECT_ROOT / "web", fatal=True):
-            sys.exit(1)
+        _web_src = PROJECT_ROOT / "web"
+        if _web_src.exists():
+            if not _build_web_ui(_web_src, fatal=True):
+                sys.exit(1)
+        else:
+            # System-wide install: no source tree, dist should be pre-built.
+            _dist_root = PROJECT_ROOT / "anakot_cli" / "web_dist"
+            if not (_dist_root / "index.html").exists():
+                print("✗ Web UI dist not found and no web source to build from.")
+                print(f"  Expected dist at: {_dist_root}")
+                print("  Reinstall with web_dist included, or run from a dev checkout.")
+                sys.exit(1)
+            print(f"→ Using pre-built web dist at {_dist_root}")
     elif getattr(args, "skip_build", False):
         # --build-mode skip trusts the caller to have pre-built the web UI.
         # Verify the dist actually exists; otherwise the server will start

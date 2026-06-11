@@ -87,7 +87,19 @@ except ImportError:
             f"Install with: {sys.executable} -m pip install 'fastapi' 'uvicorn[standard]'"
         )
 
-WEB_DIST = Path(os.environ["ANAKOT_WEB_DIST"]) if "ANAKOT_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
+_env_dist = os.environ.get("ANAKOT_WEB_DIST", "")
+if _env_dist and Path(_env_dist).exists():
+    WEB_DIST = Path(_env_dist)
+else:
+    # 1. Same directory as this file (editable/dev install)
+    _dist = Path(__file__).parent / "web_dist"
+    if not _dist.exists():
+        # 2. Project root / anakot_cli / web_dist
+        _dist = Path(__file__).parent.parent / "anakot_cli" / "web_dist"
+    if not _dist.exists():
+        # 3. Fallback: assume CWD is the project root
+        _dist = Path.cwd() / "anakot_cli" / "web_dist"
+    WEB_DIST = _dist
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
