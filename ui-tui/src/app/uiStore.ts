@@ -28,6 +28,7 @@ const buildUiState = (): UiState => ({
   status: 'summoning anakot…',
   statusBar: 'top',
   streaming: true,
+  shuttingDown: false,
   theme: DEFAULT_THEME,
   usage: ZERO
 })

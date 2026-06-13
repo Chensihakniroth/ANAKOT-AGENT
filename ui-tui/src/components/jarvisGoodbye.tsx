@@ -1,7 +1,6 @@
 import { Box, Text } from '@anakot/ink'
 import { useEffect, useState, useRef } from 'react'
 
-import { fmtK } from '../lib/text.js'
 import type { Theme } from '../theme.js'
 
 // ── Iron Man / J.A.R.V.I.S. color palette ─────────────────────────────
@@ -128,6 +127,16 @@ export function JARVISGoodbye({ stats, reason, t }: JARVISGoodbyeProps) {
     ]
     return () => timers.forEach(clearTimeout)
   }, [])
+
+  // Exit the process after the goodbye animation completes
+  useEffect(() => {
+    if (phase >= 4) {
+      const timer = setTimeout(() => {
+        process.exit(0)
+      }, 2000) // 2s buffer after final phase to let the user see the goodbye
+      return () => clearTimeout(timer)
+    }
+  }, [phase])
 
   // ── Reactor animation (slows down over time) ────────────────────────
 

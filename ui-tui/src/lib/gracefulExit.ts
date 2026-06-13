@@ -1,5 +1,4 @@
-import { showGoodbyeAndExit } from './goodbye.jsx'
-import { DARK_THEME } from '../theme.js'
+import { patchUiState } from '../app/uiStore.js'
 
 interface SetupOptions {
   cleanups?: (() => Promise<void> | void)[]
@@ -12,6 +11,12 @@ const SIGNAL_EXIT_CODE: Record<'SIGHUP' | 'SIGINT' | 'SIGTERM', number> = {
   SIGHUP: 129,
   SIGINT: 130,
   SIGTERM: 143,
+}
+
+const SIGNAL_LABEL: Record<string, 'SIGINT' | 'SIGTERM' | 'SIGHUP'> = {
+  SIGINT: 'SIGINT',
+  SIGTERM: 'SIGTERM',
+  SIGHUP: 'SIGHUP',
 }
 
 let wired = false
@@ -36,24 +41,19 @@ export function setupGracefulExit({ cleanups = [], failsafeMs = 4000, onError, o
       onSignal?.(signal)
     }
 
-    // Run cleanups (kill gateway, reset terminal modes) first
-    const cleanupPromise = Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn)))
+    // Tell the App component to render the goodbye screen
+    patchUiState({ shuttingDown: true })
 
-    cleanupPromise.then(() => {
-      // Show the J.A.R.V.I.S. goodbye screen, then exit
-      showGoodbyeAndExit({
-        reason: signal ?? 'exit',
-        theme: DARK_THEME, // Always use dark theme for the exit screen — it looks best
-        onComplete: () => {
-          // Final failsafe: force exit after goodbye completes
-        },
-      })
+    // Run cleanups (kill gateway, reset terminal modes) in parallel
+    void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).then(() => {
+      // After cleanups + goodbye animation (~7s), exit
+      // The goodbye screen auto-exits via its own timer, but this is the failsafe
     })
 
-    // Failsafe: force exit if cleanups hang
+    // Failsafe: force exit if everything hangs
     setTimeout(() => {
       process.exit(code)
-    }, failsafeMs).unref?.()
+    }, Math.max(failsafeMs, 10000)).unref?.() // At least 10s for the goodbye animation
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {

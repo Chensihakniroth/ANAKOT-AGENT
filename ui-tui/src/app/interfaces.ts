@@ -134,6 +134,7 @@ export interface UiState {
   status: string
   statusBar: StatusBarMode
   streaming: boolean
+  shuttingDown: boolean
   theme: Theme
   usage: Usage
 }
