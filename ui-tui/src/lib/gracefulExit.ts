@@ -1,3 +1,6 @@
+import { showGoodbyeAndExit } from './goodbye.jsx'
+import { DARK_THEME } from '../theme.js'
+
 interface SetupOptions {
   cleanups?: (() => Promise<void> | void)[]
   failsafeMs?: number
@@ -8,7 +11,7 @@ interface SetupOptions {
 const SIGNAL_EXIT_CODE: Record<'SIGHUP' | 'SIGINT' | 'SIGTERM', number> = {
   SIGHUP: 129,
   SIGINT: 130,
-  SIGTERM: 143
+  SIGTERM: 143,
 }
 
 let wired = false
@@ -33,9 +36,24 @@ export function setupGracefulExit({ cleanups = [], failsafeMs = 4000, onError, o
       onSignal?.(signal)
     }
 
-    setTimeout(() => process.exit(code), failsafeMs).unref?.()
+    // Run cleanups (kill gateway, reset terminal modes) first
+    const cleanupPromise = Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn)))
 
-    void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).finally(() => process.exit(code))
+    cleanupPromise.then(() => {
+      // Show the J.A.R.V.I.S. goodbye screen, then exit
+      showGoodbyeAndExit({
+        reason: signal ?? 'exit',
+        theme: DARK_THEME, // Always use dark theme for the exit screen — it looks best
+        onComplete: () => {
+          // Final failsafe: force exit after goodbye completes
+        },
+      })
+    })
+
+    // Failsafe: force exit if cleanups hang
+    setTimeout(() => {
+      process.exit(code)
+    }, failsafeMs).unref?.()
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
