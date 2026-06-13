@@ -1,4 +1,9 @@
-"""Regression tests for callmemo OAuth refresh and inference JWT interactions."""
+"""Regression tests for callmemo OAuth refresh and inference JWT interactions.
+
+NOTE: The callmemo Portal was removed in the Anakot fork. These tests are
+skipped by default since they test portal-specific OAuth flows that no longer
+exist. The stub functions in anakot_cli.auth return safe no-ops.
+"""
 
 import base64
 import json
@@ -11,6 +16,8 @@ import httpx
 import pytest
 
 from anakot_cli.auth import AuthError, get_provider_auth_state, resolve_callmemo_runtime_credentials
+
+pytestmark = pytest.mark.skip(reason="callmemo Portal removed in Anakot fork")
 
 
 # =============================================================================

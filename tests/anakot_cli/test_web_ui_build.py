@@ -54,7 +54,33 @@ class TestWebUIBuildNeeded:
         web_dir, dist_dir = _make_web_dir(tmp_path)
         _touch(web_dir / "src" / "main.ts", offset=-10)
         _touch(dist_dir / "index.html")
+        # A real Vite build also produces hashed assets under assets/.
+        # Without assets/ the dist is considered incomplete (partial build).
+        (dist_dir / "assets").mkdir()
+        _touch(dist_dir / "assets" / "index-abc123.js")
         assert _web_ui_build_needed(web_dir) is False
+
+    def test_returns_true_when_index_html_exists_but_assets_missing(self, tmp_path):
+        """Incomplete dist: index.html present but no assets/ directory.
+
+        A partial/failed Vite build may leave index.html behind while
+        failing before writing hashed JS/CSS bundles. The staleness check
+        must detect this and force a rebuild.
+        """
+        web_dir, dist_dir = _make_web_dir(tmp_path)
+        _touch(web_dir / "src" / "main.ts", offset=-10)
+        _touch(dist_dir / "index.html")
+        # No assets/ directory → dist is incomplete
+        assert _web_ui_build_needed(web_dir) is True
+
+    def test_returns_true_when_assets_dir_is_empty(self, tmp_path):
+        """Incomplete dist: assets/ exists but is empty."""
+        web_dir, dist_dir = _make_web_dir(tmp_path)
+        _touch(web_dir / "src" / "main.ts", offset=-10)
+        _touch(dist_dir / "index.html")
+        (dist_dir / "assets").mkdir()
+        # assets/ exists but empty → dist is incomplete
+        assert _web_ui_build_needed(web_dir) is True
 
     def test_web_dist_dir_not_web_dist_subdir(self, tmp_path):
         """Regression: sentinel must be in anakot_cli/web_dist/, NOT web/dist/."""

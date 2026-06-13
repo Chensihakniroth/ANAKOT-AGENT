@@ -127,35 +127,27 @@ export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean):
 
 function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: null | number; style: IndicatorStyle }) {
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
-  const [verbTick, setVerbTick] = useState(() => Math.floor(Math.random() * VERBS.length))
+  const [brailleTick, setBrailleTick] = useState(() => Math.floor(Math.random() * 1000))
   const [now, setNow] = useState(() => Date.now())
 
-  // Pre-compute cadence + verb-visibility for the active style so an
-  // `/indicator` switch re-arms the interval (and skips the verb timer
-  // for verb-less styles like `unicode`) without leaving the previous
-  // timer dangling.
   const { intervalMs, showVerb } = renderIndicator(style, 0)
+  const brailleSpinner = unicodeSpinners.braille
 
   useEffect(() => {
     const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
     const clock = setInterval(() => setNow(Date.now()), 1000)
-    // Verb timer is gated on `showVerb` — `unicode` style hides the verb
-    // entirely, so cycling `verbTick` would be an avoidable re-render.
-    const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
+    const braille = setInterval(() => setBrailleTick(n => n + 1), brailleSpinner.interval)
 
     return () => {
       clearInterval(glyph)
       clearInterval(clock)
-
-      if (verb !== null) {
-        clearInterval(verb)
-      }
+      clearInterval(braille)
     }
-  }, [intervalMs, showVerb])
+  }, [intervalMs, brailleSpinner.interval])
 
   const { frame } = renderIndicator(style, tick)
-  const verb = VERBS[verbTick % VERBS.length] ?? ''
-  const verbSegment = showVerb ? ` ${padVerb(verb)}` : ''
+  const brailleFrame = brailleSpinner.frames[brailleTick % brailleSpinner.frames.length] ?? '⠋'
+  const verbSegment = showVerb ? ` ${brailleFrame}` : ''
   // Leading space keeps a gap between the frame and the duration when the
   // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
   // IS shown, its trailing padding already provides the gap, so the extra
@@ -635,7 +627,7 @@ export function FloatBox({ children, color }: { children: ReactNode; color: stri
     <Box
       alignSelf="flex-start"
       borderColor={color}
-      borderStyle="double"
+      borderStyle="round"
       flexDirection="column"
       marginTop={1}
       opaque

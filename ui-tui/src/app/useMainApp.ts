@@ -464,16 +464,15 @@ export function useMainApp(gw: GatewayClient) {
   const gateway = useMemo(() => ({ gw, rpc }), [gw, rpc])
 
   const die = useCallback(() => {
-    gw.kill('app.die')
-    exit()
-    // Ink's exit() calls unmount() which resets terminal modes but does NOT
-    // call process.exit().  Without an explicit exit the Node process stays
-    // alive (stdin listener keeps the event loop open), so the process.on('exit')
-    // handler in entry.tsx — which sends the final resetTerminalModes() — never
-    // fires.  This leaves kitty keyboard protocol, mouse modes, etc. enabled
-    // in the parent shell.  See issue #19194.
-    process.exit(0)
-  }, [exit, gw])
+    // Set shuttingDown FIRST so the gateway exit handler doesn't respawn
+    patchUiState({ shuttingDown: true })
+    // Now kill the gateway — its cleanup output can't leak since we're exiting
+    try {
+      gw.kill('SIGKILL')
+    } catch {
+      // Gateway may already be dead
+    }
+  }, [gw])
 
   const dieWithCode = useCallback((code: number) => {
     gw.kill(`app.dieWithCode:${code}`)
@@ -764,6 +763,11 @@ export function useMainApp(gw: GatewayClient) {
 
     const exitHandler = () => {
       turnController.reset()
+
+      // If we're shutting down (goodbye screen active), don't recover — just exit
+      if (getUiState().shuttingDown) {
+        return
+      }
 
       // A still-owned child dying while the TUI is alive is an *unexpected*
       // death — a user /quit exits Node before this fires, and a replaced child

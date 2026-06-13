@@ -1626,7 +1626,12 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
     # Desktop/dev launches retain the historical "always rebuild" behaviour.
     # Termux cold starts use the freshness check because esbuild startup is
     # expensive on old mobile CPUs.
-    should_build = True
+    # Pre-built TUI: skip rebuild when dist/entry.js exists without node_modules.
+    dist_entry = tui_dir / "dist" / "entry.js"
+    if dist_entry.is_file() and not (tui_dir / "node_modules").is_dir():
+        should_build = False
+    else:
+        should_build = True
     if termux_startup:
         should_build = did_install or termux_need_rebuild
 
@@ -6912,6 +6917,14 @@ def _web_ui_build_needed(web_dir: Path) -> bool:
         sentinel = dist_dir / "index.html"
     if not sentinel.exists():
         return True
+    # A real Vite build always produces hashed assets under assets/.
+    # When the manifest is missing and we fall back to index.html as the
+    # sentinel, verify assets/ is present and non-empty — otherwise the
+    # dist is incomplete (partial/failed build) and must be rebuilt.
+    if sentinel.name == "index.html":
+        assets_dir = dist_dir / "assets"
+        if not assets_dir.is_dir() or not any(assets_dir.iterdir()):
+            return True
     dist_mtime = sentinel.stat().st_mtime
     skip = frozenset({"node_modules", "dist"})
     for dirpath, dirnames, filenames in os.walk(web_dir, topdown=True):

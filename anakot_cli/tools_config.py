@@ -23,6 +23,7 @@ from anakot_cli.config import (
     cfg_get,
     load_config, save_config, get_env_value, save_env_value,
 )
+from anakot_cli.callmemo_subscription import apply_nous_managed_defaults  # noqa: E402
 from anakot_cli.colors import Colors, color
 from tools.tool_backend_helpers import fal_key_is_configured
 from utils import base_url_hostname, is_truthy_value

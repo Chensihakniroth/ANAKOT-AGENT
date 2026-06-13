@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { useEffect, useRef } from 'react'
 
 import { GatewayProvider } from './app/gatewayContext.js'
 import { $uiState } from './app/uiStore.js'
@@ -9,22 +10,39 @@ import type { GatewayClient } from './gatewayClient.js'
 
 export function App({ gw }: { gw: GatewayClient }) {
   const { appActions, appComposer, appProgress, appStatus, appTranscript, gateway } = useMainApp(gw)
-  const { mouseTracking, shuttingDown, theme, usage } = useStore($uiState)
+  const ui = useStore($uiState)
 
-  if (shuttingDown) {
+  // Keep a ref to the latest transcript data for shutdown capture
+  const snapshotRef = useRef({ messages: 0, tools: 0, ctxUsed: 0, ctxMax: 0, cost: 0 })
+  
+  // Update the snapshot whenever transcript changes (but not during shutdown)
+  useEffect(() => {
+    if (!ui.shuttingDown) {
+      const history = appTranscript.historyItems
+      snapshotRef.current = {
+        messages: history.length,
+        tools: history.filter(m => m.role === 'tool').length,
+        ctxUsed: ui.usage?.context_used ?? 0,
+        ctxMax: ui.usage?.context_max ?? 0,
+        cost: (ui.usage as any)?.cost ?? 0,
+      }
+    }
+  }, [appTranscript.historyItems, ui.usage, ui.shuttingDown])
+
+  if (ui.shuttingDown) {
+    const data = snapshotRef.current
+
     return (
       <GatewayProvider value={gateway}>
         <JARVISGoodbye
-          stats={{
-            messages: appTranscript.historyItems.filter(m => m.role === 'user').length,
-            toolsUsed: 0,
-            contextUsed: usage?.context_used ?? 0,
-            contextMax: usage?.context_max ?? 0,
-            sessionDuration: '',
-            cost: 0,
-          }}
+          messages={data.messages}
+          toolsUsed={data.tools}
+          contextUsed={data.ctxUsed}
+          contextMax={data.ctxMax}
+          duration="—"
+          cost={data.cost}
           reason="SIGINT"
-          t={theme}
+          t={ui.theme}
         />
       </GatewayProvider>
     )
@@ -35,7 +53,7 @@ export function App({ gw }: { gw: GatewayClient }) {
       <AppLayout
         actions={appActions}
         composer={appComposer}
-        mouseTracking={mouseTracking}
+        mouseTracking={ui.mouseTracking}
         progress={appProgress}
         status={appStatus}
         transcript={appTranscript}

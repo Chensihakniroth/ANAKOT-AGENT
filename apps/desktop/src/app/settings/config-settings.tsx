@@ -30,7 +30,8 @@ function ConfigField({
   value,
   enumOptions,
   optionLabels,
-  onChange
+  onChange,
+  onSelectChange
 }: {
   schemaKey: string
   schema: ConfigFieldSchema
@@ -38,6 +39,7 @@ function ConfigField({
   enumOptions?: string[]
   optionLabels?: Record<string, string>
   onChange: (value: unknown) => void
+  onSelectChange?: (value: unknown) => void
 }) {
   const { t } = useI18n()
   const c = t.settings.config
@@ -80,7 +82,11 @@ function ConfigField({
   if (selectOptions) {
     return row(
       <Select
-        onValueChange={next => onChange(next === EMPTY_SELECT_VALUE ? '' : next)}
+        onValueChange={next => {
+          const val = next === EMPTY_SELECT_VALUE ? '' : next
+          onChange(val)
+          onSelectChange?.(val)
+        }}
         value={String(value ?? '') || EMPTY_SELECT_VALUE}
       >
         <SelectTrigger className={CONTROL_TEXT}>
@@ -183,12 +189,16 @@ export function ConfigSettings({
   activeSectionId,
   onConfigSaved,
   onMainModelChanged,
-  importInputRef
+  importInputRef,
+  gateway
 }: {
   activeSectionId: string
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void
   importInputRef: React.RefObject<HTMLInputElement | null>
+  gateway?: {
+    request: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
+  } | null
 }) {
   const { t } = useI18n()
   const c = t.settings.config
@@ -269,6 +279,21 @@ export function ConfigSettings({
     saveVersionRef.current += 1
     setConfig(next)
     setSaveVersion(saveVersionRef.current)
+  }
+
+  const handlePersonalityChange = async (value: string) => {
+    if (!gateway) return
+    try {
+      const displayCfg = (config as Record<string, unknown>)?.display as Record<string, unknown> | undefined
+      const sessionId = (displayCfg as Record<string, unknown>)?.session_id as string | undefined
+      await gateway.request('config.set', {
+        key: 'personality',
+        value,
+        session_id: sessionId ?? ''
+      })
+    } catch {
+      // Config save below will still persist to disk; RPC failure is non-fatal.
+    }
   }
 
   const sectionFields = useMemo(() => {
@@ -363,6 +388,9 @@ export function ConfigSettings({
                     : enumOptionsFor(key, getNested(config, key), config)
                 }
                 onChange={value => updateConfig(setNested(config, key, value))}
+                onSelectChange={
+                  key === 'display.personality' ? (val) => void handlePersonalityChange(String(val)) : undefined
+                }
                 optionLabels={key === 'tts.elevenlabs.voice_id' ? elevenLabsVoiceLabels : undefined}
                 schema={field}
                 schemaKey={key}

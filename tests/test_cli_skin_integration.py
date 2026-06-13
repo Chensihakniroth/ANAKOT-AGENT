@@ -90,6 +90,47 @@ class TestCliSkinPromptIntegration:
         assert "Prompt + TUI colors updated." in output
         assert cli._app.style is not None
 
+    def test_berserk_prompt_fragments_use_skin_symbol(self):
+        cli = _make_cli_stub()
+
+        set_active_skin("berserk")
+        assert cli._get_tui_prompt_fragments() == [("class:prompt", "<|> ")]
+
+    def test_berserk_style_dict_uses_skin_colors(self):
+        cli = _make_cli_stub()
+
+        set_active_skin("berserk")
+        skin = get_active_skin()
+        style_dict = cli._build_tui_style_dict()
+
+        assert style_dict["prompt"] == skin.get_color("prompt")
+        assert style_dict["input-rule"] == skin.get_color("input_rule")
+        assert style_dict["status-bar"] == (
+            f"bg:{skin.get_color('status_bar_bg')} {skin.get_color('status_bar_text')}"
+        )
+
+    def test_berserk_compact_banner_uses_skin_branding(self):
+        set_active_skin("berserk")
+
+        with patch("cli.shutil.get_terminal_size", return_value=SimpleNamespace(columns=90)), \
+             patch.dict(_build_compact_banner.__globals__, {"format_banner_version_label": lambda: "Berserk Agent v0.1.0 (test)"}):
+            banner = _build_compact_banner()
+
+        assert "Berserk Agent" in banner
+        assert "NOUS ANAKOT" not in banner
+
+    def test_berserk_compact_banner_uses_skin_colors(self):
+        set_active_skin("berserk")
+        skin = get_active_skin()
+
+        with patch("cli.shutil.get_terminal_size", return_value=SimpleNamespace(columns=90)), \
+             patch.dict(_build_compact_banner.__globals__, {"format_banner_version_label": lambda: "Berserk Agent v0.1.0 (test)"}):
+            banner = _build_compact_banner()
+
+        assert skin.get_color("banner_border") in banner
+        assert skin.get_color("banner_title") in banner
+        assert skin.get_color("banner_dim") in banner
+
 
 class TestCompactBannerSkinIntegration:
     def test_default_compact_banner_keeps_legacy_nous_anakot_branding(self):

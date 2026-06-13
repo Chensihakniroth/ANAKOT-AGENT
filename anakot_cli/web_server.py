@@ -305,7 +305,10 @@ async def host_header_middleware(request: Request, call_next):
     # Store the bound host on app.state so this middleware can read it —
     # set by start_server() at listen time.
     bound_host = getattr(app.state, "bound_host", None)
-    if bound_host:
+    # When allow_public is True (--insecure), the operator has explicitly
+    # opted into non-loopback access. Skip host validation entirely — it
+    # blocks reverse proxies like ngrok that forward with their own Host.
+    if bound_host and not getattr(app.state, "allow_public", False):
         host_header = request.headers.get("host", "")
         if not _is_accepted_host(host_header, bound_host):
             return JSONResponse(
@@ -399,12 +402,12 @@ _SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
     "display.skin": {
         "type": "select",
         "description": "CLI visual theme",
-        "options": ["default", "ares", "mono", "slate"],
+        "options": ["default", "ares", "mono", "slate", "berserk"],
     },
     "dashboard.theme": {
         "type": "select",
         "description": "Web dashboard visual theme",
-        "options": ["default", "midnight", "ember", "mono", "cyberpunk", "rose"],
+        "options": ["default", "midnight", "ember", "mono", "cyberpunk", "berserk", "rose"],
     },
     "display.resume_display": {
         "type": "select",
@@ -1000,52 +1003,6 @@ def _safe_call(mod, fn_name: str, default):
         return fn() if callable(fn) else default
     except Exception:
         return default
-
-
-# ---------------------------------------------------------------------------
-# Portal endpoint — callmemo Portal auth + Tool Gateway routing status (read-only).
-# ---------------------------------------------------------------------------
-
-
-@app.get("/api/portal")
-async def get_portal_status():
-    cfg = load_config() or {}
-    auth: Dict[str, Any] = {}
-    try:
-        from anakot_cli.auth import get_nous_auth_status
-
-        auth = get_nous_auth_status() or {}
-    except Exception:
-        auth = {}
-
-    features = []
-    try:
-        from anakot_cli.callmemo_subscription import get_callmemo_subscription_features
-
-        feats = get_callmemo_subscription_features(cfg)
-        if feats is not None:
-            for feat in feats.items():
-                if getattr(feat, "managed_by_nous", False):
-                    state = "via callmemo Portal"
-                elif getattr(feat, "active", False) and getattr(feat, "current_provider", None):
-                    state = feat.current_provider
-                elif getattr(feat, "active", False):
-                    state = "active"
-                else:
-                    state = "not configured"
-                features.append({"label": getattr(feat, "label", ""), "state": state})
-    except Exception:
-        _log.exception("portal features failed")
-
-    model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
-    return {
-        "logged_in": bool(auth.get("logged_in")),
-        "portal_url": auth.get("portal_base_url"),
-        "inference_url": auth.get("inference_base_url"),
-        "provider": str((model_cfg or {}).get("provider") or ""),
-        "subscription_url": "https://portal.callmemo.ai/manage-subscription",
-        "features": features,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -8831,8 +8788,9 @@ _BUILTIN_DASHBOARD_THEMES = [
     {"name": "midnight",      "label": "Midnight",            "description": "Deep blue-violet with cool accents"},
     {"name": "ember",     "label": "Ember",          "description": "Warm crimson and bronze — forge vibes"},
     {"name": "mono",      "label": "Mono",           "description": "Clean grayscale — minimal and focused"},
-    {"name": "cyberpunk", "label": "Cyberpunk",      "description": "Neon green on black — matrix terminal"},
-    {"name": "rose",      "label": "Rosé",           "description": "Soft pink and warm ivory — easy on the eyes"},
+    {"name": "cyberpunk", "label": "Cyberpunk",      "description": "Neon green on black -- matrix terminal"},
+    {"name": "berserk",   "label": "Berserk",        "description": "Black Swordsman -- blood, iron, and defiance"},
+    {"name": "rose",      "label": "Rosé",           "description": "Soft pink and warm ivory -- easy on the eyes"},
 ]
 
 
@@ -9731,6 +9689,7 @@ def start_server(
     # uses this to decide whether to refuse the bind, log the gate-on
     # banner, and enable uvicorn proxy_headers.
     app.state.auth_required = should_require_auth(host, allow_public)
+    app.state.allow_public = allow_public
 
     if app.state.auth_required:
         # Phase 3.5: the gate engages on non-loopback binds.  The legacy

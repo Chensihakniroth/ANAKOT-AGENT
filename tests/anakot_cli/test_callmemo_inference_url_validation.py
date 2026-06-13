@@ -1,22 +1,8 @@
 """Regression tests for callmemo Portal inference_base_url host-allowlist validation.
 
-A poisoned ``inference_base_url`` from a Portal refresh response (network
-MITM, malicious response injection) would otherwise be persisted to
-auth.json and forwarded with the user's legitimate invoke JWT
-bearer on every subsequent proxy request, exfiltrating their inference
-budget and opening a response-injection channel into the IDE / chat
-client. ``_validate_nous_inference_url_from_network()`` blocks any URL
-outside the allowlist at the source.
-
-These tests verify:
-
-1. The validator's host + scheme rules.
-2. Each of the two NETWORK call sites in ``auth.py`` calls the validator
-   rather than the unrestricted ``_optional_base_url`` helper.
-3. The proxy adapter applies the validator as belt-and-suspenders.
-4. The env-var override path (``NOUS_INFERENCE_BASE_URL``) is NOT
-   gated by the validator — that's the documented dev/staging escape
-   hatch.
+NOTE: The callmemo Portal was removed in the Anakot fork. These tests are
+skipped by default since they test portal-specific URL validation that no
+longer applies. The stub functions in anakot_cli.auth return safe no-ops.
 """
 
 from __future__ import annotations
@@ -28,6 +14,10 @@ from anakot_cli.auth import (
     _ALLOWED_NOUS_INFERENCE_HOSTS,
     _validate_nous_inference_url_from_network,
 )
+
+import pytest
+
+pytestmark = pytest.mark.skip(reason="callmemo Portal removed in Anakot fork")
 
 
 class TestValidatorRules:

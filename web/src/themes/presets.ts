@@ -160,6 +160,46 @@ export const cyberpunkTheme: DashboardTheme = {
   },
 };
 
+/** Berserk -- Black Swordsman. Blood, iron, and defiance. */
+export const berserkTheme: DashboardTheme = {
+  name: "berserk",
+  label: "Berserk",
+  description: "Black Swordsman -- blood, iron, and defiance",
+  palette: {
+    background: { hex: "#0A0A0A", alpha: 1 },
+    midground: { hex: "#C8B8A0", alpha: 1 },
+    foreground: { hex: "#FFFFFF", alpha: 0 },
+    warmGlow: "rgba(139, 0, 0, 0.35)",
+    noiseOpacity: 1.1,
+  },
+  typography: {
+    ...DEFAULT_TYPOGRAPHY,
+    fontSans: `"Cinzel", Georgia, "Times New Roman", serif`,
+    fontMono: `"Fira Code", ${SYSTEM_MONO}`,
+    fontUrl:
+      "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap",
+    letterSpacing: "0.02em",
+  },
+  layout: {
+    ...DEFAULT_LAYOUT,
+    radius: "0.125rem",
+  },
+  colorOverrides: {
+    destructive: "#CC2222",
+    warning: "#A08030",
+    success: "#5A8A5A",
+  },
+  componentStyles: {
+    card: {
+      border: "1px solid rgba(139, 0, 0, 0.2)",
+    },
+    progress: {
+      background: "rgba(139, 0, 0, 0.15)",
+    },
+  },
+  swatchColors: ["#0A0A0A", "#8B0000", "#C8B8A0"],
+};
+
 export const roseTheme: DashboardTheme = {
   name: "rose",
   label: "Rosé",
@@ -307,5 +347,6 @@ export const BUILTIN_THEMES: Record<string, DashboardTheme> = {
   ember: emberTheme,
   mono: monoTheme,
   cyberpunk: cyberpunkTheme,
+  berserk: berserkTheme,
   rose: roseTheme,
 };

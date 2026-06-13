@@ -38,8 +38,10 @@ _PEER_GONE_ERRNOS = frozenset({
     errno.ECONNRESET,   # peer reset the connection
     errno.EBADF,        # fd closed under us
     errno.ESHUTDOWN,    # transport endpoint shut down
+    errno.EINVAL,       # Windows: pipe handle invalid after peer closes
     getattr(errno, "WSAECONNRESET", -1),  # win32 mapping (no-op on POSIX)
     getattr(errno, "WSAESHUTDOWN", -1),
+    getattr(errno, "WSAEINVAL", -1),      # win32: socket/pipe invalid arg
 } - {-1})
 
 logger = logging.getLogger(__name__)

@@ -13,12 +13,6 @@ const SIGNAL_EXIT_CODE: Record<'SIGHUP' | 'SIGINT' | 'SIGTERM', number> = {
   SIGTERM: 143,
 }
 
-const SIGNAL_LABEL: Record<string, 'SIGINT' | 'SIGTERM' | 'SIGHUP'> = {
-  SIGINT: 'SIGINT',
-  SIGTERM: 'SIGTERM',
-  SIGHUP: 'SIGHUP',
-}
-
 let wired = false
 
 export function setupGracefulExit({ cleanups = [], failsafeMs = 4000, onError, onSignal }: SetupOptions = {}) {
@@ -41,19 +35,22 @@ export function setupGracefulExit({ cleanups = [], failsafeMs = 4000, onError, o
       onSignal?.(signal)
     }
 
-    // Tell the App component to render the goodbye screen
+    // For Ctrl+C: Ink's input handler calls die() which sets shuttingDown=true
+    // and shows the goodbye screen. The goodbye screen calls process.exit(0).
+    // For other signals (SIGHUP, SIGTERM): show goodbye and exit.
     patchUiState({ shuttingDown: true })
 
-    // Run cleanups (kill gateway, reset terminal modes) in parallel
-    void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).then(() => {
-      // After cleanups + goodbye animation (~7s), exit
-      // The goodbye screen auto-exits via its own timer, but this is the failsafe
-    })
+    // Run cleanups after goodbye animation completes
+    setTimeout(() => {
+      void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).then(() => {
+        process.exit(code)
+      })
+    }, 9000).unref?.()
 
-    // Failsafe: force exit if everything hangs
+    // Hard failsafe
     setTimeout(() => {
       process.exit(code)
-    }, Math.max(failsafeMs, 10000)).unref?.() // At least 10s for the goodbye animation
+    }, 12000).unref?.()
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {

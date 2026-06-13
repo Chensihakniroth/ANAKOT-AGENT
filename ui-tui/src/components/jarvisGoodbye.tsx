@@ -1,193 +1,57 @@
 import { Box, Text } from '@anakot/ink'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { Theme } from '../theme.js'
 
-// ── Iron Man / J.A.R.V.I.S. color palette ─────────────────────────────
-// Deep space black, arc reactor cyan, hot gold, warning amber, offline red
+// ── Iron Man / J.A.R.V.I.S. palette ─────────────────────────────────────
 
-const ARC_CYAN = '#00e5ff'
-const ARC_CYAN_DIM = '#009faf'
-const ARC_GLOW = '#80f7ff'
-const HOT_GOLD = '#ffd740'
-const HOT_GOLD_DIM = '#c8a000'
-const WARNING_AMBER = '#ff9100'
-const OFFLINE_RED = '#ff1744'
-const OFFLINE_RED_DIM = '#b71c1c'
-const HUD_WHITE = '#e0e0e0'
-const HUD_DIM = '#6e6e6e'
-const HUD_BG = '#0a0a14'
-const REACTOR_RING = '#00b8d4'
+const CYAN = '#00e5ff'
+const GOLD = '#ffd740'
+const RED = '#ff1744'
+const WHITE = '#e0e0e0'
+const DIM = '#555555'
 
-// ── Reactor pulse frames ───────────────────────────────────────────────
-// Concentric rings that contract/expand like the Iron Man arc reactor
+// ── Simple arc reactor: just a pulsing circle ────────────────────────────
 
-const REACTOR_FRAMES = [
-  [
-    '        ╭─────────────╮',
-    '      ╭─┤  ╭───────╮  ├─╮',
-    '    ╭─┤  ╭─┤ ╭───╮  ├─╮  ├─╮',
-    '    │  │  │ │ ● │ │  │  │  │',
-    '    ╰─┤  ╰─┤ ╰───╯  ├─╯  ├─╯',
-    '      ╰─┤  ╰───────╯  ├─╯',
-    '        ╰─────────────╯',
-  ],
-  [
-    '        ╭─────────────╮',
-    '      ╭─┤  ╭─═════╮  ├─╮',
-    '    ╭─┤  ╭─┤ ╭═══╮  ├─╮  ├─╮',
-    '    │  │  │ │ ◉ │ │  │  │  │',
-    '    ╰─┤  ╰─┤ ╰═══╯  ├─╯  ├─╯',
-    '      ╰─┤  ╰─═════╯  ├─╯',
-    '        ╰─────────────╯',
-  ],
-  [
-    '        ╭─────────────╮',
-    '      ╭─┤ ╭═══════╮  ├─╮',
-    '    ╭─┤  ╭─┤ ╭═════╮ ├─╮ ├─╮',
-    '    │  │  │ │  ◈  │ │  │  │  │',
-    '    ╰─┤  ╰─┤ ╰═════╯ ├─╯  ├─╯',
-    '      ╰─┤ ╰═══════╯  ├─╯',
-    '        ╰─────────────╯',
-  ],
-  [
-    '        ╭─────────────╮',
-    '      ╭─┤╭═════════╮ ├─╮',
-    '    ╭─┤  ╭─┤╭═══════╮├─╮ ├─╮',
-    '    │  │  │ │  ✦✦  │ │  │  │  │',
-    '    ╰─┤  ╰─┤╰═══════╯├─╯  ├─╯',
-    '      ╰─┤╰═════════╯ ├─╯',
-    '        ╰─────────────╯',
-  ],
-  [
-    '        ╭═════════════╮',
-    '      ╭═╡             ╞═╮',
-    '    ╭═╡   ╭═════════╮   ╞═╮',
-    '    ║   ║  ║  ·  ·  ║  ║   ║',
-    '    ╰═╡   ╰═════════╯   ╞═╯',
-    '      ╰═╡             ╞═╯',
-    '        ╰═════════════╯',
-  ],
-]
+const REACTOR_FRAMES = ['○', '◉', '●', '◉']
 
-// ── HUD scanline effect ────────────────────────────────────────────────
-
-const SCAN_FRAMES = [
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓',
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░▓▓',
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░▓▓▓',
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░▓▓▓',
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░▓▓▓',
-  '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░▓▓▓',
-  '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░',
-]
-
-// ── Shutdown sequence phases ──────────────────────────────────────────
-
-interface SessionStats {
+interface JARVISGoodbyeProps {
   messages: number
   toolsUsed: number
   contextUsed: number
   contextMax: number
-  sessionDuration: string
+  duration: string
   cost: number
-}
-
-interface JARVISGoodbyeProps {
-  stats: SessionStats
-  reason: 'SIGINT' | 'SIGTERM' | 'SIGHUP' | 'exit'
+  reason: string
   t: Theme
 }
 
-const centerText = (text: string, width: number): string => {
-  const len = [...text].length // Handle unicode width roughly
-  const pad = Math.max(0, width - len)
-  const left = Math.floor(pad / 2)
-  return ' '.repeat(left) + text + ' '.repeat(pad - left)
-}
+export function JARVISGoodbye({ messages, toolsUsed, contextUsed, contextMax, duration, cost, reason, t }: JARVISGoodbyeProps) {
+  const [tick, setTick] = useState(0)
 
-export function JARVISGoodbye({ stats, reason, t }: JARVISGoodbyeProps) {
-  const [phase, setPhase] = useState(0)
-  const [reactorFrame, setReactorFrame] = useState(0)
-  const [scanFrame, setScanFrame] = useState(0)
-  const startTime = useRef(Date.now())
-
-  // ── Phase progression ───────────────────────────────────────────────
-  // Phase 0: HUD boot — "Initiating shutdown sequence..."
-  // Phase 1: System status — session stats
-  // Phase 2: Power down — reactor spin-down
-  // Phase 3: Goodbye — final J.A.R.V.I.S. sign-off
-
+  // Slow pulse that decelerates, then exit
   useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase(1), 800),
-      setTimeout(() => setPhase(2), 2200),
-      setTimeout(() => setPhase(3), 3800),
-      setTimeout(() => setPhase(4), 5200),
-    ]
-    return () => timers.forEach(clearTimeout)
-  }, [])
-
-  // Exit the process after the goodbye animation completes
-  useEffect(() => {
-    if (phase >= 4) {
-      const timer = setTimeout(() => {
-        process.exit(0)
-      }, 2000) // 2s buffer after final phase to let the user see the goodbye
-      return () => clearTimeout(timer)
-    }
-  }, [phase])
-
-  // ── Reactor animation (slows down over time) ────────────────────────
-
-  useEffect(() => {
-    if (phase >= 3) {
-      return // Stop animating during final goodbye
-    }
-    const interval = phase === 0 ? 300 : phase === 1 ? 500 : 800
-    const id = setInterval(() => {
-      setReactorFrame(f => (f + 1) % REACTOR_FRAMES.length)
-    }, interval)
-    return () => clearInterval(id)
-  }, [phase])
-
-  // ── Scanline animation ──────────────────────────────────────────────
-
-  useEffect(() => {
-    if (phase >= 3) {
+    const speeds = [400, 500, 600, 800, 1000, 1200, 1500, 2000]
+    if (tick >= speeds.length) {
+      // Animation done — reset terminal and exit cleanly
+      process.stdout.write('\x1b[?25h')   // Show cursor
+      process.stdout.write('\x1b[2J')     // Clear AlternateScreen
+      process.stdout.write('\x1b[H')      // Cursor to top-left
+      process.stdout.write('\x1b[?1049l')  // Exit AlternateScreen buffer
+      // Clear the main terminal buffer and scrollback too
+      process.stdout.write('\x1b[2J')     // Clear visible area
+      process.stdout.write('\x1b[H')      // Cursor to top-left
+      process.stdout.write('\x1b[3J')     // Clear scrollback buffer
+      process.exit(0)
       return
     }
-    const id = setInterval(() => {
-      setScanFrame(f => (f + 1) % SCAN_FRAMES.length)
-    }, 150)
-    return () => clearInterval(id)
-  }, [phase])
+    const id = setTimeout(() => setTick(n => n + 1), speeds[tick])
+    return () => clearTimeout(id)
+  }, [tick])
 
-  // ── Computed values ─────────────────────────────────────────────────
-
-  const cols = 64
-  const elapsed = Math.floor((Date.now() - startTime.current) / 1000)
-  const contextPct = stats.contextMax > 0
-    ? Math.round((stats.contextUsed / stats.contextMax) * 100)
-    : 0
-
-  const reasonLabel = {
-    SIGINT: 'User interrupt (Ctrl+C)',
-    SIGTERM: 'Termination signal',
-    SIGHUP: 'Connection lost',
-    exit: 'User exit',
-  }[reason]
-
-  // ── Arc color shifts during shutdown ────────────────────────────────
-
-  const arcColor = phase >= 3 ? OFFLINE_RED_DIM : phase >= 2 ? WARNING_AMBER : ARC_CYAN
-  const arcGlow = phase >= 3 ? OFFLINE_RED : phase >= 2 ? HOT_GOLD : ARC_GLOW
-
-  // ── Render ──────────────────────────────────────────────────────────
-
-  const reactorArt = phase >= 3
-    ? REACTOR_FRAMES[4] // Collapsed/dim frame
-    : REACTOR_FRAMES[reactorFrame]
+  const reactor = REACTOR_FRAMES[Math.min(tick, REACTOR_FRAMES.length - 1)]
+  const reactorColor = tick >= 6 ? RED : tick >= 3 ? GOLD : CYAN
+  const ctxPct = contextMax > 0 ? Math.round((contextUsed / contextMax) * 100) : 0
 
   return (
     <Box
@@ -197,147 +61,74 @@ export function JARVISGoodbye({ stats, reason, t }: JARVISGoodbyeProps) {
       justifyContent="center"
       width="100%"
     >
-      {/* ── Top border: J.A.R.V.I.S. header ──────────────────────── */}
-      <Box flexDirection="column" alignItems="center" marginBottom={1}>
-        {phase === 0 && (
-          <>
-            <Text color={ARC_CYAN} dimColor>
-              {centerText('◈ ──────────── J.A.R.V.I.S. ──────────── ◈', cols)}
-            </Text>
-            <Text color={HUD_DIM}> </Text>
-            <Text color={HUD_WHITE} bold>
-              {centerText('INITIATING SHUTDOWN SEQUENCE', cols)}
-            </Text>
-            <Text color={HUD_DIM}>
-              {centerText(`Reason: ${reasonLabel}`, cols)}
-            </Text>
-            <Text color={HUD_DIM}> </Text>
-            <Text color={SCAN_FRAMES[scanFrame]}>
-              {'▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓'}
-            </Text>
-          </>
-        )}
+      <Box
+        borderStyle="round"
+        borderColor={DIM}
+        flexDirection="column"
+        alignItems="center"
+        paddingX={2}
+        paddingY={1}
+      >
+        {/* Reactor */}
+        <Text color={reactorColor} bold>
+          {reactor}
+        </Text>
 
-        {phase >= 1 && phase < 3 && (
-          <>
-            {/* ── System Status HUD ─────────────────────────────── */}
-            <Text color={ARC_CYAN} dimColor>
-              {centerText('◈ ──────────── SYSTEM DIAGNOSTICS ──────────── ◈', cols)}
-            </Text>
-            <Box height={1} />
+        {/* J.A.R.V.I.S. */}
+        <Text color={CYAN} bold>
+          J.A.R.V.I.S.
+        </Text>
 
-            {/* Status grid */}
-            <Box flexDirection="row" justifyContent="center" width={cols}>
-              <Box flexDirection="column" width={20} marginRight={2}>
-                <Text color={HUD_DIM}>SESSION MESSAGES</Text>
-                <Text bold color={HUD_WHITE}>{String(stats.messages).padStart(6, ' ')}</Text>
-              </Box>
-              <Box flexDirection="column" width={20} marginRight={2}>
-                <Text color={HUD_DIM}>TOOLS EXECUTED</Text>
-                <Text bold color={HUD_WHITE}>{String(stats.toolsUsed).padStart(6, ' ')}</Text>
-              </Box>
-              <Box flexDirection="column" width={20}>
-                <Text color={HUD_DIM}>DURATION</Text>
-                <Text bold color={HUD_WHITE}>  {stats.sessionDuration}</Text>
-              </Box>
-            </Box>
+        {/* Status */}
+        <Text color={WHITE}>
+          Shutting down…
+        </Text>
 
-            <Box height={1} />
+        {/* Reason */}
+        <Text color={DIM}>
+          {reason}
+        </Text>
 
-            {/* Context bar */}
-            <Box flexDirection="row" alignItems="center" justifyContent="center">
-              <Text color={HUD_DIM}>CTX </Text>
-              <Text color={contextPct > 90 ? OFFLINE_RED : contextPct > 70 ? WARNING_AMBER : ARC_CYAN}>
-                {'█'.repeat(Math.floor(contextPct / 5))}
-              </Text>
-              <Text color={HUD_DIM}>
-                {'░'.repeat(20 - Math.floor(contextPct / 5))}
-              </Text>
-              <Text color={HUD_WHITE}> {contextPct}%</Text>
-            </Box>
+        {/* Thin divider */}
+        <Text color={DIM} wrap="truncate">
+          {'─'.repeat(36)}
+        </Text>
 
-            <Box height={1} />
+        {/* Session info — compact 2-column layout */}
+        <Box flexDirection="row" justifyContent="space-between" width={36}>
+          <Text color={DIM}>messages </Text>
+          <Text color={WHITE}>{messages}</Text>
+        </Box>
 
-            <Text color={HUD_DIM}>
-              {centerText(`Cost: $${stats.cost.toFixed(4)}`, cols)}
-            </Text>
+        <Box flexDirection="row" justifyContent="space-between" width={36}>
+          <Text color={DIM}>tools    </Text>
+          <Text color={WHITE}>{toolsUsed}</Text>
+        </Box>
 
-            <Box height={1} />
-            <Text color={SCAN_FRAMES[scanFrame]}>
-              {'▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓'}
-            </Text>
-          </>
-        )}
+        <Box flexDirection="row" justifyContent="space-between" width={36}>
+          <Text color={DIM}>context  </Text>
+          <Text color={ctxPct > 90 ? RED : ctxPct > 70 ? GOLD : CYAN}>{ctxPct}%</Text>
+        </Box>
 
-        {phase >= 3 && (
-          <>
-            {/* ── Arc Reactor Spin-Down ──────────────────────────── */}
-            <Box flexDirection="column" alignItems="center" marginBottom={2}>
-              {reactorArt.map((line, i) => {
-                const isCenter = i === 3
-                const color = isCenter
-                  ? arcGlow
-                  : (phase >= 3 && i >= 4)
-                    ? OFFLINE_RED_DIM
-                    : (phase >= 3 && i <= 2)
-                      ? WARNING_AMBER
-                      : REACTOR_RING
-                return (
-                  <Text key={i} color={color} bold={isCenter && phase < 3}>
-                    {line}
-                  </Text>
-                )
-              })}
-            </Box>
+        <Box flexDirection="row" justifyContent="space-between" width={36}>
+          <Text color={DIM}>duration </Text>
+          <Text color={WHITE}>{duration}</Text>
+        </Box>
 
-            {phase >= 3 && (
-              <>
-                <Text color={OFFLINE_RED}>
-                  ─── REACTOR OFFLINE ───
-                </Text>
-                <Box height={1} />
+        <Box flexDirection="row" justifyContent="space-between" width={36}>
+          <Text color={DIM}>cost     </Text>
+          <Text color={WHITE}>${cost.toFixed(4)}</Text>
+        </Box>
 
-                {/* ── J.A.R.V.I.S. Sign-Off ────────────────────────── */}
-                <Text color={HUD_DIM}>
-                  {centerText('────────────────────────────────────────────', cols)}
-                </Text>
-                <Box height={1} />
+        {/* Thin divider */}
+        <Text color={DIM} wrap="truncate">
+          {'─'.repeat(36)}
+        </Text>
 
-                <Text color={HOT_GOLD} bold>
-                  {centerText('Goodbye, Sir.', cols)}
-                </Text>
-                <Box height={1} />
-
-                <Text color={HUD_WHITE}>
-                  {centerText('_   _ _____      _____ _____ _____ _____', cols)}
-                </Text>
-                <Text color={HUD_WHITE}>
-                  {centerText('| | | |  ___|    |  _  /  ___/  ___|_   _|', cols)}
-                </Text>
-                <Text color={HUD_WHITE}>
-                  {centerText('| | | | |_ _____| | | \\ `--.| |_    | |  ', cols)}
-                </Text>
-                <Text color={HUD_WHITE}>
-                  {centerText('| |/  |  _|_____| | | |`--. \\  _|   | |  ', cols)}
-                </Text>
-                <Text color={HUD_WHITE}>
-                  {centerText('|___/|_|        \\_/ /\\__/ /\\__/ /  |_|  ', cols)}
-                </Text>
-                <Text color={HUD_WHITE}>
-                  {centerText('                    \\_____/\\____/ (_)    ', cols)}
-                </Text>
-
-                <Box height={2} />
-                <Text color={HUD_DIM}>
-                  {centerText(`${stats.messages} exchanges · ${stats.toolsUsed} operations · ${stats.sessionDuration}`, cols)}
-                </Text>
-                <Text color={HUD_DIM}>
-                  {centerText('All systems terminated.', cols)}
-                </Text>
-              </>
-            )}
-          </>
-        )}
+        {/* Sign-off */}
+        <Text color={GOLD} bold>
+          Goodbye, Sir.
+        </Text>
       </Box>
     </Box>
   )

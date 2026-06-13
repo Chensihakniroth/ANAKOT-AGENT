@@ -281,6 +281,7 @@ class TurnController {
       streamSegments: [],
       streaming: '',
       subagents: [],
+      thinkingSpinner: false,
       tools: [],
       turnTrail: []
     })
@@ -683,14 +684,16 @@ class TurnController {
       return
     }
 
-    this.reasoningText = incoming
-    this.activeReasoningText = incoming
+    // The first reasoning delta is always the kaomoji verb from Python.
+    // Strip it entirely — it is a status indicator, not reasoning content.
+    patchTurnState({ reasoning: '', thinkingSpinner: true })
+
     this.scheduleReasoning()
     this.syncReasoningSegment()
     this.pulseReasoningStreaming()
   }
 
-  recordReasoningDelta(text: string, force = false) {
+  recordReasoningDelta(text: string, force = boolean) {
     if (this.interrupted || (!force && !getUiState().showReasoning)) {
       return
     }
@@ -699,8 +702,20 @@ class TurnController {
       this.flushStreamingSegment()
     }
 
+    // Strip the kaomoji spinner verb sent by the Python gateway as the first
+    // thinking delta (e.g. "(◉) initializing protocols..."). It is a status
+    // indicator, not actual reasoning content.
+    const isFirstDelta = !this.reasoningText.trim()
+    if (isFirstDelta) {
+      // The first delta is always the kaomoji verb — show spinner instead
+      patchTurnState({ reasoning: '', thinkingSpinner: true })
+      this.pulseReasoningStreaming()
+      return
+    }
+
     this.reasoningText += text
     this.activeReasoningText += text
+    patchTurnState({ thinkingSpinner: false })
 
     if (this.reasoningText.length > 80_000) {
       this.reasoningText = this.reasoningText.slice(-60_000)

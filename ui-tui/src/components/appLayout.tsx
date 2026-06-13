@@ -21,7 +21,7 @@ import { composerPromptText } from '../lib/prompt.js'
 
 import { AgentsOverlay } from './agentsOverlay.js'
 import { GoodVibesHeart, StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
-import { FloatingOverlays, PromptZone } from './appOverlays.js'
+import { OverlaysInline, PromptZone } from './appOverlays.js'
 import { Banner, Panel, SessionPanel } from './branding.js'
 import { FpsOverlay } from './fpsOverlay.js'
 import { HelpHint } from './helpHint.js'
@@ -256,19 +256,6 @@ const ComposerPane = memo(function ComposerPane({
       <StatusRulePane at="top" composer={composer} status={status} />
 
       <Box flexDirection="column" marginTop={ui.statusBar === 'top' ? 0 : 1} position="relative">
-        <FloatingOverlays
-          cols={composer.cols}
-          compIdx={composer.compIdx}
-          completions={composer.completions}
-          onActiveSessionClose={actions.closeLiveSession}
-          onActiveSessionSelect={actions.activateLiveSession}
-          onModelSelect={actions.onModelSelect}
-          onNewLiveSession={actions.newLiveSession}
-          onNewPromptSession={actions.newPromptSession}
-          onResumeSelect={actions.resumeById}
-          pagerPageSize={composer.pagerPageSize}
-        />
-
         {composer.input === '?' && !composer.inputBuf.length && <HelpHint t={ui.theme} />}
 
         {!isBlocked && (
@@ -458,6 +445,15 @@ export const AppLayout = memo(function AppLayout({
             </PerfPane>
           )}
         </Box>
+
+        <OverlaysInline
+          actions={actions}
+          cols={composer.cols}
+          compIdx={composer.compIdx}
+          completions={composer.completions}
+          overlay={overlay}
+          pagerPageSize={composer.pagerPageSize}
+        />
 
         {!overlay.agents && (
           <>

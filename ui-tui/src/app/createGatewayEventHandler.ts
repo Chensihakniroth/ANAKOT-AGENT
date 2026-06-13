@@ -442,7 +442,15 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
           scheduleThinkingStatus(value || statusFromBusy())
 
           if (value) {
-            turnController.recordReasoningDelta(value)
+            // Strip the kaomoji spinner verb (e.g. "(◉) initializing protocols...")
+            const isVerb = /^\([^)]+\)\s+\w+[\w\s]*\.\.\.$/.test(value.trim())
+            if (isVerb) {
+              // Verb is a status indicator, not reasoning content.
+              // Still pulse the streaming state so the thinking header renders.
+              turnController.pulseReasoningStreaming()
+            } else {
+              turnController.recordReasoningDelta(value)
+            }
           }
         }
 
@@ -645,17 +653,27 @@ export function createGatewayEventHandler(ctx: GatewayEventHandlerContext): (ev:
 
         return
 
-      case 'reasoning.delta':
+      case 'reasoning.delta': {
         if (ev.payload?.text) {
-          turnController.recordReasoningDelta(ev.payload.text, Boolean(ev.payload.verbose))
+          const value = String(ev.payload.text)
+          const isVerb = /^\([^)]+\)\s+\w+[\w\s]*\.\.\.$/.test(value.trim())
+          if (!isVerb) {
+            turnController.recordReasoningDelta(value, Boolean(ev.payload.verbose))
+          }
         }
 
         return
+      }
 
-      case 'reasoning.available':
-        turnController.recordReasoningAvailable(String(ev.payload?.text ?? ''), Boolean(ev.payload?.verbose))
+      case 'reasoning.available': {
+        const text = String(ev.payload?.text ?? '')
+        const isVerb = /^\([^)]+\)\s+\w+[\w\s]*\.\.\.$/.test(text.trim())
+        if (!isVerb) {
+          turnController.recordReasoningAvailable(text, Boolean(ev.payload?.verbose))
+        }
 
         return
+      }
 
       case 'tool.progress':
         if (ev.payload?.preview && ev.payload.name) {

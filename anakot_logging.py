@@ -467,7 +467,14 @@ class _ManagedRotatingFileHandler(RotatingFileHandler):
         return stream
 
     def doRollover(self):
-        super().doRollover()
+        try:
+            super().doRollover()
+        except PermissionError:
+            # On Windows, another process may hold an exclusive lock on the
+            # log file (e.g. a running TUI session).  Silently skip rotation
+            # rather than crashing the entire process.  The log will be
+            # rotated on the next attempt when the lock is released.
+            pass
         self._chmod_if_managed()
         # Our own rollover writes a new baseFilename; refresh the snapshot
         # so the next emit doesn't mistake it for external rotation.
