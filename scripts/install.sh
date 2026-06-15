@@ -1,35 +1,44 @@
 #!/bin/bash
 # ============================================================================
-# Anakot Agent Installer
+# Anakot Agent Installer — TUI Edition
 # ============================================================================
-# Installation script for Linux, macOS, and Android/Termux.
-# Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
+# Installs the Anakot Agent with the TUI frontend (anakot --tui).
+# No web dashboard, no desktop GUI, no Electron, no Playwright.
+#
+# Uses uv for fast Python provisioning on desktop/server,
+# and Python's stdlib venv + pip on Termux.
 #
 # Usage:
-#   curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+#   Clone the repo and run scripts/install.sh from the repo root.
+#   There is NO public install script URL — clone the repo and run this locally.
 #
-# Or with options:
-#   curl -fsSL ... | bash -s -- --no-venv --skip-setup
+# Options:
+#   --skip-setup       Skip interactive setup wizard
+#   --no-venv          Don't create virtual environment
+#   --no-skills        Start with a blank slate (no bundled skills)
+#   --branch NAME      Git branch to install (default: tui-revamp-design)
+#   --commit SHA       Pin checkout to a specific commit
+#   --dir PATH         Installation directory
+#   --anakot-home PATH Data directory (default: ~/.anakot)
+#   --non-interactive  Skip stages that require user input
+#   --verify-only      Verify an existing install, then exit
+#   --reinstall        Force full reinstall (removes existing venv + TUI dist)
+#   -h, --help         Show this help
 #
 # ============================================================================
 
 set -e
 
-# Guard against environment leakage when the installer is launched from another
-# Python-driven tool session (e.g. Anakot terminal tool). A pre-set PYTHONPATH
-# can force pip/entrypoints to import a different checkout than the one being
-# installed, which makes fresh installs appear broken or stale.
+# Guard against environment leakage
 if [ -n "${PYTHONPATH:-}" ]; then
-    echo "⚠ Ignoring inherited PYTHONPATH during install to avoid module shadowing"
+    echo "Warning: Ignoring inherited PYTHONPATH during install"
     unset PYTHONPATH
 fi
 if [ -n "${PYTHONHOME:-}" ]; then
-    echo "⚠ Ignoring inherited PYTHONHOME during install"
+    echo "Warning: Ignoring inherited PYTHONHOME during install"
     unset PYTHONHOME
 fi
 
-# Prevent uv from discovering config files (uv.toml, pyproject.toml) from the
-# wrong user's home directory when running under sudo -u <user>.  See #21269.
 export UV_NO_CONFIG=1
 
 # Colors
@@ -39,16 +48,13 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:callmemo/anakot-agent.git"
-REPO_URL_HTTPS="https://github.com/callmemo/anakot-agent.git"
+REPO_URL_SSH="git@github.com:Chensihakniroth/ANAKOT-AGENT.git"
+REPO_URL_HTTPS="https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
 ANAKOT_HOME="${ANAKOT_HOME:-$HOME/.anakot}"
-# INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
-# FHS-style layout for root installs.  Track whether the user gave us an
-# explicit directory — if so we never override it.
 if [ -n "${ANAKOT_INSTALL_DIR:-}" ]; then
     INSTALL_DIR="$ANAKOT_INSTALL_DIR"
     INSTALL_DIR_EXPLICIT=true
@@ -58,32 +64,19 @@ else
 fi
 PYTHON_VERSION="3.11"
 NODE_VERSION="22"
-
-# FHS-style root install layout (set by resolve_install_layout when applicable):
-#   code at /usr/local/lib/anakot-agent, command at /usr/local/bin/anakot,
-#   data still at /root/.anakot (ANAKOT_HOME).  Matches Claude Code / Codex CLI
-#   and keeps Docker bind-mounted /root/ volumes lean.
+BRANCH="tui-revamp-design"
+INSTALL_COMMIT=""
 ROOT_FHS_LAYOUT=false
-DETECTED_BROWSER_EXECUTABLE=""
+TUI_EXTRAS="cli,pty,cron,acp,mcp"
 
 # Options
 USE_VENV=true
 RUN_SETUP=true
-SKIP_BROWSER=false
 NO_SKILLS=false
-BRANCH="main"
-INSTALL_COMMIT=""
-ENSURE_DEPS=""
-POSTINSTALL_MODE=false
-MANIFEST_MODE=false
-STAGE_NAME=""
-JSON_OUTPUT=false
 NON_INTERACTIVE=false
-INCLUDE_DESKTOP=false
+VERIFY_ONLY=false
+REINSTALL=false
 
-# Detect non-interactive mode (e.g. curl | bash)
-# When stdin is not a terminal, read -p will fail with EOF,
-# causing set -e to silently abort the entire script.
 if [ -t 0 ]; then
     IS_INTERACTIVE=true
 else
@@ -93,2490 +86,600 @@ fi
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --no-venv)
-            USE_VENV=false
-            shift
-            ;;
-        --skip-setup)
-            RUN_SETUP=false
-            shift
-            ;;
-        --skip-browser|--no-playwright)
-            SKIP_BROWSER=true
-            shift
-            ;;
-        --no-skills)
-            NO_SKILLS=true
-            shift
-            ;;
-        --branch|-Branch)
-            BRANCH="$2"
-            shift 2
-            ;;
-        --commit|-Commit)
-            INSTALL_COMMIT="$2"
-            shift 2
-            ;;
-        --manifest|-Manifest)
-            MANIFEST_MODE=true
-            shift
-            ;;
-        --stage|-Stage)
-            STAGE_NAME="$2"
-            shift 2
-            ;;
-        --json|-Json)
-            JSON_OUTPUT=true
-            shift
-            ;;
-        --non-interactive|-NonInteractive)
-            NON_INTERACTIVE=true
-            shift
-            ;;
-        --include-desktop|-IncludeDesktop)
-            INCLUDE_DESKTOP=true
-            shift
-            ;;
-        --dir)
-            INSTALL_DIR="$2"
-            INSTALL_DIR_EXPLICIT=true
-            shift 2
-            ;;
-        --anakot-home)
-            ANAKOT_HOME="$2"
-            shift 2
-            ;;
-        --ensure)
-            ENSURE_DEPS="$2"
-            shift 2
-            ;;
-        --postinstall)
-            POSTINSTALL_MODE=true
-            shift
-            ;;
+        --no-venv)         USE_VENV=false; shift ;;
+        --skip-setup)      RUN_SETUP=false; shift ;;
+        --no-skills)       NO_SKILLS=true; shift ;;
+        --branch)          BRANCH="$2"; shift 2 ;;
+        --commit)          INSTALL_COMMIT="$2"; shift 2 ;;
+        --dir)             INSTALL_DIR="$2"; INSTALL_DIR_EXPLICIT=true; shift 2 ;;
+        --anakot-home)     ANAKOT_HOME="$2"; shift 2 ;;
+        --non-interactive) NON_INTERACTIVE=true; shift ;;
+        --verify-only)     VERIFY_ONLY=true; shift ;;
+        --reinstall)       REINSTALL=true; shift ;;
         -h|--help)
-            echo "Anakot Agent Installer"
-            echo ""
-            echo "Usage: install.sh [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --no-venv      Don't create virtual environment"
-            echo "  --skip-setup   Skip interactive setup wizard"
-            echo "  --skip-browser Skip Playwright/Chromium install (browser tools won't work)"
-            echo "  --no-skills    Start with a blank slate — seed no bundled skills, and"
-            echo "                   write \$ANAKOT_HOME/.no-bundled-skills so future"
-            echo "                   'anakot update' runs never inject bundled skills either"
-            echo "  --branch NAME  Git branch to install (default: main)"
-            echo "  --commit SHA   Pin checkout to a specific commit after clone/update"
-            echo "  --manifest     Print desktop bootstrap stage manifest as JSON"
-            echo "  --stage NAME   Run one desktop bootstrap stage"
-            echo "  --json         Print a JSON result frame for --stage"
-            echo "  --non-interactive  Skip stages that require user input"
-            echo "  --include-desktop  Also build the desktop app (apps/desktop -> Anakot.app)"
-            echo "  --dir PATH     Installation directory"
-            echo "                   default (non-root):  ~/.anakot/anakot-agent"
-            echo "                   default (root, Linux): /usr/local/lib/anakot-agent"
-            echo "  --anakot-home PATH  Data directory (default: ~/.anakot, or \$ANAKOT_HOME)"
-            echo "  -h, --help     Show this help"
-            echo ""
-            echo "Notes:"
-            echo "  When running as root on Linux, Anakot installs the code under"
-            echo "  /usr/local/lib/anakot-agent and links the command into"
-            echo "  /usr/local/bin/anakot (FHS layout — matches Claude Code / Codex CLI)."
-            echo "  Data, config, sessions, and logs still live in \$ANAKOT_HOME"
-            echo "  (default /root/.anakot).  This keeps Docker bind-mounted volumes"
-            echo "  small and ensures the command is on PATH for all shells."
-            echo "  Existing installs at \$ANAKOT_HOME/anakot-agent are preserved in-place."
-            echo "  --ensure DEPS  Install only specified deps (comma-separated)"
-            echo "                   Supported: node, browser, ripgrep, ffmpeg"
-            echo "                   Does NOT clone repo or create venv"
-            echo "  --postinstall  Run post-install setup only (for pip users)"
-            echo "                   Installs optional deps + runs anakot setup"
-            echo "                   Does NOT clone repo or create venv"
+            sed -n '3,35p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# ============================================================================
-# Helper functions
-# ============================================================================
-
+# Helpers
 print_banner() {
     echo ""
     echo -e "${MAGENTA}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
- echo "│ Anakot Agent Installer │"
+    echo "│          Anakot Agent Installer — TUI Edition           │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  An open source AI agent by callmemo.              │"
+    echo "│  An open source AI agent by callmemo.                   │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }
 
-log_info() {
-    echo -e "${CYAN}→${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
-json_escape() {
-    # Enough for short installer status strings; avoids requiring jq during
-    # pre-install bootstrap.
-    printf '%s' "$1" | tr '\n' ' ' | sed \
-        -e 's/\\/\\\\/g' \
-        -e 's/"/\\"/g'
-}
-
-# npm rewrites tracked package-lock.json files non-deterministically during
-# `npm install` / `npm run pack`. On a managed install those diffs are never
-# intentional, but they leave the checkout dirty — which forces `anakot update`
-# to autostash on every run and makes branch switches fragile. Restore them so
-# a fresh install ends with a clean tree. Best-effort; only touches lockfiles.
-restore_dirty_lockfiles() {
-    local repo="${1:-$INSTALL_DIR}"
-    [ -n "$repo" ] && [ -d "$repo/.git" ] || return 0
-    command -v git >/dev/null 2>&1 || return 0
-    local dirty
-    dirty=$(git -C "$repo" diff --name-only 2>/dev/null | grep 'package-lock\.json$' || true)
-    [ -z "$dirty" ] && return 0
-    echo "$dirty" | while IFS= read -r f; do
-        [ -n "$f" ] && git -C "$repo" checkout -- "$f" 2>/dev/null || true
-    done
-}
-
-emit_manifest() {
-    # Stage-Desktop is included only with --include-desktop, mirroring
-    # install.ps1: the signed bootstrap installer (Anakot-Setup) passes it so
-    # a GUI install ends up with a launchable app; the Electron app's own
-    # first-launch bootstrap and the CLI one-liner omit it (building the
-    # desktop from inside the already-running app would clobber it).
-    local desktop_stage=""
-    if [ "$INCLUDE_DESKTOP" = true ]; then
-        desktop_stage='{"name":"desktop","title":"Build desktop app","category":"runtime","needs_user_input":false},'
-    fi
-    printf '%s' '{"protocol_version":1,"stages":[{"name":"prerequisites","title":"System prerequisites","category":"runtime","needs_user_input":false},{"name":"repository","title":"Download Anakot Agent","category":"runtime","needs_user_input":false},{"name":"venv","title":"Create Python virtual environment","category":"runtime","needs_user_input":false},{"name":"python-deps","title":"Install Python dependencies","category":"runtime","needs_user_input":false},{"name":"node-deps","title":"Install browser-tool dependencies","category":"runtime","needs_user_input":false},{"name":"path","title":"Install anakot command","category":"runtime","needs_user_input":false},{"name":"config","title":"Prepare config and skills","category":"configuration","needs_user_input":false},{"name":"setup","title":"Configure API keys and settings","category":"configuration","needs_user_input":true},{"name":"gateway","title":"Configure gateway service","category":"configuration","needs_user_input":true},'"$desktop_stage"'{"name":"complete","title":"Finish install","category":"runtime","needs_user_input":false}]}'
-    printf '\n'
-}
-
-stage_needs_user_input() {
-    case "$1" in
-        setup|gateway) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
-emit_stage_json() {
-    local stage="$1"
-    local ok="$2"
-    local skipped="${3:-false}"
-    local reason="${4:-}"
-    local escaped_reason
-    escaped_reason="$(json_escape "$reason")"
-    if [ -n "$escaped_reason" ]; then
-        printf '{"ok":%s,"stage":"%s","skipped":%s,"reason":"%s"}\n' "$ok" "$stage" "$skipped" "$escaped_reason"
-    else
-        printf '{"ok":%s,"stage":"%s","skipped":%s}\n' "$ok" "$stage" "$skipped"
-    fi
-}
+log_info()  { echo -e "${CYAN}→${NC} $1"; }
+log_ok()    { echo -e "${GREEN}✓${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
+log_error() { echo -e "${RED}✗${NC} $1"; }
 
 prompt_yes_no() {
-    local question="$1"
-    local default="${2:-yes}"
-    local prompt_suffix
-    local answer=""
-
-    # Use case patterns (not ${var,,}) so this works on bash 3.2 (macOS /bin/bash).
+    local question="$1" default="${2:-yes}" prompt_suffix answer
     case "$default" in
-        [yY]|[yY][eE][sS]|[tT][rR][uU][eE]|1) prompt_suffix="[Y/n]" ;;
-        *) prompt_suffix="[y/N]" ;;
+        [yY]*) prompt_suffix="[Y/n]" ;;
+        *)     prompt_suffix="[y/N]" ;;
     esac
-
-    if [ "$NON_INTERACTIVE" = true ]; then
-        answer=""
+    if [ "$NON_INTERACTIVE" = true ]; then answer=""
     elif [ "$IS_INTERACTIVE" = true ]; then
         read -r -p "$question $prompt_suffix " answer || answer=""
     elif [ -r /dev/tty ] && [ -w /dev/tty ]; then
         printf "%s %s " "$question" "$prompt_suffix" > /dev/tty
         IFS= read -r answer < /dev/tty || answer=""
-    else
-        answer=""
-    fi
-
+    else answer=""; fi
     answer="${answer#"${answer%%[![:space:]]*}"}"
     answer="${answer%"${answer##*[![:space:]]}"}"
-
     if [ -z "$answer" ]; then
-        case "$default" in
-            [yY]|[yY][eE][sS]|[tT][rR][uU][eE]|1) return 0 ;;
-            *) return 1 ;;
-        esac
+        case "$default" in [yY]*) return 0 ;; *) return 1 ;; esac
     fi
-
-    case "$answer" in
-        [yY]|[yY][eE][sS]) return 0 ;;
-        *) return 1 ;;
-    esac
+    case "$answer" in [yY]*) return 0 ;; *) return 1 ;; esac
 }
 
 is_termux() {
     [ -n "${TERMUX_VERSION:-}" ] || [[ "${PREFIX:-}" == *"com.termux/files/usr"* ]]
 }
 
-# Decide where the repo checkout + venv live, and where the `anakot` command
-# symlink goes.  Called after detect_os so $OS/$DISTRO are known.
-#
-# Defaults:
-#   - Non-root, any OS:       INSTALL_DIR = $ANAKOT_HOME/anakot-agent
-#                             command link in $HOME/.local/bin
-#   - Termux (any uid):       INSTALL_DIR = $ANAKOT_HOME/anakot-agent
-#                             command link in $PREFIX/bin (already on PATH)
-#   - Root on Linux (new):    INSTALL_DIR = /usr/local/lib/anakot-agent
-#                             command link in /usr/local/bin
-#                             (unless a legacy install already exists at
-#                              $ANAKOT_HOME/anakot-agent — then preserve it)
-#
-# Always no-op when the user set --dir or $ANAKOT_INSTALL_DIR.
-resolve_install_layout() {
-    if [ "$INSTALL_DIR_EXPLICIT" = true ]; then
-        log_info "Install directory: $INSTALL_DIR (explicit)"
-        return 0
-    fi
+MANIFEST_FILE="$ANAKOT_HOME/.install_manifest"
 
-    # Termux: package manager manages /data/data/..., keep code in ANAKOT_HOME.
-    if is_termux; then
-        INSTALL_DIR="$ANAKOT_HOME/anakot-agent"
-        return 0
-    fi
-
-    # Root on Linux: prefer FHS layout unless a legacy install already exists.
-    # macOS root installs keep the legacy layout because /usr/local/ on macOS
-    # is Homebrew territory and we don't want to fight that.
-    if [ "$OS" = "linux" ] && [ "$(id -u)" -eq 0 ]; then
-        if [ -d "$ANAKOT_HOME/anakot-agent/.git" ]; then
-            INSTALL_DIR="$ANAKOT_HOME/anakot-agent"
-            log_info "Existing install detected at $INSTALL_DIR — keeping legacy layout"
-            log_info "  (new root installs use /usr/local/lib/anakot-agent)"
-            return 0
-        fi
-        INSTALL_DIR="/usr/local/lib/anakot-agent"
-        ROOT_FHS_LAYOUT=true
-        # Place uv-managed Python under /usr/local/share so the venv interpreter
-        # is world-readable.  Default uv paths land in /root/.local/share/uv,
-        # which non-root users can't traverse — leaving the shared
-        # /usr/local/bin/anakot wrapper unable to exec the bad-interpreter venv
-        # python.  See #21457.
-        export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/usr/local/share/uv/python}"
-        export UV_PYTHON_BIN_DIR="${UV_PYTHON_BIN_DIR:-/usr/local/share/uv/bin}"
-        log_info "Root install on Linux — using FHS layout"
-        log_info "  Code:    $INSTALL_DIR"
-        log_info "  Command: /usr/local/bin/anakot"
-        log_info "  Data:    $ANAKOT_HOME (unchanged)"
-        log_info "  uv Python: $UV_PYTHON_INSTALL_DIR (world-readable)"
-        return 0
-    fi
-
-    # Default: non-root, non-Termux → legacy user-scoped layout.
-    INSTALL_DIR="$ANAKOT_HOME/anakot-agent"
+load_manifest() {
+    MANIFEST_DIR=""; MANIFEST_BRANCH=""; MANIFEST_COMMIT=""; MANIFEST_TIMESTAMP=""
+    [ -f "$MANIFEST_FILE" ] || return 0
+    while IFS='=' read -r key val; do
+        case "$key" in
+            dir)      MANIFEST_DIR="$val" ;;
+            branch)   MANIFEST_BRANCH="$val" ;;
+            commit)   MANIFEST_COMMIT="$val" ;;
+            timestamp) MANIFEST_TIMESTAMP="$val" ;;
+        esac
+    done < "$MANIFEST_FILE"
 }
 
-get_command_link_dir() {
-    if is_termux && [ -n "${PREFIX:-}" ]; then
-        echo "$PREFIX/bin"
-    elif [ "$ROOT_FHS_LAYOUT" = true ]; then
-        echo "/usr/local/bin"
-    else
-        echo "$HOME/.local/bin"
-    fi
+save_manifest() {
+    mkdir -p "$ANAKOT_HOME"
+    local commit_hash
+    commit_hash="$(cd "$INSTALL_DIR" && git rev-parse HEAD 2>/dev/null || echo "unknown")"
+    cat > "$MANIFEST_FILE" <<EOF
+dir=$INSTALL_DIR
+branch=$BRANCH
+commit=${INSTALL_COMMIT:-$commit_hash}
+timestamp=$(date -u +%Y%m%d-%H%M%S)
+EOF
 }
-
-get_command_link_display_dir() {
-    if is_termux && [ -n "${PREFIX:-}" ]; then
-        echo '$PREFIX/bin'
-    elif [ "$ROOT_FHS_LAYOUT" = true ]; then
-        echo '/usr/local/bin'
-    else
-        echo '~/.local/bin'
-    fi
-}
-
-get_anakot_command_path() {
-    local link_dir
-    link_dir="$(get_command_link_dir)"
-    if [ -x "$link_dir/anakot" ]; then
-        echo "$link_dir/anakot"
-    else
-        echo "anakot"
-    fi
-}
-
-# ============================================================================
-# System detection
-# ============================================================================
 
 detect_os() {
     case "$(uname -s)" in
         Linux*)
-            if is_termux; then
-                OS="android"
-                DISTRO="termux"
-            else
-                OS="linux"
-                if [ -f /etc/os-release ]; then
-                    . /etc/os-release
-                    DISTRO="$ID"
-                else
-                    DISTRO="unknown"
-                fi
-            fi
-            ;;
-        Darwin*)
-            OS="macos"
-            DISTRO="macos"
-            ;;
-        CYGWIN*|MINGW*|MSYS*)
-            OS="windows"
-            DISTRO="windows"
+            if is_termux; then OS="android"; DISTRO="termux"
+            else OS="linux"; [ -f /etc/os-release ] && . /etc/os-release && DISTRO="$ID" || DISTRO="unknown"; fi ;;
+        Darwin*) OS="macos"; DISTRO="macos" ;;
+        CYGWIN*|MINGW*|MSYS*) OS="windows"; DISTRO="windows"
             log_error "Windows detected. Please use the PowerShell installer:"
-            log_info "  iex (irm https://anakot-agent.callmemo.ai/install.ps1)"
-            exit 1
-            ;;
-        *)
-            OS="unknown"
-            DISTRO="unknown"
-            log_warn "Unknown operating system"
-            ;;
+            log_info "  Clone the repo and run scripts\\install.ps1 from the repo root."
+            exit 1 ;;
+        *) OS="unknown"; DISTRO="unknown"; log_warn "Unknown operating system" ;;
     esac
-
-    log_success "Detected: $OS ($DISTRO)"
+    log_ok "Detected: $OS ($DISTRO)"
 }
 
-# ============================================================================
-# Dependency checks
-# ============================================================================
+resolve_install_layout() {
+    if [ "$INSTALL_DIR_EXPLICIT" = true ]; then
+        log_info "Install directory: $INSTALL_DIR (explicit)"; return 0
+    fi
+    if is_termux; then INSTALL_DIR="$ANAKOT_HOME/anakot-agent"; return 0; fi
+    if [ "$OS" = "linux" ] && [ "$(id -u)" -eq 0 ]; then
+        if [ -d "$ANAKOT_HOME/anakot-agent/.git" ]; then
+            INSTALL_DIR="$ANAKOT_HOME/anakot-agent"
+            log_info "Existing install at $INSTALL_DIR — keeping legacy layout"; return 0
+        fi
+        INSTALL_DIR="/usr/local/lib/anakot-agent"; ROOT_FHS_LAYOUT=true
+        export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-/usr/local/share/uv/python}"
+        export UV_PYTHON_BIN_DIR="${UV_PYTHON_BIN_DIR:-/usr/local/share/uv/bin}"
+        log_info "Root install — FHS layout: $INSTALL_DIR"; return 0
+    fi
+    INSTALL_DIR="$ANAKOT_HOME/anakot-agent"
+}
+
+get_command_link_dir() {
+    if is_termux && [ -n "${PREFIX:-}" ]; then echo "$PREFIX/bin"
+    elif [ "$ROOT_FHS_LAYOUT" = true ]; then echo "/usr/local/bin"
+    else echo "$HOME/.local/bin"; fi
+}
 
 install_uv() {
-    if [ "$DISTRO" = "termux" ]; then
-        log_info "Termux detected — using Python's stdlib venv + pip instead of uv"
-        UV_CMD=""
-        return 0
+    if [ "$DISTRO" = "termux" ]; then UV_CMD=""; return 0; fi
+    local managed_uv="$ANAKOT_HOME/bin/uv"
+    if [ -x "$managed_uv" ]; then
+        UV_CMD="$managed_uv"
+        log_ok "Managed uv found ($($UV_CMD --version 2>/dev/null))"; return 0
     fi
-
-    # Anakot owns its own uv at $ANAKOT_HOME/bin/uv.  Always install there —
-    # no PATH probing, no conda guards, no multi-location resolution chains.
-    # The runtime update path (anakot_cli/managed_uv.py) looks in the same
-    # place, so install.sh and `anakot update` stay in sync.
-    local _managed_uv="$ANAKOT_HOME/bin/uv"
-
-    if [ -x "$_managed_uv" ]; then
-        UV_CMD="$_managed_uv"
-        UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "Managed uv found ($UV_VERSION)"
-        return 0
-    fi
-
     log_info "Installing managed uv into $ANAKOT_HOME/bin ..."
     mkdir -p "$ANAKOT_HOME/bin"
-
-    # Two-stage: download the installer, then run it.  Piping
-    # `curl | sh` masks curl failures (sh exits 0 on empty stdin)
-    # and conflates network errors with installer errors.
-    local _uv_install_log _uv_installer
-    _uv_install_log="$(mktemp 2>/dev/null || echo "/tmp/anakot-uv-install.$$.log")"
-    _uv_installer="$(mktemp 2>/dev/null || echo "/tmp/anakot-uv-installer.$$.sh")"
-    if ! curl -LsSf https://astral.sh/uv/install.sh -o "$_uv_installer" 2>"$_uv_install_log"; then
-        log_error "Failed to download uv installer from https://astral.sh/uv/install.sh"
-        log_info "curl output:"
-        sed 's/^/    /' "$_uv_install_log" >&2
-        log_info "Install manually: https://docs.astral.sh/uv/getting-started/installation/"
-        rm -f "$_uv_install_log" "$_uv_installer"
-        exit 1
+    local log_file installer; log_file="$(mktemp)"; installer="$(mktemp)"
+    if ! curl -LsSf https://astral.sh/uv/install.sh -o "$installer" 2>"$log_file"; then
+        log_error "Failed to download uv installer"; sed 's/^/    /' "$log_file" >&2
+        rm -f "$log_file" "$installer"; exit 1
     fi
-    # UV_UNMANAGED_INSTALL tells the astral installer to place the binary
-    # directly into $ANAKOT_HOME/bin instead of ~/.local/bin.
-    if UV_UNMANAGED_INSTALL="$ANAKOT_HOME/bin" sh "$_uv_installer" >>"$_uv_install_log" 2>&1; then
-        rm -f "$_uv_installer"
-        if [ -x "$_managed_uv" ]; then
-            UV_CMD="$_managed_uv"
-        else
-            log_error "uv installer reported success but binary not found at $_managed_uv"
-            log_info "Installer output:"
-            sed 's/^/    /' "$_uv_install_log" >&2
-            rm -f "$_uv_install_log"
-            exit 1
+    if UV_UNMANAGED_INSTALL="$ANAKOT_HOME/bin" sh "$installer" >>"$log_file" 2>&1; then
+        rm -f "$installer"
+        if [ -x "$managed_uv" ]; then UV_CMD="$managed_uv"
+            log_ok "Managed uv installed ($($UV_CMD --version 2>/dev/null))"
+            rm -f "$log_file"; return 0
         fi
-        rm -f "$_uv_install_log"
-        UV_VERSION=$($UV_CMD --version 2>/dev/null)
-        log_success "Managed uv installed ($UV_VERSION)"
-    else
-        log_error "Failed to install uv"
-        log_info "Installer output:"
-        sed 's/^/    /' "$_uv_install_log" >&2
-        log_info "Install manually: https://docs.astral.sh/uv/getting-started/installation/"
-        rm -f "$_uv_install_log" "$_uv_installer"
-        exit 1
     fi
+    log_error "uv installer failed"; sed 's/^/    /' "$log_file" >&2
+    rm -f "$log_file" "$installer"; exit 1
 }
 
 check_python() {
     if [ "$DISTRO" = "termux" ]; then
-        log_info "Checking Termux Python..."
         if command -v python >/dev/null 2>&1; then
             PYTHON_PATH="$(command -v python)"
-            if "$PYTHON_PATH" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
-                PYTHON_FOUND_VERSION="$("$PYTHON_PATH" --version 2>/dev/null)"
-                log_success "Python found: $PYTHON_FOUND_VERSION"
-                return 0
-            fi
+            log_ok "Python found: $(python --version 2>/dev/null)"; return 0
         fi
-
-        log_info "Installing Python via pkg..."
-        pkg install -y python >/dev/null
+        log_info "Installing Python via pkg..."; pkg install -y python >/dev/null
         PYTHON_PATH="$(command -v python)"
-        PYTHON_FOUND_VERSION="$("$PYTHON_PATH" --version 2>/dev/null)"
-        log_success "Python installed: $PYTHON_FOUND_VERSION"
-        return 0
+        log_ok "Python installed: $(python --version 2>/dev/null)"; return 0
     fi
-
     log_info "Checking Python $PYTHON_VERSION..."
-
-    # Let uv handle Python — it can download and manage Python versions
-    # First check if a suitable Python is already available
-    if PYTHON_PATH="$("$UV_CMD" python find "$PYTHON_VERSION" 2>/dev/null)"; then
-        PYTHON_FOUND_VERSION="$("$PYTHON_PATH" --version 2>/dev/null)"
-        log_success "Python found: $PYTHON_FOUND_VERSION"
-        return 0
+    if PYTHON_PATH="$($UV_CMD python find "$PYTHON_VERSION" 2>/dev/null)"; then
+        log_ok "Python found: $($PYTHON_PATH --version 2>/dev/null)"; return 0
     fi
-
-    # Python not found — use uv to install it (no sudo needed!)
     log_info "Python $PYTHON_VERSION not found, installing via uv..."
     if "$UV_CMD" python install "$PYTHON_VERSION"; then
-        PYTHON_PATH="$("$UV_CMD" python find "$PYTHON_VERSION")"
-        PYTHON_FOUND_VERSION="$("$PYTHON_PATH" --version 2>/dev/null)"
-        log_success "Python installed: $PYTHON_FOUND_VERSION"
-    else
-        log_error "Failed to install Python $PYTHON_VERSION"
-        log_info "Install Python $PYTHON_VERSION manually, then re-run this script"
-        exit 1
-    fi
-}
-
-# Best-effort automatic git provisioning, mirroring install.ps1's Install-Git
-# (which downloads PortableGit on Windows). git is required to clone the repo,
-# and a fresh "normie" machine with no developer tools won't have it. Returns 0
-# if git is available afterwards, non-zero otherwise (caller prints manual
-# instructions and aborts).
-attempt_install_git() {
-    case "$OS" in
-        macos)
-            # Prefer Homebrew — fully headless when present.
-            if command -v brew >/dev/null 2>&1; then
-                log_info "Installing Git via Homebrew..."
-                brew install git >/dev/null 2>&1 || true
-                command -v git >/dev/null 2>&1 && return 0
-            fi
-            # Fall back to Apple Command Line Tools, which provide git AND the
-            # compiler some Python wheels need. `xcode-select --install` pops a
-            # system dialog (Apple gates CLT behind it — it cannot be fully
-            # silent without MDM), so we trigger it and poll for git to appear.
-            if command -v xcode-select >/dev/null 2>&1; then
-                log_info "Requesting Apple Command Line Tools (provides git + compiler)..."
-                log_info "If a macOS dialog appears, click \"Install\" and accept the license."
-                xcode-select --install >/dev/null 2>&1 || true
-                local waited=0
-                local timeout=900
-                while [ "$waited" -lt "$timeout" ]; do
-                    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    sleep 5
-                    waited=$((waited + 5))
-                    if [ $((waited % 60)) -eq 0 ]; then
-                        log_info "Still waiting for Command Line Tools install ($((waited / 60))m)..."
-                    fi
-                done
-            fi
-            return 1
-            ;;
-        linux)
-            local sudo_cmd=""
-            if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
-                command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
-            fi
-            case "$DISTRO" in
-                ubuntu|debian)
-                    log_info "Installing Git via apt..."
-                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
-                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null 2>&1 || true
-                    ;;
-                fedora)
-                    log_info "Installing Git via dnf..."
-                    $sudo_cmd dnf install -y git >/dev/null 2>&1 || true
-                    ;;
-                arch)
-                    log_info "Installing Git via pacman..."
-                    $sudo_cmd pacman -S --noconfirm git >/dev/null 2>&1 || true
-                    ;;
-                *)
-                    return 1
-                    ;;
-            esac
-            command -v git >/dev/null 2>&1 && return 0
-            return 1
-            ;;
-    esac
-    return 1
+        PYTHON_PATH="$($UV_CMD python find "$PYTHON_VERSION")"
+        log_ok "Python installed: $($PYTHON_PATH --version 2>/dev/null)"
+    else log_error "Failed to install Python $PYTHON_VERSION"; exit 1; fi
 }
 
 check_git() {
     log_info "Checking Git..."
-
-    # On fresh macOS /usr/bin/git is a stub that exits non-zero until CLT is installed.
-    if command -v git &> /dev/null && git --version &> /dev/null; then
-        GIT_VERSION=$(git --version | awk '{print $3}')
-        log_success "Git $GIT_VERSION found"
-        return 0
+    if command -v git &>/dev/null && git --version &>/dev/null; then
+        log_ok "Git $(git --version | awk '{print $3}') found"; return 0
     fi
-
-    log_error "Git not found"
-
-    if [ "$DISTRO" = "termux" ]; then
-        log_info "Installing Git via pkg..."
-        pkg install -y git >/dev/null
-        if command -v git >/dev/null 2>&1; then
-            GIT_VERSION=$(git --version | awk '{print $3}')
-            log_success "Git $GIT_VERSION installed"
-            return 0
-        fi
-    fi
-
-    # Try to install it automatically before giving up (parity with install.ps1).
-    log_info "Attempting to install Git automatically..."
-    if attempt_install_git; then
-        GIT_VERSION=$(git --version | awk '{print $3}')
-        log_success "Git $GIT_VERSION installed"
-        return 0
-    fi
-
-    log_warn "Could not install Git automatically. Please install it manually:"
-
+    if [ "$DISTRO" = "termux" ]; then pkg install -y git >/dev/null
+        log_ok "Git $(git --version | awk '{print $3}') installed"; return 0; fi
+    local sudo_cmd=""
+    [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
     case "$OS" in
+        macos)
+            if command -v brew >/dev/null 2>&1; then brew install git >/dev/null 2>&1 || true
+            elif command -v xcode-select >/dev/null 2>&1; then
+                xcode-select --install >/dev/null 2>&1 || true
+                local waited=0
+                while [ "$waited" -lt 900 ]; do
+                    command -v git >/dev/null 2>&1 && return 0
+                    sleep 5; waited=$((waited + 5))
+                done
+            fi ;;
         linux)
             case "$DISTRO" in
-                ubuntu|debian)
-                    log_info "  sudo apt update && sudo apt install git"
-                    ;;
-                fedora)
-                    log_info "  sudo dnf install git"
-                    ;;
-                arch)
-                    log_info "  sudo pacman -S git"
-                    ;;
-                *)
-                    log_info "  Use your package manager to install git"
-                    ;;
-            esac
-            ;;
-        android)
-            log_info "  pkg install git"
-            ;;
-        macos)
-            log_info "  xcode-select --install"
-            log_info "  Or: brew install git"
-            ;;
+                ubuntu|debian) $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true; $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null 2>&1 || true ;;
+                fedora)  $sudo_cmd dnf install -y git >/dev/null 2>&1 || true ;;
+                arch)    $sudo_cmd pacman -S --noconfirm git >/dev/null 2>&1 || true ;;
+            esac ;;
     esac
-
-    exit 1
+    if command -v git &>/dev/null && git --version &>/dev/null; then
+        log_ok "Git $(git --version | awk '{print $3}') installed"; return 0
+    fi
+    log_error "Git not found. Install it manually and re-run."; exit 1
 }
 
-# The desktop build runs Vite ^8, which refuses to start on Node outside
-# `^20.19 || >=22.12` — older Node lacks `node:util.styleText`, so `vite build`
-# crashes with a SyntaxError that surfaces only as the opaque "Build desktop
-# app … exit code 1" install failure. Returns 0 when the given `node --version`
-# string clears that floor; anything below it is replaced with the Anakot-
-# managed Node $NODE_VERSION LTS.
 node_satisfies_build() {
-    local ver="${1#v}"
-    local major="${ver%%.*}"
-    local minor="${ver#*.}"; minor="${minor%%.*}"
+    local ver="${1#v}" major="${ver%%.*}" minor="${ver#*.}"; minor="${minor%%.*}"
     case "$major" in ''|*[!0-9]*) return 1 ;; esac
     case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
-    if [ "$major" -eq 20 ] && [ "$minor" -ge 19 ]; then return 0; fi
-    if [ "$major" -ge 22 ] && { [ "$major" -gt 22 ] || [ "$minor" -ge 12 ]; }; then return 0; fi
+    [ "$major" -eq 20 ] && [ "$minor" -ge 19 ] && return 0
+    [ "$major" -ge 22 ] && { [ "$major" -gt 22 ] || [ "$minor" -ge 12 ]; } && return 0
     return 1
 }
 
 check_node() {
-    log_info "Checking Node.js (for browser tools)..."
-
-    if command -v node &> /dev/null && node_satisfies_build "$(node --version)"; then
-        log_success "Node.js $(node --version) found"
-        HAS_NODE=true
-        return 0
+    log_info "Checking Node.js (for TUI build)..."
+    if command -v node &>/dev/null && node_satisfies_build "$(node --version)"; then
+        log_ok "Node.js $(node --version) found"; HAS_NODE=true; return 0
     fi
-
-    # Prefer a Anakot-managed Node from a previous run over a too-old system one.
     if [ -x "$ANAKOT_HOME/node/bin/node" ] && node_satisfies_build "$("$ANAKOT_HOME/node/bin/node" --version)"; then
         export PATH="$ANAKOT_HOME/node/bin:$PATH"
-        log_success "Node.js $("$ANAKOT_HOME/node/bin/node" --version) found (Anakot-managed)"
-        HAS_NODE=true
-        return 0
+        log_ok "Node.js $($ANAKOT_HOME/node/bin/node --version) found (Anakot-managed)"
+        HAS_NODE=true; return 0
     fi
-
-    if command -v node &> /dev/null; then
-        log_warn "Node.js $(node --version) is too old for the desktop build (need ^20.19 or >=22.12) — installing Anakot-managed Node $NODE_VERSION LTS..."
-    elif [ "$DISTRO" = "termux" ]; then
-        log_info "Node.js not found — installing Node.js via pkg..."
-    else
-        log_info "Node.js not found — installing Node.js $NODE_VERSION LTS..."
-    fi
+    if command -v node &>/dev/null; then
+        log_warn "Node.js $(node --version) too old — installing Node $NODE_VERSION LTS..."
+    else log_info "Node.js not found — installing Node $NODE_VERSION LTS..."; fi
     install_node
 }
 
 install_node() {
     if [ "$DISTRO" = "termux" ]; then
-        log_info "Installing Node.js via pkg..."
-        if pkg install -y nodejs >/dev/null; then
-            local installed_ver
-            installed_ver=$(node --version 2>/dev/null)
-            log_success "Node.js $installed_ver installed via pkg"
-            HAS_NODE=true
-        else
-            log_warn "Failed to install Node.js via pkg"
-            HAS_NODE=false
-        fi
-        return 0
+        pkg install -y nodejs >/dev/null
+        log_ok "Node.js $(node --version 2>/dev/null) installed via pkg"
+        HAS_NODE=true; return 0
     fi
-
-    local arch=$(uname -m)
-    local node_arch
+    local arch=$(uname -m) node_arch node_os
     case "$arch" in
-        x86_64)        node_arch="x64"    ;;
-        aarch64|arm64) node_arch="arm64"  ;;
-        armv7l)        node_arch="armv7l" ;;
-        *)
-            log_warn "Unsupported architecture ($arch) for Node.js auto-install"
-            log_info "Install manually: https://nodejs.org/en/download/"
-            HAS_NODE=false
-            return 0
-            ;;
+        x86_64) node_arch="x64" ;; aarch64|arm64) node_arch="arm64" ;;
+        armv7l) node_arch="armv7l" ;;
+        *) log_warn "Unsupported arch ($arch)"; HAS_NODE=false; return 0 ;;
     esac
-
-    local node_os
     case "$OS" in
-        linux) node_os="linux"  ;;
-        macos) node_os="darwin" ;;
-        *)
-            log_warn "Unsupported OS for Node.js auto-install"
-            HAS_NODE=false
-            return 0
-            ;;
+        linux) node_os="linux" ;; macos) node_os="darwin" ;;
+        *) log_warn "Unsupported OS"; HAS_NODE=false; return 0 ;;
     esac
-
-    # Resolve the latest v22.x.x tarball name from the index page
     local index_url="https://nodejs.org/dist/latest-v${NODE_VERSION}.x/"
     local tarball_name
-    tarball_name=$(curl -fsSL "$index_url" \
-        | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.xz" \
-        | head -1)
-
-    # Fallback to .tar.gz if .tar.xz not available
+    tarball_name=$(curl -fsSL "$index_url" | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.xz" | head -1)
     if [ -z "$tarball_name" ]; then
-        tarball_name=$(curl -fsSL "$index_url" \
-            | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.gz" \
-            | head -1)
+        tarball_name=$(curl -fsSL "$index_url" | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.gz" | head -1)
     fi
-
     if [ -z "$tarball_name" ]; then
-        log_warn "Could not find Node.js $NODE_VERSION binary for $node_os-$node_arch"
-        log_info "Install manually: https://nodejs.org/en/download/"
-        HAS_NODE=false
-        return 0
+        log_warn "Could not find Node.js $NODE_VERSION for $node_os-$node_arch"
+        HAS_NODE=false; return 0
     fi
-
-    local download_url="${index_url}${tarball_name}"
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
-
+    local tmp_dir; tmp_dir=$(mktemp -d)
     log_info "Downloading $tarball_name..."
-    if ! curl -fsSL "$download_url" -o "$tmp_dir/$tarball_name"; then
-        log_warn "Download failed"
-        rm -rf "$tmp_dir"
-        HAS_NODE=false
-        return 0
+    if ! curl -fsSL "${index_url}${tarball_name}" -o "$tmp_dir/$tarball_name"; then
+        log_warn "Download failed"; rm -rf "$tmp_dir"; HAS_NODE=false; return 0
     fi
-
     log_info "Extracting to ~/.anakot/node/..."
-    if [[ "$tarball_name" == *.tar.xz ]]; then
-        tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir"
-    else
-        tar xzf "$tmp_dir/$tarball_name" -C "$tmp_dir"
-    fi
-
-    local extracted_dir
-    extracted_dir=$(ls -d "$tmp_dir"/node-v* 2>/dev/null | head -1)
-
-    if [ ! -d "$extracted_dir" ]; then
-        log_warn "Extraction failed"
-        rm -rf "$tmp_dir"
-        HAS_NODE=false
-        return 0
-    fi
-
-    # Place into ~/.anakot/node/ and symlink binaries into the same bin dir
-    # the anakot command uses (get_command_link_dir): /usr/local/bin for root
-    # FHS installs, $PREFIX/bin on Termux, ~/.local/bin otherwise.
-    rm -rf "$ANAKOT_HOME/node"
-    mkdir -p "$ANAKOT_HOME"
-    mv "$extracted_dir" "$ANAKOT_HOME/node"
-    rm -rf "$tmp_dir"
-
-    local node_link_dir
-    node_link_dir="$(get_command_link_dir)"
-    mkdir -p "$node_link_dir"
-    ln -sf "$ANAKOT_HOME/node/bin/node" "$node_link_dir/node"
-    ln -sf "$ANAKOT_HOME/node/bin/npm"  "$node_link_dir/npm"
-    ln -sf "$ANAKOT_HOME/node/bin/npx"  "$node_link_dir/npx"
-
+    [[ "$tarball_name" == *.tar.xz ]] && tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir" || tar xzf "$tmp_dir/$tarball_name" -C "$tmp_dir"
+    local extracted_dir; extracted_dir=$(ls -d "$tmp_dir"/node-v* 2>/dev/null | head -1)
+    [ ! -d "$extracted_dir" ] && { log_warn "Extraction failed"; rm -rf "$tmp_dir"; HAS_NODE=false; return 0; }
+    rm -rf "$ANAKOT_HOME/node"; mkdir -p "$ANAKOT_HOME"
+    mv "$extracted_dir" "$ANAKOT_HOME/node"; rm -rf "$tmp_dir"
+    local link_dir; link_dir="$(get_command_link_dir)"
+    mkdir -p "$link_dir"
+    ln -sf "$ANAKOT_HOME/node/bin/node" "$link_dir/node"
+    ln -sf "$ANAKOT_HOME/node/bin/npm"  "$link_dir/npm"
+    ln -sf "$ANAKOT_HOME/node/bin/npx"  "$link_dir/npx"
     export PATH="$ANAKOT_HOME/node/bin:$PATH"
-
-    local installed_ver
-    installed_ver=$("$ANAKOT_HOME/node/bin/node" --version 2>/dev/null)
-    log_success "Node.js $installed_ver installed to ~/.anakot/node/"
+    log_ok "Node.js $($ANAKOT_HOME/node/bin/node --version) installed"
     HAS_NODE=true
 }
 
-check_network_prerequisites() {
-    log_info "Checking internet connectivity for package install and web tools..."
-
-    local url
-    local failed=false
-    local checks=("https://pypi.org/simple/" "https://duckduckgo.com/")
-
-    if ! command -v curl >/dev/null 2>&1; then
-        log_warn "curl not found; skipping connectivity probes"
-        return 0
-    fi
-
-    for url in "${checks[@]}"; do
-        if ! curl -fsSI --max-time 8 "$url" >/dev/null 2>&1; then
-            failed=true
-            log_warn "Could not reach $url"
-        fi
-    done
-
-    if [ "$failed" = false ]; then
-        log_success "Internet connectivity looks good"
-        return 0
-    fi
-
-    if [ "$DISTRO" = "termux" ]; then
-        log_warn "Termux network prerequisites may be incomplete."
-        log_info "Try: pkg install -y ca-certificates curl && pkg update"
-        log_info "If mirrors are stale: termux-change-repo"
-        log_info "Then test: curl -I https://pypi.org/simple/ && curl -I https://duckduckgo.com/"
-    else
-        log_warn "Network checks failed. Anakot install may complete, but web search and dependency downloads can fail."
-        log_info "Verify internet/DNS and retry if pip install fails."
-    fi
-}
-
 install_system_packages() {
-    # Detect what's missing
-    HAS_RIPGREP=false
-    HAS_FFMPEG=false
-    local need_ripgrep=false
-    local need_ffmpeg=false
-
-    log_info "Checking ripgrep (fast file search)..."
-    if command -v rg &> /dev/null; then
-        log_success "$(rg --version | head -1) found"
-        HAS_RIPGREP=true
-    else
-        need_ripgrep=true
-    fi
-
-    log_info "Checking ffmpeg (TTS voice messages)..."
-    if command -v ffmpeg &> /dev/null; then
-        local ffmpeg_ver=$(ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}')
-        log_success "ffmpeg $ffmpeg_ver found"
-        HAS_FFMPEG=true
-    else
-        need_ffmpeg=true
-    fi
-
-    # Termux always needs the Android build toolchain for the tested pip path,
-    # even when ripgrep/ffmpeg are already present.
+    command -v rg &>/dev/null && { log_ok "$(rg --version | head -1) found"; return 0; }
+    log_info "Installing ripgrep..."
     if [ "$DISTRO" = "termux" ]; then
-        local termux_pkgs=(clang rust make pkg-config libffi openssl ca-certificates curl)
-        if [ "$need_ripgrep" = true ]; then
-            termux_pkgs+=("ripgrep")
-        fi
-        if [ "$need_ffmpeg" = true ]; then
-            termux_pkgs+=("ffmpeg")
-        fi
-
-        log_info "Installing Termux packages: ${termux_pkgs[*]}"
-        if pkg install -y "${termux_pkgs[@]}" >/dev/null; then
-            [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-            [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-            log_success "Termux build dependencies installed"
-            return 0
-        fi
-
-        log_warn "Could not auto-install all Termux packages"
-        log_info "Install manually: pkg install ${termux_pkgs[*]}"
-        return 0
-    fi
-
-    # Nothing to install — done
-    if [ "$need_ripgrep" = false ] && [ "$need_ffmpeg" = false ]; then
-        return 0
-    fi
-
-    # Build a human-readable description + package list
-    local desc_parts=()
-    local pkgs=()
-    if [ "$need_ripgrep" = true ]; then
-        desc_parts+=("ripgrep for faster file search")
-        pkgs+=("ripgrep")
-    fi
-    if [ "$need_ffmpeg" = true ]; then
-        desc_parts+=("ffmpeg for TTS voice messages")
-        pkgs+=("ffmpeg")
-    fi
-    local description
-    description=$(IFS=" and "; echo "${desc_parts[*]}")
-
-    # ── macOS: brew ──
-    if [ "$OS" = "macos" ]; then
-        if command -v brew &> /dev/null; then
-            log_info "Installing ${pkgs[*]} via Homebrew..."
-            if brew install "${pkgs[@]}"; then
-                [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-                [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-                return 0
-            fi
-        fi
-        log_warn "Could not auto-install (brew not found or install failed)"
-        log_info "Install manually: brew install ${pkgs[*]}"
-        return 0
-    fi
-
-    # ── Linux: resolve package manager command ──
-    local pkg_install=""
-    case "$DISTRO" in
-        ubuntu|debian) pkg_install="apt install -y"   ;;
-        fedora)        pkg_install="dnf install -y"   ;;
-        arch)          pkg_install="pacman -S --noconfirm" ;;
-    esac
-
-    if [ -n "$pkg_install" ]; then
-        local install_cmd="$pkg_install ${pkgs[*]}"
-
-        # Prevent needrestart/whiptail dialogs from blocking non-interactive installs
+        pkg install -y ripgrep >/dev/null 2>&1 && { log_ok "ripgrep installed"; return 0; }
+    elif [ "$OS" = "macos" ] && command -v brew &>/dev/null; then
+        brew install ripgrep >/dev/null 2>&1 && { log_ok "ripgrep installed"; return 0; }
+    elif [ "$OS" = "linux" ]; then
+        local sudo_cmd=""
+        [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null && sudo_cmd="sudo"
         case "$DISTRO" in
-            ubuntu|debian) export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a ;;
+            ubuntu|debian)
+                $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
+                $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ripgrep >/dev/null 2>&1 && { log_ok "ripgrep installed"; return 0; } ;;
+            fedora) $sudo_cmd dnf install -y ripgrep >/dev/null 2>&1 && { log_ok "ripgrep installed"; return 0; } ;;
+            arch)   $sudo_cmd pacman -S --noconfirm ripgrep >/dev/null 2>&1 && { log_ok "ripgrep installed"; return 0; } ;;
         esac
-
-        # Already root — just install
-        if [ "$(id -u)" -eq 0 ]; then
-            log_info "Installing ${pkgs[*]}..."
-            if $install_cmd; then
-                [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-                [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-                return 0
-            fi
-        # Passwordless sudo — just install
-        elif command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-            log_info "Installing ${pkgs[*]}..."
-            if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd; then
-                [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-                [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-                return 0
-            fi
-        # sudo needs password — ask once for everything
-        elif command -v sudo &> /dev/null; then
-            if [ "$IS_INTERACTIVE" = true ]; then
-                echo ""
-                log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Anakot Agent itself does not require or retain root access."
-                if prompt_yes_no "Install ${description}? (requires sudo)" "no"; then
-                    if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd; then
-                        [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-                        [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-                        return 0
-                    fi
-                fi
-            elif (: </dev/tty) 2>/dev/null; then
-                # Non-interactive (e.g. curl | bash) but a terminal is available.
-                # Read the prompt from /dev/tty (same approach the setup wizard uses).
-                # Probe by actually opening /dev/tty: a bare existence test passes
-                # in Docker builds where the device node is in the mount namespace
-                # but opening fails with ENXIO. See #16746.
-                echo ""
-                log_info "sudo is needed ONLY to install optional system packages (${pkgs[*]}) via your package manager."
-                log_info "Anakot Agent itself does not require or retain root access."
-                if prompt_yes_no "Install ${description}?" "yes"; then
-                    if sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a $install_cmd < /dev/tty; then
-                        [ "$need_ripgrep" = true ] && HAS_RIPGREP=true && log_success "ripgrep installed"
-                        [ "$need_ffmpeg" = true ]  && HAS_FFMPEG=true  && log_success "ffmpeg installed"
-                        return 0
-                    fi
-                fi
-            else
-                log_warn "Non-interactive mode and no terminal available — cannot install system packages"
-                log_info "Install manually after setup completes: sudo $install_cmd"
-            fi
-        fi
     fi
-
-    # ── Fallback for ripgrep: cargo ──
-    if [ "$need_ripgrep" = true ] && [ "$HAS_RIPGREP" = false ]; then
-        if command -v cargo &> /dev/null; then
-            log_info "Trying cargo install ripgrep (no sudo needed)..."
-            if cargo install ripgrep; then
-                log_success "ripgrep installed via cargo"
-                HAS_RIPGREP=true
-            fi
-        fi
-    fi
-
-    # ── Show manual instructions for anything still missing ──
-    if [ "$HAS_RIPGREP" = false ] && [ "$need_ripgrep" = true ]; then
-        log_warn "ripgrep not installed (file search will use grep fallback)"
-        show_manual_install_hint "ripgrep"
-    fi
-    if [ "$HAS_FFMPEG" = false ] && [ "$need_ffmpeg" = true ]; then
-        log_warn "ffmpeg not installed (TTS voice messages will be limited)"
-        show_manual_install_hint "ffmpeg"
-    fi
+    log_warn "ripgrep not installed — file search will use grep fallback"
 }
 
-show_manual_install_hint() {
-    local pkg="$1"
-    log_info "To install $pkg manually:"
-    case "$OS" in
-        linux)
-            case "$DISTRO" in
-                ubuntu|debian) log_info "  sudo apt install $pkg" ;;
-                fedora)        log_info "  sudo dnf install $pkg" ;;
-                arch)          log_info "  sudo pacman -S $pkg"   ;;
-                *)             log_info "  Use your package manager or visit the project homepage" ;;
-            esac
-            ;;
-        android)
-            log_info "  pkg install $pkg"
-            ;;
-        macos) log_info "  brew install $pkg" ;;
-    esac
+check_network() {
+    if ! command -v curl &>/dev/null; then log_warn "curl not found — skipping connectivity check"; return 0; fi
+    if curl -fsSI --max-time 8 https://pypi.org/simple/ >/dev/null 2>&1; then log_ok "Internet connectivity OK"
+    else log_warn "Could not reach pypi.org — install may fail if packages aren't cached"; fi
 }
-
-# ============================================================================
-# Installation
-# ============================================================================
 
 clone_repo() {
-    log_info "Installing to $INSTALL_DIR..."
-
+    log_info "Repository: $BRANCH"
+    if [ "$REINSTALL" = true ] && [ -d "$INSTALL_DIR" ]; then
+        log_warn "Reinstall mode — removing $INSTALL_DIR"; rm -rf "$INSTALL_DIR"; fi
     if [ -d "$INSTALL_DIR" ]; then
-        if [ -d "$INSTALL_DIR/.git" ]; then
-            log_info "Existing installation found, updating..."
-            cd "$INSTALL_DIR"
-
-            local autostash_ref=""
-            if [ -n "$(git status --porcelain)" ]; then
-                local stash_name
-                stash_name="anakot-install-autostash-$(date -u +%Y%m%d-%H%M%S)"
-                log_info "Local changes detected, stashing before update..."
-                git stash push --include-untracked -m "$stash_name"
-                autostash_ref="stash@{0}"
-            fi
-
-            git fetch origin
-            git checkout "$BRANCH"
-            git pull --ff-only origin "$BRANCH"
-
-            if [ -n "$autostash_ref" ]; then
-                local restore_now="yes"
-                if [ -t 0 ] && [ -t 1 ]; then
-                    echo
-                    log_warn "Local changes were stashed before updating."
-                    log_warn "Restoring them may reapply local customizations onto the updated codebase."
-                    printf "Restore local changes now? [Y/n] "
-                    read -r restore_answer
-                    case "$restore_answer" in
-                        ""|y|Y|yes|YES|Yes) restore_now="yes" ;;
-                        *) restore_now="no" ;;
-                    esac
-                fi
-
-                if [ "$restore_now" = "yes" ]; then
-                    log_info "Restoring local changes..."
-                    if git stash apply "$autostash_ref"; then
-                        git stash drop "$autostash_ref" >/dev/null
-                        log_warn "Local changes were restored on top of the updated codebase."
-                        log_warn "Review git diff / git status if Anakot behaves unexpectedly."
-                    else
-                        log_error "Update succeeded, but restoring local changes failed. Your changes are still preserved in git stash."
-                        log_info "Resolve manually with: git stash apply $autostash_ref"
-                        exit 1
-                    fi
-                else
-                    log_info "Skipped restoring local changes."
-                    log_info "Your changes are still preserved in git stash."
-                    log_info "Restore manually with: git stash apply $autostash_ref"
-                fi
-            fi
-        else
-            log_error "Directory exists but is not a git repository: $INSTALL_DIR"
-            log_info "Remove it or choose a different directory with --dir"
-            exit 1
+        if [ ! -d "$INSTALL_DIR/.git" ]; then
+            log_error "Directory exists but is not a git repo: $INSTALL_DIR"
+            log_info "Remove it or choose a different directory with --dir"; exit 1
         fi
+        local current_branch; current_branch=$(cd "$INSTALL_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
+        local autostash_ref=""
+        if [ -n "$(cd "$INSTALL_DIR" && git status --porcelain)" ]; then
+            local stash_name="anakot-install-autostash-$(date -u +%Y%m%d-%H%M%S)"
+            log_info "Local changes detected — stashing..."
+            (cd "$INSTALL_DIR" && git stash push --include-untracked -m "$stash_name")
+            autostash_ref="stash@{0}"
+        fi
+        if [ "$current_branch" = "$BRANCH" ]; then log_info "Already on $BRANCH — pulling latest..."
+        else log_info "Switching from $current_branch → $BRANCH..."; fi
+        (cd "$INSTALL_DIR" && git fetch origin "$BRANCH" 2>/dev/null)
+        (cd "$INSTALL_DIR" && git checkout "$BRANCH" 2>/dev/null)
+        (cd "$INSTALL_DIR" && git pull --ff-only origin "$BRANCH" 2>/dev/null) || true
+        if [ -n "$autostash_ref" ]; then
+            if [ "$IS_INTERACTIVE" = true ]; then
+                if prompt_yes_no "Restore local changes?" "yes"; then
+                    (cd "$INSTALL_DIR" && git stash apply "$autostash_ref" 2>/dev/null && git stash drop "$autostash_ref" 2>/dev/null) || \
+                        log_warn "Could not restore stashed changes — they're still in git stash"
+                fi
+            fi
+        fi
+        log_ok "Repository updated ($BRANCH)"
     else
-        # Try SSH first (for private repo access), fall back to HTTPS
-        # GIT_SSH_COMMAND disables interactive prompts and sets a short timeout
-        # so SSH fails fast instead of hanging when no key is configured.
-        log_info "Trying SSH clone..."
+        log_info "Cloning $BRANCH..."
         if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
            git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
-            log_success "Cloned via SSH"
+            log_ok "Cloned via SSH"
         else
-            rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial SSH clone
-            log_info "SSH failed, trying HTTPS..."
+            rm -rf "$INSTALL_DIR" 2>/dev/null
             if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
-                log_success "Cloned via HTTPS"
-            else
-                log_error "Failed to clone repository"
-                exit 1
-            fi
+                log_ok "Cloned via HTTPS"
+            else log_error "Failed to clone repository"; exit 1; fi
         fi
     fi
-
-    cd "$INSTALL_DIR"
-
     if [ -n "$INSTALL_COMMIT" ]; then
-        log_info "Pinning checkout to commit $INSTALL_COMMIT..."
-        if ! git cat-file -e "$INSTALL_COMMIT^{commit}" 2>/dev/null; then
-            git fetch origin "$INSTALL_COMMIT" || true
-        fi
-        git checkout --detach "$INSTALL_COMMIT"
+        log_info "Pinning to commit $INSTALL_COMMIT..."
+        if ! (cd "$INSTALL_DIR" && git cat-file -e "$INSTALL_COMMIT^{commit}" 2>/dev/null); then
+            (cd "$INSTALL_DIR" && git fetch origin "$INSTALL_COMMIT" 2>/dev/null) || true; fi
+        (cd "$INSTALL_DIR" && git checkout --detach "$INSTALL_COMMIT")
     fi
-
-    log_success "Repository ready"
+    log_ok "Repository ready at $INSTALL_DIR"
 }
 
 setup_venv() {
-    if [ "$USE_VENV" = false ]; then
-        log_info "Skipping virtual environment (--no-venv)"
-        return 0
-    fi
-
+    if [ "$USE_VENV" = false ]; then log_info "Skipping virtual environment (--no-venv)"; return 0; fi
     if [ "$DISTRO" = "termux" ]; then
-        log_info "Creating virtual environment with Termux Python..."
-
-        if [ -d "venv" ]; then
-            log_info "Virtual environment already exists, recreating..."
-            rm -rf venv
-        fi
-
+        [ -d "venv" ] && { log_info "Recreating venv..."; rm -rf venv; }
         "$PYTHON_PATH" -m venv venv
-        log_success "Virtual environment ready ($(./venv/bin/python --version 2>/dev/null))"
-        return 0
+        log_ok "Venv ready ($(./venv/bin/python --version 2>/dev/null))"; return 0
     fi
-
-    log_info "Creating virtual environment with Python $PYTHON_VERSION..."
-
-    if [ -d "venv" ]; then
-        log_info "Virtual environment already exists, recreating..."
-        rm -rf venv
+    if [ "$REINSTALL" = true ] && [ -d "$INSTALL_DIR/venv" ]; then
+        log_warn "Reinstall mode — removing existing venv"; rm -rf "$INSTALL_DIR/venv"; fi
+    if [ -d "$INSTALL_DIR/venv" ]; then log_info "Virtual environment already exists — reusing"
+    else
+        log_info "Creating venv (Python $PYTHON_VERSION)..."
+        $UV_CMD venv "$INSTALL_DIR/venv" --python "$PYTHON_VERSION"
     fi
-
-    # uv creates the venv and pins the Python version in one step
-    $UV_CMD venv venv --python "$PYTHON_VERSION"
-
-    # Neutralize any inherited UV_PYTHON (e.g. UV_PYTHON=3.14 left in the
-    # user's shell env). uv honours UV_PYTHON over an existing venv for the
-    # later `uv sync` / `uv pip install` tiers, so without this it would
-    # silently delete this 3.11 venv and recreate it at the inherited
-    # version — building Rust transitives that have no wheel for that
-    # version from source via maturin, which fails. Pinning UV_PYTHON to the
-    # interpreter we just created forces every subsequent uv command onto it.
-    if [ -x "$INSTALL_DIR/venv/bin/python" ]; then
-        export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
-    fi
-
-    log_success "Virtual environment ready (Python $PYTHON_VERSION)"
+    [ -x "$INSTALL_DIR/venv/bin/python" ] && export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
+    log_ok "Venv ready (Python $PYTHON_VERSION)"
 }
 
 install_deps() {
-    log_info "Installing dependencies..."
-
-    # Re-pin UV_PYTHON to the venv interpreter. setup_venv already does this,
-    # but the bootstrap runs install stages (`venv`, `python-deps`) as separate
-    # processes, so an export from setup_venv does NOT survive into a separate
-    # python-deps invocation. Re-deriving it here covers that path. Without it,
-    # an inherited UV_PYTHON=3.14 makes the uv sync/pip tiers below recreate the
-    # venv at 3.14 and fail the maturin source build (no cp314 wheels yet).
     if [ "$DISTRO" != "termux" ] && [ -x "$INSTALL_DIR/venv/bin/python" ]; then
-        export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
-    fi
-
+        export UV_PYTHON="$INSTALL_DIR/venv/bin/python"; fi
     if [ "$DISTRO" = "termux" ]; then
-        if [ "$USE_VENV" = true ]; then
-            export VIRTUAL_ENV="$INSTALL_DIR/venv"
-            PIP_PYTHON="$INSTALL_DIR/venv/bin/python"
-        else
-            PIP_PYTHON="$PYTHON_PATH"
+        local pip_python="$INSTALL_DIR/venv/bin/python"
+        "$pip_python" -m pip install --upgrade pip setuptools wheel >/dev/null 2>&1
+        "$pip_python" -m pip install -e ".[${TUI_EXTRAS}]" 2>&1 | tail -5
+        log_ok "Python deps installed"; return 0
+    fi
+    export VIRTUAL_ENV="$INSTALL_DIR/venv"
+    local spec=".[${TUI_EXTRAS}]"
+    if [ -f "$INSTALL_DIR/uv.lock" ]; then
+        log_info "Trying hash-verified install (uv.lock)..."
+        if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" $UV_CMD sync --extra all --locked 2>&1 | tail -3; then
+            log_ok "Deps installed (hash-verified)"; return 0
         fi
-
-        if [ -z "${ANDROID_API_LEVEL:-}" ]; then
-            ANDROID_API_LEVEL="$(getprop ro.build.version.sdk 2>/dev/null || true)"
-            if [ -z "$ANDROID_API_LEVEL" ]; then
-                ANDROID_API_LEVEL=24
-            fi
-            export ANDROID_API_LEVEL
-            log_info "Using ANDROID_API_LEVEL=$ANDROID_API_LEVEL for Android wheel builds"
-        fi
-
-        "$PIP_PYTHON" -m pip install --upgrade pip setuptools wheel >/dev/null
-
-        # On Android, psutil's setup.py rejects sys.platform == 'android' before
-        # it ever invokes the C build, so the next pip install would fail at
-        # "platform android is not supported".  Prebuild psutil from the official
-        # sdist with a one-line marker patch (Linux source path is fine on
-        # Android).  Stopgap until psutil#2762 ships upstream.
-        if "$PIP_PYTHON" -c 'import sys; raise SystemExit(0 if sys.platform == "android" else 1)' 2>/dev/null; then
-            log_info "Android Python detected: prebuilding psutil compatibility shim..."
-            if ! "$PIP_PYTHON" "$INSTALL_DIR/scripts/install_psutil_android.py" --pip "$PIP_PYTHON -m pip"; then
-                log_warn "psutil Android prebuild failed — package install will likely fail next."
-                log_info "Workaround: manually rerun 'python scripts/install_psutil_android.py' once your toolchain is set up."
-            fi
-        fi
-
-        # Try the broad Termux profile first (best-effort "install all" for Android),
-        # then fall back to the conservative Termux baseline, then base package.
-        if ! "$PIP_PYTHON" -m pip install -e '.[termux-all]' -c constraints-termux.txt; then
-            log_warn "Termux broad profile (.[termux-all]) failed, trying baseline Termux profile..."
-            if ! "$PIP_PYTHON" -m pip install -e '.[termux]' -c constraints-termux.txt; then
-                log_warn "Termux baseline profile (.[termux]) failed, trying base install..."
-                if ! "$PIP_PYTHON" -m pip install -e '.' -c constraints-termux.txt; then
-                    log_error "Package installation failed on Termux."
-                    log_info "Ensure these packages are installed: pkg install clang rust make pkg-config libffi openssl ca-certificates curl"
-                    log_info "Then re-run: cd $INSTALL_DIR && python -m pip install -e '.[termux-all]' -c constraints-termux.txt"
-                    exit 1
-                fi
-            fi
-        fi
-
-        log_success "Main package installed"
-        log_info "Termux note: matrix e2ee and local faster-whisper extras are excluded from .[termux-all] due to upstream Android wheel/toolchain blockers."
-        log_info "Termux note: browser/WhatsApp tooling is not installed by default; see the Termux guide for optional follow-up steps."
-
-        log_success "All dependencies installed"
-        return 0
+        log_warn "uv.lock sync failed — falling back to PyPI resolve"
     fi
+    log_info "Installing Python dependencies ($spec)..."
+    if $UV_CMD pip install -e "$spec" 2>&1 | tail -5; then log_ok "Deps installed ($spec)"
+    elif $UV_CMD pip install -e "." 2>&1 | tail -5; then log_warn "Installed core only — some TUI features may be missing"
+    else log_error "Package installation failed"; log_info "Try: cd $INSTALL_DIR && uv pip install -e '$spec'"; exit 1; fi
+}
 
-    if [ "$USE_VENV" = true ]; then
-        # Tell uv to install into our venv (no need to activate)
-        export VIRTUAL_ENV="$INSTALL_DIR/venv"
+build_tui() {
+    if [ "$HAS_NODE" = false ]; then
+        log_warn "Node.js not available — skipping TUI build"
+        log_info "Install Node.js and run: cd $INSTALL_DIR/ui-tui && npm run build"; return 0
     fi
-
-    # On Debian/Ubuntu (including WSL), some Python packages need build tools.
-    # Check and offer to install them if missing.
-    if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ]; then
-        local need_build_tools=false
-        for pkg in gcc python3-dev libffi-dev; do
-            if ! dpkg -s "$pkg" &>/dev/null; then
-                need_build_tools=true
-                break
-            fi
-        done
-        if [ "$need_build_tools" = true ]; then
-            log_info "Some build tools may be needed for Python packages..."
-            if command -v sudo &> /dev/null; then
-                if sudo -n true 2>/dev/null; then
-                    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq build-essential python3-dev libffi-dev >/dev/null 2>&1 || true
-                    log_success "Build tools installed"
-                else
-                    log_info "sudo is needed ONLY to install build tools (build-essential, python3-dev, libffi-dev) via apt."
-                    log_info "Anakot Agent itself does not require or retain root access."
-                    if prompt_yes_no "Install build tools?" "yes"; then
-                        sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -qq build-essential python3-dev libffi-dev >/dev/null 2>&1 || true
-                        log_success "Build tools installed"
-                    fi
-                fi
-            fi
-        fi
+    [ ! -f "$INSTALL_DIR/ui-tui/package.json" ] && { log_warn "ui-tui not found in checkout — skipping TUI build"; return 0; }
+    if [ -f "$INSTALL_DIR/ui-tui/dist/entry.js" ] && [ "$REINSTALL" = false ]; then
+        local newer; newer=$(find "$INSTALL_DIR/ui-tui/src" -type f -newer "$INSTALL_DIR/ui-tui/dist/entry.js" 2>/dev/null | head -1)
+        if [ -z "$newer" ]; then log_ok "TUI already built (dist/entry.js is up to date)"; return 0; fi
+        log_info "TUI source changed — rebuilding..."
+    else log_info "Building TUI..."; fi
+    cd "$INSTALL_DIR/ui-tui"
+    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
+        log_info "Installing TUI npm dependencies..."
+        npm install --silent 2>/dev/null || npm install
     fi
-
-    # Install the main package in editable mode with all extras.
-    #
-    # Hash-verified install (Tier 0) — when uv.lock is present, prefer
-    # `uv sync --locked`. The lockfile records SHA256 hashes for every
-    # transitive, so a compromised transitive (different hash than what
-    # we shipped) is REJECTED by the resolver. This is the *only* path
-    # that protects against the "direct dep is fine, but the dep's dep
-    # got worm-poisoned overnight" failure mode. All `uv pip install`
-    # tiers below re-resolve transitives fresh from PyPI without any
-    # hash verification — they exist to keep installs working when the
-    # lockfile is stale, missing, or out-of-sync with the current
-    # extras spec, NOT because they're equivalent in posture.
-    if [ -f "uv.lock" ]; then
-        log_info "Trying tier: hash-verified (uv.lock) ..."
-        log_info "(this resolves + downloads the curated [all] set — first run on a"
-        log_info " fresh venv can take 1-5 minutes; uv prints progress below)"
-        # Stream uv's progress directly to the user instead of swallowing
-        # it with `2>"$(mktemp)"`.  Two reasons:
-        #   1. `--extra all --locked` against a fresh venv has to pull
-        #      every transitive — silencing stderr makes the install
-        #      look frozen for minutes on slow networks. Users see
-        #      "Trying tier: hash-verified ..." and assume it's hung.
-        #   2. The previous `2>"$(mktemp)"` substituted the path at
-        #      command-build time but never saved it, so on failure the
-        #      uv error message was unreachable — the user just got the
-        #      generic "lockfile may be stale" warning.
-        #
-        # Critical flag choice: `--extra all`, NOT `--all-extras`.
-        #   --all-extras = every [project.optional-dependencies] key.
-        #                  This bypasses the curated `[all]` extra
-        #                  entirely and pulls e.g. [matrix] (which
-        #                  needs python-olm + make on Windows) and
-        #                  [rl] (git+https deps that fail offline).
-        #   --extra all  = install just the `[all]` extra's contents.
-        #                  This respects the curation in pyproject.toml.
-        # uv's own progress UI handles TTY detection and downgrades
-        # gracefully when stdout/stderr aren't terminals.
-        if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" $UV_CMD sync --extra all --locked; then
-            log_success "Main package installed (hash-verified via uv.lock)"
-            log_success "All dependencies installed"
-            return 0
-        fi
-        log_warn "uv.lock sync failed (see uv output above), falling back to PyPI resolve..."
-    else
-        log_info "uv.lock not found — falling back to PyPI resolve (no hash verification)"
-    fi
-
-    # Multi-tier fallback. The point of the tiers is that ONE compromised
-    # PyPI package (a worm-poisoned release that gets quarantined, like
-    # mistralai 2.4.6 in May 2026) shouldn't be able to silently demote a
-    # fresh install all the way down to "core only" — the user should keep
-    # everything else they signed up for.
-    #
-    # Tier 1: [all] — the curated extra in pyproject.toml.
-    # Tier 2: [all] minus the currently-broken extras list (_BROKEN_EXTRAS).
-    #         Edit _BROKEN_EXTRAS below when something on PyPI breaks; this
-    #         lets users keep the rest of [all] when one transitive is
-    #         unavailable. The list of [all]'s contents is parsed from
-    #         pyproject.toml at runtime — there is NO hand-mirrored copy
-    #         to drift out of sync. If you want to change what [all]
-    #         contains, edit pyproject.toml only.
-    # Tier 3: bare `.` — last-resort so at least the core CLI launches.
-    #         Skipped tiers like "PyPI-only extras (no git deps)" used to
-    #         exist to dodge [rl] / [matrix] git+sdist deps; those are no
-    #         longer in [all] post-2026-05-12 lazy-install migration, so
-    #         a separate PyPI-only tier had no remaining content.
-    local _BROKEN_EXTRAS=()  # populate when an extra becomes unresolvable
-
-    # Parse [project.optional-dependencies].all from pyproject.toml.
-    # tomllib is stdlib on Python 3.11+ which uv's bootstrap guarantees.
-    # Falls back to a hand list if parse fails — defensive only.
-    local _ALL_EXTRAS_CSV
-    _ALL_EXTRAS_CSV="$(
-        "$PYTHON_PATH" - <<'PY' 2>/dev/null
-import re, sys, tomllib
-try:
-    with open("pyproject.toml", "rb") as fh:
-        data = tomllib.load(fh)
-    specs = data["project"]["optional-dependencies"]["all"]
-    extras = []
-    for s in specs:
-        m = re.search(r"anakot-agent\[([\w-]+)\]", s)
-        if m:
-            extras.append(m.group(1))
-    print(",".join(extras))
-except Exception as e:
-    print("", file=sys.stderr)
-    sys.exit(1)
-PY
-    )"
-    if [ -z "$_ALL_EXTRAS_CSV" ]; then
-        log_warn "Could not parse [all] from pyproject.toml; falling back to .[all] only."
-        _ALL_EXTRAS_CSV=""
-    fi
-
-    # Build "[all] minus broken" spec by filtering the parsed list.
-    local _SAFE_SPEC=".[all]"
-    if [ -n "$_ALL_EXTRAS_CSV" ] && [ "${#_BROKEN_EXTRAS[@]}" -gt 0 ]; then
-        local _SAFE_EXTRAS=()
-        local _e _b _skip
-        IFS=',' read -ra _ALL_EXTRAS_ARR <<< "$_ALL_EXTRAS_CSV"
-        for _e in "${_ALL_EXTRAS_ARR[@]}"; do
-            _skip=false
-            for _b in "${_BROKEN_EXTRAS[@]}"; do
-                if [ "$_e" = "$_b" ]; then _skip=true; break; fi
-            done
-            if [ "$_skip" = false ]; then _SAFE_EXTRAS+=("$_e"); fi
-        done
-        _SAFE_SPEC=".[$(IFS=,; echo "${_SAFE_EXTRAS[*]}")]"
-    fi
-
-    ALL_INSTALL_LOG=$(mktemp)
-    local _installed=false
-    local _tier_name=""
-
-    install_tier() {
-        local name="$1"; local spec="$2"
-        log_info "Trying tier: $name ..."
-        if $UV_CMD pip install -e "$spec" 2>"$ALL_INSTALL_LOG"; then
-            log_success "Main package installed ($name)"
-            _installed=true
-            _tier_name="$name"
-            return 0
-        fi
-        log_warn "Tier '$name' failed. Top of pip output:"
-        head -5 "$ALL_INSTALL_LOG" | sed 's/^/    /' >&2
-        return 1
-    }
-
-    install_tier "all" ".[all]" \
-        || install_tier "all minus known-broken (${_BROKEN_EXTRAS[*]:-none})" "$_SAFE_SPEC" \
-        || install_tier "core only (no extras)" "."
-
-    rm -f "$ALL_INSTALL_LOG"
-
-    if [ "$_installed" = false ]; then
-        log_error "Package installation failed even with no extras."
-        log_info "Check that build tools are installed: sudo apt install build-essential python3-dev"
-        log_info "Then re-run: cd $INSTALL_DIR && uv pip install -e '.[all]'"
-        exit 1
-    fi
-
-    if [ "$_tier_name" != "all (with RL/matrix extras)" ]; then
-        log_warn "Note: installed via fallback tier ($_tier_name)."
-        log_info "Some optional features may be missing. After resolving any"
-        log_info "PyPI/network issue, re-run: $UV_CMD pip install -e '.[all]'"
-    fi
-
-    log_success "Main package installed"
-
-    log_success "All dependencies installed"
+    if npm run build 2>&1 | tail -5; then log_ok "TUI built successfully (dist/entry.js)"
+    else log_error "TUI build failed"; log_info "Run manually: cd $INSTALL_DIR/ui-tui && npm run build"; exit 1; fi
 }
 
 setup_path() {
     log_info "Setting up anakot command..."
-
-    if [ "$USE_VENV" = true ]; then
-        ANAKOT_BIN="$INSTALL_DIR/venv/bin/anakot"
-    else
-        ANAKOT_BIN="$(which anakot 2>/dev/null || echo "")"
-        if [ -z "$ANAKOT_BIN" ]; then
-            log_warn "anakot not found on PATH after install"
-            return 0
-        fi
-    fi
-
-    # Verify the entry point script was actually generated
-    if [ ! -x "$ANAKOT_BIN" ]; then
-        log_warn "anakot entry point not found at $ANAKOT_BIN"
-        log_info "This usually means the pip install didn't complete successfully."
-        if [ "$DISTRO" = "termux" ]; then
-            log_info "Try: cd $INSTALL_DIR && python -m pip install -e '.[termux-all]' -c constraints-termux.txt"
-        else
-            log_info "Try: cd $INSTALL_DIR && uv pip install -e '.[all]'"
-        fi
-        return 0
-    fi
-
-    local command_link_dir
-    local command_link_display_dir
-    command_link_dir="$(get_command_link_dir)"
-    command_link_display_dir="$(get_command_link_display_dir)"
-
-    # Create a user-facing shim for the anakot command.
-    # We intentionally clear PYTHONPATH/PYTHONHOME here so inherited env vars
-    # can't make this launcher import modules from another checkout.
-    mkdir -p "$command_link_dir"
-    # Older installs created this path as a symlink to $ANAKOT_BIN. Without
-    # the rm, `cat >` follows the symlink and overwrites the venv pip entry
-    # point with this shim — making `exec "$ANAKOT_BIN"` self-recurse. (#21454)
-    rm -f "$command_link_dir/anakot"
-    cat > "$command_link_dir/anakot" <<EOF
+    local anakot_bin="$INSTALL_DIR/venv/bin/anakot"
+    [ ! -x "$anakot_bin" ] && { log_warn "anakot entry point not found at $anakot_bin"; return 0; }
+    local link_dir; link_dir="$(get_command_link_dir)"
+    mkdir -p "$link_dir"; rm -f "$link_dir/anakot"
+    cat > "$link_dir/anakot" <<EOF
 #!/usr/bin/env bash
-unset PYTHONPATH
-unset PYTHONHOME
-exec "$ANAKOT_BIN" "\$@"
+unset PYTHONPATH; unset PYTHONHOME
+exec "$anakot_bin" "$@"
 EOF
-    chmod +x "$command_link_dir/anakot"
-    log_success "Installed anakot launcher → $command_link_display_dir/anakot"
-
-    if [ "$DISTRO" = "termux" ]; then
-        export PATH="$command_link_dir:$PATH"
-        log_info "$command_link_display_dir is the native Termux command path"
-        log_success "anakot command ready"
-        return 0
+    chmod +x "$link_dir/anakot"
+    log_ok "anakot → $link_dir/anakot"
+    if [ "$OS" = "linux" ] && [ "$(id -u)" -eq 0 ]; then
+        local profile_d="/etc/profile.d/anakot.sh"
+        echo "export PATH=\"$link_dir:\$PATH\"" > "$profile_d"
+        chmod 644 "$profile_d"; log_ok "Global PATH: $profile_d"
+    elif [ "$OS" = "macos" ]; then
+        local cur; cur="$(launchctl getenv PATH 2>/dev/null || echo "")"
+        if [[ ":$cur:" != *":$link_dir:"* ]]; then
+            launchctl setenv PATH "$link_dir:$cur" 2>/dev/null || true
+            log_ok "Global PATH: launchctl setenv PATH (macOS)"; fi
+        [ "$(id -u)" -eq 0 ] && { echo "$link_dir" > /etc/paths.d/anakot 2>/dev/null || true; log_ok "Global PATH: /etc/paths.d/anakot"; }
     fi
-
-    # FHS layout: /usr/local/bin is normally on PATH for login shells (via
-    # /etc/profile pathmunge), but on RHEL/CentOS/Rocky/Alma 8+ non-login
-    # interactive root shells (su, sudo -s, tmux panes, some web terminals)
-    # only source /etc/bashrc, which does NOT add /usr/local/bin — and
-    # /root/.bash_profile doesn't either.  So verify with `command -v` and
-    # fall back to writing a PATH guard into /root/.bashrc when needed.
-    if [ "$ROOT_FHS_LAYOUT" = true ]; then
-        export PATH="$command_link_dir:$PATH"
-        # Probe a fresh non-login interactive bash the way the user will use it.
-        # `bash -i -c` sources ~/.bashrc but NOT ~/.bash_profile or /etc/profile,
-        # which is the exact scenario where RHEL root loses /usr/local/bin.
-        if env -i HOME="$HOME" TERM="${TERM:-dumb}" bash -i -c 'command -v anakot' \
-                >/dev/null 2>&1; then
-            log_info "/usr/local/bin is already on PATH for all shells"
-            log_success "anakot command ready"
-            return 0
-        fi
-
-        log_info "anakot not on PATH in non-login shells (common on RHEL-family)"
-        PATH_LINE='export PATH="/usr/local/bin:$PATH"'
-        PATH_COMMENT='# Anakot Agent — ensure /usr/local/bin is on PATH (RHEL non-login shells)'
-        for SHELL_CONFIG in "$HOME/.bashrc" "$HOME/.bash_profile"; do
-            [ -f "$SHELL_CONFIG" ] || continue
-            if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null \
-                    | grep -qE 'PATH=.*(/usr/local/bin|\$command_link_dir)'; then
-                echo "" >> "$SHELL_CONFIG"
-                echo "$PATH_COMMENT" >> "$SHELL_CONFIG"
-                echo "$PATH_LINE" >> "$SHELL_CONFIG"
-                log_success "Added /usr/local/bin to PATH in $SHELL_CONFIG"
-            fi
-        done
-        log_success "anakot command ready"
-        return 0
-    fi
-
-    # Check if ~/.local/bin is on PATH; if not, add it to shell config.
-    # Detect the user's actual login shell (not the shell running this script,
-    # which is always bash when piped from curl).
-    if ! echo "$PATH" | tr ':' '\n' | grep -q "^$command_link_dir$"; then
-        SHELL_CONFIGS=()
-        IS_FISH=false
-        LOGIN_SHELL="$(basename "${SHELL:-/bin/bash}")"
-        case "$LOGIN_SHELL" in
-            zsh)
-                [ -f "$HOME/.zshrc" ] && SHELL_CONFIGS+=("$HOME/.zshrc")
-                [ -f "$HOME/.zprofile" ] && SHELL_CONFIGS+=("$HOME/.zprofile")
-                # If neither exists, create ~/.zshrc (common on fresh macOS installs)
-                if [ ${#SHELL_CONFIGS[@]} -eq 0 ]; then
-                    touch "$HOME/.zshrc"
-                    SHELL_CONFIGS+=("$HOME/.zshrc")
-                fi
-                ;;
-            bash)
-                [ -f "$HOME/.bashrc" ] && SHELL_CONFIGS+=("$HOME/.bashrc")
-                [ -f "$HOME/.bash_profile" ] && SHELL_CONFIGS+=("$HOME/.bash_profile")
-                ;;
+    if ! echo "$PATH" | tr ':' '\n' | grep -q "^${link_dir}$"; then
+        local shell_configs=() shell_rc
+        case "$(basename "${SHELL:-/bin/bash}")" in
+            zsh)  shell_configs=("$HOME/.zshrc" "$HOME/.zprofile") ;;
+            bash) shell_configs=("$HOME/.bashrc" "$HOME/.bash_profile") ;;
             fish)
-                # fish uses ~/.config/fish/config.fish and fish_add_path — not export PATH=
-                IS_FISH=true
-                FISH_CONFIG="$HOME/.config/fish/config.fish"
-                mkdir -p "$(dirname "$FISH_CONFIG")"
-                touch "$FISH_CONFIG"
-                ;;
-            *)
-                [ -f "$HOME/.bashrc" ] && SHELL_CONFIGS+=("$HOME/.bashrc")
-                [ -f "$HOME/.zshrc" ] && SHELL_CONFIGS+=("$HOME/.zshrc")
-                ;;
+                local fc="$HOME/.config/fish/config.fish"
+                mkdir -p "$(dirname "$fc")"; touch "$fc"
+                grep -q 'fish_add_path.*\.local/bin' "$fc" 2>/dev/null || {
+                    echo "" >> "$fc"; echo "# Anakot Agent" >> "$fc"
+                    echo 'fish_add_path "$HOME/.local/bin"' >> "$fc"
+                    log_ok "Added ~/.local/bin to PATH in $fc"; }
+                export PATH="$link_dir:$PATH"
+                log_ok "anakot command ready (restart shell to use)"; return 0 ;;
+            *)    shell_configs=("$HOME/.bashrc") ;;
         esac
-        # Also ensure ~/.profile has it (sourced by login shells on
-        # Ubuntu/Debian/WSL even when ~/.bashrc is skipped)
-        [ "$IS_FISH" = "false" ] && [ -f "$HOME/.profile" ] && SHELL_CONFIGS+=("$HOME/.profile")
-
-        PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
-
-        for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
-            if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
-                echo "" >> "$SHELL_CONFIG"
-                echo "# Anakot Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
-                echo "$PATH_LINE" >> "$SHELL_CONFIG"
-                log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
+        for shell_rc in "${shell_configs[@]}"; do
+            [ -f "$shell_rc" ] || continue
+            if ! grep -v '^[[:space:]]*#' "$shell_rc" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
+                echo "" >> "$shell_rc"
+                echo "# Anakot Agent — ensure ~/.local/bin is on PATH" >> "$shell_rc"
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
+                log_ok "Added ~/.local/bin to PATH in $shell_rc"
             fi
         done
-
-        # fish uses fish_add_path instead of export PATH=...
-        if [ "$IS_FISH" = "true" ]; then
-            if ! grep -q 'fish_add_path.*\.local/bin' "$FISH_CONFIG" 2>/dev/null; then
-                echo "" >> "$FISH_CONFIG"
-                echo "# Anakot Agent — ensure ~/.local/bin is on PATH" >> "$FISH_CONFIG"
-                echo 'fish_add_path "$HOME/.local/bin"' >> "$FISH_CONFIG"
-                log_success "Added ~/.local/bin to PATH in $FISH_CONFIG"
-            fi
-        fi
-
-        if [ "$IS_FISH" = "false" ] && [ ${#SHELL_CONFIGS[@]} -eq 0 ]; then
-            log_warn "Could not detect shell config file to add ~/.local/bin to PATH"
-            log_info "Add manually: $PATH_LINE"
-        fi
-    else
-        log_info "~/.local/bin already on PATH"
     fi
-
-    # Export for current session so anakot works immediately
-    export PATH="$command_link_dir:$PATH"
-
-    log_success "anakot command ready"
+    export PATH="$link_dir:$PATH"
+    log_ok "anakot command ready"
 }
 
 copy_config_templates() {
-    log_info "Setting up configuration files..."
-
-    # Create ~/.anakot directory structure (config at top level, code in subdir)
+    log_info "Setting up configuration..."
     mkdir -p "$ANAKOT_HOME"/{cron,sessions,logs,pairing,hooks,image_cache,audio_cache,memories,skills}
-
-    # Create .env at ~/.anakot/.env (top level, easy to find)
     if [ ! -f "$ANAKOT_HOME/.env" ]; then
-        if [ -f "$INSTALL_DIR/.env.example" ]; then
-            cp "$INSTALL_DIR/.env.example" "$ANAKOT_HOME/.env"
-            log_success "Created ~/.anakot/.env from template"
-        else
-            touch "$ANAKOT_HOME/.env"
-            log_success "Created ~/.anakot/.env"
-        fi
-    else
-        log_info "~/.anakot/.env already exists, keeping it"
-    fi
-    # Restrict .env permissions — this file holds API keys and tokens.
-    # 0600 ensures only the file owner can read/write, matching standard
-    # practice for credential files (.netrc, .aws/credentials, .ssh/config).
-    chmod 600 "$ANAKOT_HOME/.env"
-    configure_browser_env_from_system_browser
-
-    # Create config.yaml at ~/.anakot/config.yaml (top level, easy to find)
+        [ -f "$INSTALL_DIR/.env.example" ] && cp "$INSTALL_DIR/.env.example" "$ANAKOT_HOME/.env" || touch "$ANAKOT_HOME/.env"
+        chmod 600 "$ANAKOT_HOME/.env"; log_ok "Created ~/.anakot/.env"
+    else log_info "~/.anakot/.env already exists — keeping it"; fi
     if [ ! -f "$ANAKOT_HOME/config.yaml" ]; then
-        if [ -f "$INSTALL_DIR/cli-config.yaml.example" ]; then
-            cp "$INSTALL_DIR/cli-config.yaml.example" "$ANAKOT_HOME/config.yaml"
-            log_success "Created ~/.anakot/config.yaml from template"
-        fi
-    else
-        log_info "~/.anakot/config.yaml already exists, keeping it"
-    fi
-
-    # Create SOUL.md if it doesn't exist (global persona file)
+        [ -f "$INSTALL_DIR/cli-config.yaml.example" ] && { cp "$INSTALL_DIR/cli-config.yaml.example" "$ANAKOT_HOME/config.yaml"; log_ok "Created ~/.anakot/config.yaml from template"; }
+    else log_info "~/.anakot/config.yaml already exists — keeping it"; fi
     if [ ! -f "$ANAKOT_HOME/SOUL.md" ]; then
-        cat > "$ANAKOT_HOME/SOUL.md" << 'SOUL_EOF'
-# Anakot Agent Persona
-
-<!--
-This file defines the agent's personality and tone.
-The agent will embody whatever you write here.
-Edit this to customize how Anakot communicates with you.
-
-Examples:
-  - "You are a warm, playful assistant who uses kaomoji occasionally."
-  - "You are a concise technical expert. No fluff, just facts."
-  - "You speak like a friendly coworker who happens to know everything."
-
-This file is loaded fresh each message -- no restart needed.
-Delete the contents (or this file) to use the default personality.
--->
-SOUL_EOF
-        log_success "Created ~/.anakot/SOUL.md (edit to customize personality)"
+        printf '%s\n' '# Anakot Agent Persona' '' '<!-- Edit this to customize how Anakot communicates with you. -->' > "$ANAKOT_HOME/SOUL.md"
+        log_ok "Created ~/.anakot/SOUL.md"
     fi
-
-    log_success "Configuration directory ready: ~/.anakot/"
-
-    # Seed bundled skills into ~/.anakot/skills/ (manifest-based, one-time per skill)
     if [ "$NO_SKILLS" = true ]; then
-        # Blank-slate install: write the opt-out marker and skip seeding.
-        # skills_sync.py and `anakot update` both honor this marker, so the
-        # default profile stays empty across future updates too.
-        printf '%s\n' \
-            "This profile opted out of bundled-skill seeding (installed with --no-skills)." \
-            "Delete this file to re-enable sync on the next 'anakot update'." \
-            > "$ANAKOT_HOME/.no-bundled-skills" 2>/dev/null || true
-        log_info "Skipping bundled skills (--no-skills). Wrote $ANAKOT_HOME/.no-bundled-skills"
-        log_info "  Future 'anakot update' runs will not inject bundled skills. Delete the marker to opt back in."
+        printf '%s\n' "Opted out of bundled skills (--no-skills)." "Delete this file to re-enable." > "$ANAKOT_HOME/.no-bundled-skills" 2>/dev/null || true
+        log_info "Skipping bundled skills (--no-skills)"
     else
-        log_info "Syncing bundled skills to ~/.anakot/skills/ ..."
-        if "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" 2>/dev/null; then
-            log_success "Skills synced to ~/.anakot/skills/"
-        else
-            # Fallback: simple directory copy if Python sync fails
-            if [ -d "$INSTALL_DIR/skills" ] && [ ! "$(ls -A "$ANAKOT_HOME/skills/" 2>/dev/null | grep -v '.bundled_manifest')" ]; then
-                cp -r "$INSTALL_DIR/skills/"* "$ANAKOT_HOME/skills/" 2>/dev/null || true
-                log_success "Skills copied to ~/.anakot/skills/"
-            fi
-        fi
+        log_info "Syncing bundled skills..."
+        if "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/tools/skills_sync.py" 2>/dev/null; then log_ok "Skills synced"
+        elif [ -d "$INSTALL_DIR/skills" ]; then
+            cp -r "$INSTALL_DIR/skills/"* "$ANAKOT_HOME/skills/" 2>/dev/null || true; log_ok "Skills copied"; fi
     fi
 }
 
-find_system_browser() {
-    # Prefer a user-specified browser path, then common Linux/macOS Chrome and
-    # Chromium command names.  Arch-family distributions commonly ship plain
-    # `chromium`, while Debian-family systems often use `chromium-browser`.
-    if [ -n "${AGENT_BROWSER_EXECUTABLE_PATH:-}" ]; then
-        if [ -x "$AGENT_BROWSER_EXECUTABLE_PATH" ]; then
-            echo "$AGENT_BROWSER_EXECUTABLE_PATH"
-            return 0
-        fi
-        if command -v "$AGENT_BROWSER_EXECUTABLE_PATH" >/dev/null 2>&1; then
-            command -v "$AGENT_BROWSER_EXECUTABLE_PATH"
-            return 0
-        fi
-    fi
-
-    local candidate
-    for candidate in google-chrome google-chrome-stable chromium chromium-browser chrome; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            command -v "$candidate"
-            return 0
-        fi
-    done
-
-    if [ "$(uname)" = "Darwin" ]; then
-        for app in \
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-            "/Applications/Chromium.app/Contents/MacOS/Chromium"; do
-            if [ -x "$app" ]; then
-                echo "$app"
-                return 0
-            fi
-        done
-    fi
-
-    return 1
-}
-
-run_browser_install_with_timeout() {
-    local timeout_seconds="$1"
-    shift
-
-    if command -v timeout >/dev/null 2>&1; then
-        timeout "$timeout_seconds" "$@"
-    else
-        "$@"
-    fi
-}
-
-configure_browser_env_from_system_browser() {
-    local env_file="$ANAKOT_HOME/.env"
-    local browser_path="${DETECTED_BROWSER_EXECUTABLE:-}"
-
-    if [ -z "$browser_path" ]; then
-        browser_path="$(find_system_browser 2>/dev/null || true)"
-    fi
-
-    if [ -z "$browser_path" ]; then
-        return 0
-    fi
-
-    mkdir -p "$ANAKOT_HOME"
-    if [ ! -f "$env_file" ]; then
-        touch "$env_file"
-    fi
-
-    if grep -q '^AGENT_BROWSER_EXECUTABLE_PATH=' "$env_file" 2>/dev/null; then
-        log_info "AGENT_BROWSER_EXECUTABLE_PATH already configured"
-        return 0
-    fi
-
-    {
-        echo ""
-        echo "# Anakot Agent browser tools — use the system Chrome/Chromium binary."
-        echo "AGENT_BROWSER_EXECUTABLE_PATH=$browser_path"
-    } >> "$env_file"
-    log_success "Configured browser tools to use $browser_path"
-}
-
-install_node_deps() {
-    if [ "$HAS_NODE" = false ]; then
-        log_info "Skipping Node.js dependencies (Node not installed)"
-        return 0
-    fi
-
-    if [ "$DISTRO" = "termux" ]; then
-        log_info "Skipping automatic Node/browser dependency setup on Termux"
-        log_info "Browser automation is not part of the tested Termux install path yet."
-        log_info "If you want to experiment manually later, run: cd $INSTALL_DIR && npm install"
-        return 0
-    fi
-
-    if [ -f "$INSTALL_DIR/package.json" ]; then
-        log_info "Installing Node.js dependencies (browser tools)..."
-        cd "$INSTALL_DIR"
-        npm install --silent 2>/dev/null || {
-            log_warn "npm install failed (browser tools may not work)"
-        }
-        log_success "Node.js dependencies installed"
-
-        # Install Playwright browser + system dependencies.
-        # Playwright's --with-deps only supports apt-based systems natively.
-        # For Arch/Manjaro we install the system libs via pacman first.
-        # Other systems must install Chromium dependencies manually.
-        if [ "$SKIP_BROWSER" = true ]; then
-            log_info "Skipping Playwright/Chromium install (--skip-browser)"
-            log_info "Browser tools will be unavailable until you run manually:"
-            log_info "  cd $INSTALL_DIR && npx playwright install chromium"
-            log_info "On apt-based systems, an admin also needs to run:"
-            log_info "  sudo npx playwright install-deps chromium"
-        else
-        log_info "Installing browser engine (Playwright Chromium)..."
-        DETECTED_BROWSER_EXECUTABLE="$(find_system_browser 2>/dev/null || true)"
-        if [ -n "$DETECTED_BROWSER_EXECUTABLE" ]; then
-            log_success "Found system Chrome/Chromium at $DETECTED_BROWSER_EXECUTABLE"
-            log_info "Skipping Playwright browser download; Anakot will use the system browser."
-        else
-            case "$DISTRO" in
-                ubuntu|debian|raspbian|pop|linuxmint|elementary|zorin|kali|parrot)
-                    # Use --with-deps only when sudo is available non-interactively
-                    # (root, or a user with passwordless sudo). Non-sudo users
-                    # — typical for systemd service accounts and unprivileged
-                    # operator users — would otherwise get blocked on an
-                    # interactive sudo prompt that they can't satisfy. Fall back
-                    # to the browser-only install in that case, and print the
-                    # exact command the admin needs to run separately.
-                    if [ "$(id -u)" -eq 0 ] || (command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null); then
-                        log_info "Installing Playwright Chromium with system dependencies..."
-                        cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install --with-deps chromium 2>/dev/null || {
-                            log_warn "Playwright browser installation failed — browser tools will not work."
-                            log_warn "Try running manually: cd $INSTALL_DIR && npx playwright install --with-deps chromium"
-                        }
-                    else
-                        log_warn "No sudo available — skipping system-library install (--with-deps)."
-                        log_info "Ask an administrator to run, one time, as root:"
-                        log_info "  sudo npx playwright install-deps chromium"
-                        log_info "  (from $INSTALL_DIR, after Node.js deps are installed)"
-                        log_info "Installing Chromium binary into this user's Playwright cache..."
-                        cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install chromium 2>/dev/null || {
-                            log_warn "Playwright browser installation failed — browser tools will not work."
-                            log_warn "Try running manually: cd $INSTALL_DIR && npx playwright install chromium"
-                        }
-                    fi
-                    ;;
-                arch|manjaro|cachyos|endeavouros|garuda)
-                    if command -v pacman &> /dev/null; then
-                        log_info "Arch-family distro detected — installing Chromium system dependencies via pacman..."
-                        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
-                            sudo NEEDRESTART_MODE=a pacman -S --noconfirm --needed \
-                                nss atk at-spi2-core cups libdrm libxkbcommon mesa pango cairo alsa-lib >/dev/null 2>&1 || true
-                        elif [ "$(id -u)" -eq 0 ]; then
-                            pacman -S --noconfirm --needed \
-                                nss atk at-spi2-core cups libdrm libxkbcommon mesa pango cairo alsa-lib >/dev/null 2>&1 || true
-                        else
-                            log_warn "Cannot install browser deps without sudo. Run manually:"
-                            log_warn "  sudo pacman -S nss atk at-spi2-core cups libdrm libxkbcommon mesa pango cairo alsa-lib"
-                        fi
-                    fi
-                    cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install chromium 2>/dev/null || {
-                        log_warn "Playwright browser installation failed — browser tools will not work."
-                    }
-                    ;;
-                fedora|rhel|centos|rocky|alma)
-                    log_warn "Playwright does not support automatic dependency installation on RPM-based systems."
-                    log_info "Install Chromium system dependencies manually before using browser tools:"
-                    log_info "  sudo dnf install nss atk at-spi2-core cups-libs libdrm libxkbcommon mesa-libgbm pango cairo alsa-lib"
-                    cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install chromium 2>/dev/null || {
-                        log_warn "Playwright browser installation failed — install dependencies above and retry."
-                    }
-                    ;;
-                opensuse*|sles)
-                    log_warn "Playwright does not support automatic dependency installation on zypper-based systems."
-                    log_info "Install Chromium system dependencies manually before using browser tools:"
-                    log_info "  sudo zypper install mozilla-nss libatk-1_0-0 at-spi2-core cups-libs libdrm2 libxkbcommon0 Mesa-libgbm1 pango cairo libasound2"
-                    cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install chromium 2>/dev/null || {
-                        log_warn "Playwright browser installation failed — install dependencies above and retry."
-                    }
-                    ;;
-                *)
-                    log_warn "Playwright does not support automatic dependency installation on $DISTRO."
-                    log_info "Install Chromium/browser system dependencies for your distribution, then run:"
-                    log_info "  cd $INSTALL_DIR && npx playwright install chromium"
-                    log_info "Browser tools will not work until dependencies are installed."
-                    cd "$INSTALL_DIR" && run_browser_install_with_timeout 600 npx playwright install chromium 2>/dev/null || true
-                    ;;
-            esac
-        fi
-        fi
-        log_success "Browser engine setup complete"
-    fi
-
-    # Install TUI dependencies
-    if [ -f "$INSTALL_DIR/ui-tui/package.json" ]; then
-        log_info "Installing TUI dependencies..."
-        cd "$INSTALL_DIR/ui-tui"
-        npm install --silent 2>/dev/null || {
-            log_warn "TUI npm install failed (anakot --tui may not work)"
-        }
-        log_success "TUI dependencies installed"
-    fi
-
-    # Keep the checkout clean so `anakot update` doesn't autostash every run.
-    restore_dirty_lockfiles "$INSTALL_DIR"
+verify_install() {
+    log_info "Verifying installation..."
+    local ok=true
+    local anakot_cmd; anakot_cmd="$(command -v anakot 2>/dev/null || echo "")"
+    [ -n "$anakot_cmd" ] && log_ok "anakot command: $anakot_cmd" || { log_error "anakot command not found on PATH"; ok=false; }
+    if "$INSTALL_DIR/venv/bin/python" -c "import anakot_cli" 2>/dev/null; then log_ok "Python core imports OK"
+    else log_error "Cannot import anakot_cli — venv may be broken"; ok=false; fi
+    if [ -f "$INSTALL_DIR/ui-tui/dist/entry.js" ]; then
+        local sz; sz=$(du -h "$INSTALL_DIR/ui-tui/dist/entry.js" 2>/dev/null | cut -f1)
+        log_ok "TUI dist: $INSTALL_DIR/ui-tui/dist/entry.js ($sz)"
+    else log_warn "TUI dist not found — anakot --tui will not work"; fi
+    [ -f "$ANAKOT_HOME/.env" ] && log_ok "Config: ~/.anakot/.env" || log_warn "Missing: ~/.anakot/.env"
+    [ -f "$ANAKOT_HOME/config.yaml" ] && log_ok "Config: ~/.anakot/config.yaml" || log_warn "Missing: ~/.anakot/config.yaml"
+    if [ -d "$INSTALL_DIR/.git" ]; then
+        local ib ic; ib=$(cd "$INSTALL_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null); ic=$(cd "$INSTALL_DIR" && git rev-parse --short HEAD 2>/dev/null)
+        log_ok "Git: $ib @ $ic"; fi
+    $ok && { echo ""; log_ok "All checks passed"; } || { echo ""; log_warn "Some checks failed — see above"; }
+    $ok
 }
 
 run_setup_wizard() {
-    if [ "$RUN_SETUP" = false ]; then
-        log_info "Skipping setup wizard (--skip-setup)"
-        return 0
-    fi
-
-    # The setup wizard reads from /dev/tty, so it works even when the
-    # install script itself is piped (curl | bash). Only skip if no
-    # terminal is available at all (e.g. Docker build, CI).
-    #
-    # Probe by actually opening /dev/tty: a bare existence test passes
-    # in Docker builds where the device node is in the mount namespace
-    # but opening fails with ENXIO, so the wizard would proceed and
-    # then crash on `< /dev/tty` below.
-    if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Setup wizard skipped (no terminal available). Run 'anakot setup' after install."
-        return 0
-    fi
-
-    echo ""
-    log_info "Starting setup wizard..."
-    echo ""
-
+    if [ "$RUN_SETUP" = false ]; then log_info "Skipping setup wizard (--skip-setup)"; return 0; fi
+    if ! (: </dev/tty) 2>/dev/null; then log_info "Setup wizard skipped (no terminal). Run 'anakot setup' after install."; return 0; fi
+    echo ""; log_info "Starting setup wizard..."; echo ""
     cd "$INSTALL_DIR"
-
-    # Run anakot setup using the venv Python directly (no activation needed).
-    # Redirect stdin from /dev/tty so interactive prompts work when piped from curl.
-    if [ "$USE_VENV" = true ]; then
-        "$INSTALL_DIR/venv/bin/python" -m anakot_cli.main setup < /dev/tty
-    else
-        python -m anakot_cli.main setup < /dev/tty
-    fi
-}
-
-maybe_start_gateway() {
-    # Check if any messaging platform tokens were configured
-    ENV_FILE="$ANAKOT_HOME/.env"
-    if [ ! -f "$ENV_FILE" ]; then
-        return 0
-    fi
-
-    HAS_MESSAGING=false
-    for VAR in TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN WHATSAPP_ENABLED; do
-        VAL=$(grep "^${VAR}=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
-        if [ -n "$VAL" ] && [ "$VAL" != "your-token-here" ]; then
-            HAS_MESSAGING=true
-            break
-        fi
-    done
-
-    if [ "$HAS_MESSAGING" = false ]; then
-        return 0
-    fi
-
-    echo ""
-    log_info "Messaging platform token detected!"
-    log_info "The gateway needs to be running for Anakot to send/receive messages."
-
-    # If WhatsApp is enabled and no session exists yet, run foreground first for QR scan
-    WHATSAPP_VAL=$(grep "^WHATSAPP_ENABLED=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2-)
-    WHATSAPP_SESSION="$ANAKOT_HOME/whatsapp/session/creds.json"
-    if [ "$WHATSAPP_VAL" = "true" ] && [ ! -f "$WHATSAPP_SESSION" ]; then
-        if [ "$IS_INTERACTIVE" = true ]; then
-            echo ""
-            log_info "WhatsApp is enabled but not yet paired."
-            log_info "Running 'anakot whatsapp' to pair via QR code..."
-            echo ""
-            if prompt_yes_no "Pair WhatsApp now?" "yes"; then
-                ANAKOT_CMD="$(get_anakot_command_path)"
-                $ANAKOT_CMD whatsapp || true
-            fi
-        else
-            log_info "WhatsApp pairing skipped (non-interactive). Run 'anakot whatsapp' to pair."
-        fi
-    fi
-
-    # Probe by actually opening /dev/tty: a bare existence test passes
-    # in Docker builds where the device node is in the mount namespace
-    # but opening fails with ENXIO. See #16746.
-    if ! (: </dev/tty) 2>/dev/null; then
-        log_info "Gateway setup skipped (no terminal available). Run 'anakot gateway install' later."
-        return 0
-    fi
-
-    echo ""
-    local should_install_gateway=false
-    if [ "$DISTRO" = "termux" ]; then
-        if prompt_yes_no "Would you like to start the gateway in the background?" "yes"; then
-            should_install_gateway=true
-        fi
-    else
-        if prompt_yes_no "Would you like to install the gateway as a background service?" "yes"; then
-            should_install_gateway=true
-        fi
-    fi
-
-    if [ "$should_install_gateway" = true ]; then
-        ANAKOT_CMD="$(get_anakot_command_path)"
-
-        if [ "$DISTRO" != "termux" ] && command -v systemctl &> /dev/null; then
-            log_info "Installing systemd service..."
-            if $ANAKOT_CMD gateway install 2>/dev/null; then
-                log_success "Gateway service installed"
-                if $ANAKOT_CMD gateway start 2>/dev/null; then
-                    log_success "Gateway started! Your bot is now online."
-                else
-                    log_warn "Service installed but failed to start. Try: anakot gateway start"
-                fi
-            else
-                log_warn "Systemd install failed. You can start manually: anakot gateway"
-            fi
-        else
-            if [ "$DISTRO" = "termux" ]; then
-                log_info "Termux detected — starting gateway in best-effort background mode..."
-            else
-                log_info "systemd not available — starting gateway in background..."
-            fi
-            nohup $ANAKOT_CMD gateway > "$ANAKOT_HOME/logs/gateway.log" 2>&1 &
-            GATEWAY_PID=$!
-            log_success "Gateway started (PID $GATEWAY_PID). Logs: ~/.anakot/logs/gateway.log"
-            log_info "To stop: kill $GATEWAY_PID"
-            log_info "To restart later: anakot gateway"
-            if [ "$DISTRO" = "termux" ]; then
-                log_warn "Android may stop background processes when Termux is suspended or the system reclaims resources."
-            fi
-        fi
-    else
-        log_info "Skipped. Start the gateway later with: anakot gateway"
-    fi
+    if [ "$USE_VENV" = true ]; then "$INSTALL_DIR/venv/bin/python" -m anakot_cli.main setup < /dev/tty
+    else python -m anakot_cli.main setup < /dev/tty; fi
 }
 
 print_success() {
     echo ""
     echo -e "${GREEN}${BOLD}"
     echo "┌─────────────────────────────────────────────────────────┐"
-    echo "│              ✓ Installation Complete!                   │"
+    echo "│              Installation Complete!                     │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
     echo ""
-
-    # Show file locations
-    echo -e "${CYAN}${BOLD}📁 Your files:${NC}"
+    echo -e "${CYAN}${BOLD}  Your files:${NC}"
     echo ""
-    echo -e "   ${YELLOW}Config:${NC}    $ANAKOT_HOME/config.yaml"
-    echo -e "   ${YELLOW}API Keys:${NC}  $ANAKOT_HOME/.env"
-    echo -e "   ${YELLOW}Data:${NC}      $ANAKOT_HOME/cron/, sessions/, logs/"
-    echo -e "   ${YELLOW}Code:${NC}      $INSTALL_DIR"
+    echo -e "    ${YELLOW}Config:${NC}    $ANAKOT_HOME/config.yaml"
+    echo -e "    ${YELLOW}API Keys:${NC}  $ANAKOT_HOME/.env"
+    echo -e "    ${YELLOW}Data:${NC}      $ANAKOT_HOME/{cron,sessions,logs,skills}/"
+    echo -e "    ${YELLOW}Code:${NC}      $INSTALL_DIR"
     echo ""
-
     echo -e "${CYAN}─────────────────────────────────────────────────────────${NC}"
     echo ""
-    echo -e "${CYAN}${BOLD}🚀 Commands:${NC}"
+    echo -e "${CYAN}${BOLD}  Commands:${NC}"
     echo ""
-    echo -e "   ${GREEN}anakot${NC}              Start chatting"
-    echo -e "   ${GREEN}anakot setup${NC}        Configure API keys & settings"
-    echo -e "   ${GREEN}anakot config${NC}       View/edit configuration"
-    echo -e "   ${GREEN}anakot config edit${NC}  Open config in editor"
-    echo -e "   ${GREEN}anakot gateway install${NC} Install gateway service (messaging + cron)"
-    echo -e "   ${GREEN}anakot update${NC}       Update to latest version"
-    echo ""
-
-    echo -e "${CYAN}─────────────────────────────────────────────────────────${NC}"
+    echo -e "    ${GREEN}anakot${NC}              Start interactive TUI"
+    echo -e "    ${GREEN}anakot --tui${NC}        Start TUI explicitly"
+    echo -e "    ${GREEN}anakot setup${NC}        Configure API keys & settings"
+    echo -e "    ${GREEN}anakot config edit${NC}  Open config in editor"
+    echo -e "    ${GREEN}anakot update${NC}       Update to latest version"
     echo ""
     if [ "$DISTRO" = "termux" ]; then
-        echo -e "${YELLOW}⚡ 'anakot' was linked into $(get_command_link_display_dir), which is already on PATH in Termux.${NC}"
-        echo ""
+        echo -e "${YELLOW}  'anakot' is on PATH in Termux — ready to use.${NC}"
     elif [ "$ROOT_FHS_LAYOUT" = true ]; then
-        echo -e "${YELLOW}⚡ 'anakot' was linked into /usr/local/bin and is ready to use — no shell reload needed.${NC}"
-        echo ""
+        echo -e "${YELLOW}  'anakot' is in /usr/local/bin — ready to use.${NC}"
     else
-        echo -e "${YELLOW}⚡ Reload your shell to use 'anakot' command:${NC}"
-        echo ""
-        LOGIN_SHELL="$(basename "${SHELL:-/bin/bash}")"
-        if [ "$LOGIN_SHELL" = "zsh" ]; then
-            echo "   source ~/.zshrc"
-        elif [ "$LOGIN_SHELL" = "bash" ]; then
-            echo "   source ~/.bashrc"
-        elif [ "$LOGIN_SHELL" = "fish" ]; then
-            echo "   source ~/.config/fish/config.fish"
-        else
-            echo "   source ~/.bashrc   # or ~/.zshrc"
-        fi
-        echo ""
+        echo -e "${YELLOW}  Reload your shell to use 'anakot':${NC}"
+        local ls; ls="$(basename "${SHELL:-/bin/bash}")"
+        case "$ls" in
+            zsh)  echo "   source ~/.zshrc" ;;
+            bash) echo "   source ~/.bashrc" ;;
+            fish) echo "   source ~/.config/fish/config.fish" ;;
+            *)    echo "   source ~/.bashrc" ;; esac
     fi
-
-    # Show Node.js warning if auto-install failed
-    if [ "$HAS_NODE" = false ]; then
-        echo -e "${YELLOW}"
-        echo "Note: Node.js could not be installed automatically."
-        echo "Browser tools need Node.js. Install manually:"
-        if [ "$DISTRO" = "termux" ]; then
-            echo "  pkg install nodejs"
-        else
-            echo "  https://nodejs.org/en/download/"
-        fi
-        echo -e "${NC}"
-    fi
-
-    # Show ripgrep note if not installed
-    if [ "$HAS_RIPGREP" = false ]; then
-        echo -e "${YELLOW}"
-        echo "Note: ripgrep (rg) was not found. File search will use"
-        echo "grep as a fallback. For faster search in large codebases,"
-        if [ "$DISTRO" = "termux" ]; then
-            echo "install ripgrep: pkg install ripgrep"
-        else
-            echo "install ripgrep: sudo apt install ripgrep (or brew install ripgrep)"
-        fi
-        echo -e "${NC}"
-    fi
+    echo ""
 }
-
-ensure_browser() {
-    if ! command -v node >/dev/null 2>&1; then
-        local node_bin="$ANAKOT_HOME/node/bin/node"
-        if [ -x "$node_bin" ]; then
-            export PATH="$ANAKOT_HOME/node/bin:$PATH"
-        else
-            log_error "Node.js not found. Run with --ensure node first."
-            return 1
-        fi
-    fi
-
-    local npm_bin
-    npm_bin="$(command -v npm 2>/dev/null || echo "$ANAKOT_HOME/node/bin/npm")"
-    if [ ! -x "$npm_bin" ]; then
-        log_error "npm not found"
-        return 1
-    fi
-
-    log_info "Installing agent-browser..."
-    local log_file
-    log_file="$(mktemp)"
-    if ! "$npm_bin" install -g --prefix "$ANAKOT_HOME/node" --silent --ignore-scripts \
-        "agent-browser@^0.26.0" \
-        "@askjo/camofox-browser@^1.5.2" \
-        >"$log_file" 2>&1; then
-        log_error "npm install failed:"
-        cat "$log_file" >&2
-        rm -f "$log_file"
-        return 1
-    fi
-    rm -f "$log_file"
-    export PATH="$ANAKOT_HOME/node/bin:$PATH"
-
-    local sys_browser
-    sys_browser="$(find_system_browser 2>/dev/null || true)"
-    if [ -n "$sys_browser" ]; then
-        configure_browser_env_from_system_browser "$sys_browser"
-        log_info "System browser detected -- skipping Chromium download"
-        return 0
-    fi
-
-    log_info "Installing Chromium via agent-browser install..."
-    local ab_bin="$ANAKOT_HOME/node/bin/agent-browser"
-    if [ -x "$ab_bin" ]; then
-        "$ab_bin" install 2>/dev/null || {
-            log_warn "Chromium install failed. Browser tools may not work without a system browser."
-
-            # OS-specific hints (detect_os sets $DISTRO)
-            case "${DISTRO:-unknown}" in
-                ubuntu|debian)
-                    log_info "Try: sudo apt-get install -y chromium-browser"
-                    ;;
-                arch)
-                    log_info "Try: sudo pacman -S chromium"
-                    ;;
-                fedora|rhel|centos)
-                    log_info "Try: sudo dnf install -y chromium"
-                    ;;
-            esac
-        }
-    else
-        log_warn "agent-browser not found at $ab_bin"
-    fi
-
-    return 0
-}
-
-ensure_mode() {
-    detect_os
-
-    IFS=',' read -ra DEPS <<< "$ENSURE_DEPS"
-    for dep in "${DEPS[@]}"; do
-        dep="$(echo "$dep" | tr -d '[:space:]')"
-        case "$dep" in
-            node)
-                check_node
-                ;;
-            browser)
-                check_node
-                if [ "$HAS_NODE" = true ]; then
-                    ensure_browser
-                fi
-                ;;
-            ripgrep)
-                if ! command -v rg &>/dev/null; then
-                    HAS_RIPGREP=false
-                    HAS_FFMPEG=true
-                    install_system_packages
-                fi
-                ;;
-            ffmpeg)
-                if ! command -v ffmpeg &>/dev/null; then
-                    HAS_FFMPEG=false
-                    HAS_RIPGREP=true
-                    install_system_packages
-                fi
-                ;;
-            *)
-                log_warn "Unknown dependency: $dep"
-                ;;
-        esac
-    done
-}
-
-postinstall_mode() {
-    print_banner
-    detect_os
-
-    log_info "Post-install mode: setting up Anakot for pip install"
-
-    check_node
-    check_network_prerequisites
-    install_system_packages
-
-    if [ "$HAS_NODE" = true ] && [ "$SKIP_BROWSER" = false ]; then
-        ensure_browser
-    fi
-
-    ANAKOT_CMD="$(command -v anakot 2>/dev/null || echo "")"
-    if [ -n "$ANAKOT_CMD" ]; then
-        log_info "Running anakot setup..."
-        "$ANAKOT_CMD" setup
-    else
-        log_warn "anakot command not found on PATH"
-        log_info "Try: python -m anakot_cli.main setup"
-    fi
-}
-
-# Build apps/desktop into a launchable native app. Mirrors install.ps1's
-# Install-Desktop: a root-level npm install so the apps/* workspace resolves
-# the desktop's own deps (Electron ~150MB), then `npm run pack`
-# (electron-builder --dir) which emits an unpacked app for the current OS. Only invoked
-# via the 'desktop' stage / --include-desktop, which the Electron app's own
-# first-launch bootstrap never requests (it must not rebuild itself).
-install_desktop() {
-    local desktop_dir="$INSTALL_DIR/apps/desktop"
-
-    # The desktop stage only runs when a build is explicitly requested
-    # (--include-desktop / 'desktop' stage), so a missing toolchain is a hard
-    # failure, not a silent skip — a silent skip yields a "complete" install
-    # with no app and a confusing "couldn't find a built desktop" at launch.
-    # Always re-resolve Node here. Stages run in separate processes, so we can't
-    # trust an earlier check; more importantly check_node now enforces the build
-    # floor (^20.19 || >=22.12) and prepends the Anakot-managed Node to PATH, so
-    # the build never runs on a too-old system Node — the cause of the opaque
-    # "Build desktop app … exit code 1" failure (Vite crashes on old Node).
-    check_node
-    if ! command -v npm >/dev/null 2>&1; then
-        log_error "Cannot build desktop app: Node.js / npm unavailable"
-        log_info "Install Node.js and retry: cd $desktop_dir && npm run pack"
-        return 1
-    fi
-    if [ ! -f "$desktop_dir/package.json" ]; then
-        log_warn "Skipping desktop build (apps/desktop not present in checkout)"
-        return 0
-    fi
-
-    # 1. Root workspace install so apps/desktop's deps (Electron, Vite,
-    #    node-pty prebuilds) resolve. The browser-tools install runs in the
-    #    repo-root package workspace, which does not pull apps/* deps.
-    #
-    #    Prefer `npm ci`: it deletes node_modules and reinstalls from the
-    #    lockfile, so it always produces a complete tree. Bare `npm install`
-    #    can report "up to date" against a stale node_modules/.package-lock.json
-    #    marker while node_modules is actually empty (Windows workspace-hoisting
-    #    flake) — leaving tsc/typescript unresolved and `npm run pack`'s
-    #    `tsc -b` failing with no obvious cause. Fall back to `npm install`
-    #    only if `npm ci` is unavailable or the lockfile is out of sync.
-    log_info "Installing desktop workspace dependencies (includes Electron ~150MB, 1-3min)..."
-    ( cd "$INSTALL_DIR" && npm ci ) || ( cd "$INSTALL_DIR" && npm install ) || {
-        log_error "Desktop workspace npm install failed"
-        return 1
-    }
-    log_success "Desktop workspace dependencies installed"
-
-    # 2. Build. `npm run pack` = tsc + vite build + electron-builder --dir,
-    #    producing an unpacked app for the current OS. We disable signing
-    #    auto-discovery so electron-builder falls back to an ad-hoc signature
-    #    instead of grabbing an unrelated Developer ID from the keychain; a
-    #    real signed/notarized .dmg needs Apple credentials and is a separate
-    #    release concern.
-    log_info "Building desktop app (this takes 1-3 minutes)..."
-    ( cd "$desktop_dir" && CSC_IDENTITY_AUTO_DISCOVERY=false npm run pack ) || {
-        log_error "Desktop app build failed"
-        log_info "Run manually: cd $desktop_dir && npm run pack"
-        return 1
-    }
-
-    local app=""
-    if [ "$OS" = "linux" ]; then
-        if [ -x "$desktop_dir/release/linux-unpacked/Anakot" ]; then
-            app="$desktop_dir/release/linux-unpacked/Anakot"
-        elif [ -x "$desktop_dir/release/linux-unpacked/anakot" ]; then
-            app="$desktop_dir/release/linux-unpacked/anakot"
-        fi
-    else
-        local cand
-        for cand in \
-            "$desktop_dir/release/mac-arm64/Anakot.app" \
-            "$desktop_dir/release/mac/Anakot.app"; do
-            if [ -d "$cand" ]; then
-                app="$cand"
-                break
-            fi
-        done
-    fi
-    if [ -z "$app" ]; then
-        log_error "Desktop build completed but no app was found under $desktop_dir/release/"
-        return 1
-    fi
-    log_success "Desktop app built: $app"
-
-    # Linux: Electron's chrome-sandbox helper needs root:root 4755 or the
-    # sandboxed renderer will abort on startup.  Check the file is a regular
-    # file (not a symlink) before chown/chmod so we don't follow an
-    # attacker-controlled link to an arbitrary path.
-    if [ "$OS" = "linux" ]; then
-        local sandbox="$desktop_dir/release/linux-unpacked/chrome-sandbox"
-        if [ -f "$sandbox" ] && [ ! -L "$sandbox" ]; then
-            if [ "$(id -u)" -eq 0 ]; then
-                chown root:root "$sandbox" && chmod 4755 "$sandbox" || {
-                    log_error "Cannot configure Electron sandbox helper: $sandbox"
-                    return 1
-                }
-            elif command -v sudo >/dev/null 2>&1; then
-                sudo chown root:root "$sandbox" && sudo chmod 4755 "$sandbox" || {
-                    log_error "Cannot configure Electron sandbox helper (sudo failed): $sandbox"
-                    return 1
-                }
-            else
-                log_error "Cannot configure Electron sandbox helper without sudo: $sandbox"
-                return 1
-            fi
-        fi
-    fi
-
-    # macOS: make the locally-built (ad-hoc) app relaunchable after an in-place
-    # self-update. An ad-hoc bundle has no stable Designated Requirement, so a
-    # later in-place rebuild (new cdhash) plus the inherited quarantine flag
-    # trips Gatekeeper's tamper check ("Anakot is damaged and can't be opened").
-    # Strip quarantine + re-apply a clean deep ad-hoc signature (no
-    # hardened-runtime flag, which an ad-hoc build can't satisfy). Skipped when a
-    # real signing identity is configured so a signed build isn't clobbered.
-    if [ "$OS" = "macos" ] && [ -z "${CSC_LINK:-}" ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ] && command -v codesign >/dev/null 2>&1; then
-        xattr -cr "$app" 2>/dev/null || true
-        codesign --force --deep --sign - "$app" >/dev/null 2>&1 || true
-    fi
-
-    # `npm install` + `npm run pack` rewrite lockfiles; restore them so the
-    # checkout stays clean for the next `anakot update`.
-    restore_dirty_lockfiles "$INSTALL_DIR"
-}
-
-# Each --stage runs in its own process, so (unlike the monolithic main() where
-# clone_repo cd's once and later steps inherit it) a stage that operates on the
-# checkout must cd into it explicitly. Without this, install_deps/setup_path run
-# from the desktop app's cwd and resolve `.` / the venv against the wrong tree.
-require_install_dir() {
-    if [ -z "$INSTALL_DIR" ] || [ ! -d "$INSTALL_DIR" ]; then
-        log_error "Install directory not found: ${INSTALL_DIR:-<unset>}"
-        log_info "The 'repository' stage must run before this one."
-        return 1
-    fi
-    cd "$INSTALL_DIR"
-}
-
-# Desktop bootstrap stage protocol. Mirrors the Windows install.ps1 surface
-# closely enough for the Electron bootstrap runner to show structured progress.
-run_stage_body() {
-    local stage="$1"
-
-    case "$stage" in
-        prerequisites)
-            print_banner
-            detect_os
-            resolve_install_layout
-            install_uv
-            check_python
-            check_git
-            check_node
-            check_network_prerequisites
-            install_system_packages
-            ;;
-        repository)
-            detect_os
-            resolve_install_layout
-            check_git
-            clone_repo
-            ;;
-        venv)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            install_uv
-            check_python
-            setup_venv
-            ;;
-        python-deps)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            install_uv
-            check_python
-            install_deps
-            ;;
-        node-deps)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            check_node
-            install_node_deps
-            ;;
-        path)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            setup_path
-            ;;
-        config)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            copy_config_templates
-            ;;
-        setup)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            run_setup_wizard
-            ;;
-        gateway)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            maybe_start_gateway
-            ;;
-        desktop)
-            detect_os
-            resolve_install_layout
-            require_install_dir
-            # Each stage runs in its own process, so the Anakot-managed Node
-            # provisioned during prerequisites/node-deps (at $ANAKOT_HOME/node/bin)
-            # isn't on PATH here. check_node re-adds it (or installs if missing)
-            # so install_desktop can find npm instead of silently skipping.
-            check_node
-            install_desktop
-            ;;
-        complete)
-            detect_os
-            resolve_install_layout
-            print_success
-            echo "git" > "$ANAKOT_HOME/.install_method"
-            ;;
-        *)
-            log_error "Unknown stage: $stage"
-            return 2
-            ;;
-    esac
-}
-
-run_stage_protocol() {
-    local stage="$1"
-    if [ -z "$stage" ]; then
-        log_error "--stage requires a stage name"
-        if [ "$JSON_OUTPUT" = true ]; then
-            emit_stage_json "" false false "missing stage name"
-        fi
-        return 2
-    fi
-
-    if [ "$NON_INTERACTIVE" = true ] && stage_needs_user_input "$stage"; then
-        log_info "Skipping $stage (non-interactive bootstrap)"
-        if [ "$JSON_OUTPUT" = true ]; then
-            emit_stage_json "$stage" true true
-        fi
-        return 0
-    fi
-
-    # Run the stage body in a subshell so a stage helper that calls `exit 1`
-    # on failure (clone_repo, install_deps, etc. were written for the monolithic
-    # flow) only exits the subshell — the parent still reaches the JSON result
-    # frame below. Without this, a failed --stage would terminate the process
-    # before emitting the frame and the Rust/Electron parser would see "no
-    # result frame" instead of a clean {ok:false} contract response.
-    set +e
-    ( run_stage_body "$stage" )
-    local code=$?
-    set -e
-
-    if [ "$JSON_OUTPUT" = true ]; then
-        if [ "$code" -eq 0 ]; then
-            emit_stage_json "$stage" true false
-        else
-            emit_stage_json "$stage" false false "exit code $code"
-        fi
-    fi
-    return "$code"
-}
-
-# ============================================================================
-# Main
-# ============================================================================
 
 main() {
     print_banner
-
     detect_os
     resolve_install_layout
+    load_manifest
+    [ -n "$MANIFEST_DIR" ] && [ "$MANIFEST_DIR" = "$INSTALL_DIR" ] && [ "$MANIFEST_BRANCH" = "$BRANCH" ] && \
+        log_info "Existing install detected (manifest: $MANIFEST_BRANCH @ ${MANIFEST_TIMESTAMP:-unknown})"
     install_uv
     check_python
     check_git
     check_node
-    check_network_prerequisites
+    check_network
     install_system_packages
-
     clone_repo
+    save_manifest
     setup_venv
     install_deps
-    install_node_deps
+    build_tui
     setup_path
     copy_config_templates
+    verify_install
     run_setup_wizard
-    maybe_start_gateway
-
-    if [ "$INCLUDE_DESKTOP" = true ]; then
-        install_desktop
-    fi
-
     print_success
-
-    echo "git" > "$ANAKOT_HOME/.install_method"
 }
 
-if [ "$MANIFEST_MODE" = true ]; then
-    emit_manifest
-elif [ -n "$STAGE_NAME" ]; then
-    run_stage_protocol "$STAGE_NAME"
-elif [ -n "$ENSURE_DEPS" ]; then
-    ensure_mode
-elif [ "$POSTINSTALL_MODE" = true ]; then
-    postinstall_mode
+if [ "$VERIFY_ONLY" = true ]; then
+    detect_os; resolve_install_layout; load_manifest; verify_install
 else
     main
 fi
