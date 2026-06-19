@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useRef, useMemo, useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -67,19 +67,8 @@ function BackgroundImageSettings() {
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
-  // Resolve a built-in path to a full URL (works in both dev and built app)
+  // Resolve a built-in path to a full URL for <img> src attributes
   const resolveBuiltIn = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
-
-  const builtInUrlSet = useMemo(
-    () => new Set(BUILT_IN_BACKGROUNDS.map(b => resolveBuiltIn(b.path))),
-    []
-  )
-
-  const isBuiltIn = (src: string | null) => {
-    if (!src) return false
-    if (builtInUrlSet.has(src)) return true
-    return BUILT_IN_BACKGROUNDS.some(b => b.path === src)
-  }
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -124,17 +113,19 @@ function BackgroundImageSettings() {
   }
 
   const handleSelectBuiltIn = (bg: typeof BUILT_IN_BACKGROUNDS[number]) => {
-    const url = resolveBuiltIn(bg.path)
-    setBackgroundImage(url)
+    // Store the raw relative path (e.g. "ds-assets/filler-bg0.jpg")
+    // AppShell will resolve it against BASE_URL at render time
+    setBackgroundImage(bg.path)
     triggerHaptic('crisp')
   }
 
   // Use nanostore for reactive state
   const image = useStore($backgroundImage)
   const opacity = useStore($backgroundOpacity)
-  const currentIsBuiltIn = isBuiltIn(image)
-  const currentBuiltInId = currentIsBuiltIn
-    ? BUILT_IN_BACKGROUNDS.find(b => resolveBuiltIn(b.path) === image || b.path === image)?.id ?? null
+
+  // For the gallery, check if current image matches a built-in path
+  const currentBuiltInId = image
+    ? BUILT_IN_BACKGROUNDS.find(b => b.path === image || image.endsWith(b.path))?.id ?? null
     : null
 
   return (

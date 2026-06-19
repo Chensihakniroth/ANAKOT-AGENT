@@ -70,6 +70,13 @@ export function AppShell({
   const bgOpacity = useStore($backgroundOpacity)
   const hasBgImage = Boolean(bgImage)
 
+  // Resolve the background image URL for CSS.
+  // Built-in paths (e.g. "ds-assets/filler-bg0.jpg") are relative to the app root.
+  // Uploaded images are file:// URLs. Data URLs are used as-is.
+  const resolvedBgUrl = bgImage
+    ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(bgImage) ? bgImage : `${import.meta.env.BASE_URL}${bgImage.replace(/^\/+/, '')}`)
+    : null
+
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   // Width Windows/Linux reserve for the OS-painted min/max/close overlay (zero
   // on macOS, where window controls sit on the left and are reported via
@@ -150,8 +157,8 @@ export function AppShell({
           'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
           hasBgImage && 'app-bg-image'
         )}
-        style={hasBgImage ? {
-          '--app-bg-image': `url(${bgImage})`,
+        style={resolvedBgUrl ? {
+          '--app-bg-image': `url(${resolvedBgUrl})`,
           '--app-bg-overlay': `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`
         } as CSSProperties : undefined}
       >

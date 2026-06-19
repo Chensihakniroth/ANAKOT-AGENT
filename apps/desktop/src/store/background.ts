@@ -2,12 +2,10 @@
  * Background image store — reactive nanostore for the desktop background image.
  * Persists to localStorage and notifies all subscribers on change.
  *
- * Uploaded images are saved to disk via the desktop bridge (ds-assets/ folder
- * in the app user data dir). Built-in images are referenced by their public/
- * path. The stored value is always a URL string:
- *   - Built-in:  "ds-assets/filler-bg0.jpg"  (relative, resolved at runtime)
+ * Stored value is always a string URL. Three formats:
+ *   - Built-in:  "ds-assets/filler-bg0.jpg"  (relative path, resolved at render)
  *   - Uploaded:  "file:///C:/Users/.../ds-assets/my-bg.png"  (absolute file:// URL)
- *   - Custom:    "data:image/png;base64,..."  (data URL, fallback)
+ *   - Data URL:  "data:image/png;base64,..."  (inline, fallback)
  */
 import { atom } from 'nanostores'
 
@@ -51,8 +49,8 @@ $backgroundOpacity.subscribe(op => {
   } catch { /* ignore */ }
 })
 
-export function setBackgroundImage(dataUrl: string | null) {
-  $backgroundImage.set(dataUrl)
+export function setBackgroundImage(url: string | null) {
+  $backgroundImage.set(url)
 }
 
 export function setBackgroundOpacity(value: number) {
@@ -68,14 +66,12 @@ export function getBackgroundOpacity(): number {
 }
 
 /**
- * Save an uploaded image file to disk in the ds-assets/ folder.
- * Returns the file:// URL of the saved image, or falls back to data URL.
+ * Save an uploaded image file to disk via the desktop bridge.
+ * Returns a file:// URL on success, or falls back to a data URL.
  */
 export async function saveUploadedImage(file: File): Promise<string> {
-  // Try to save via desktop bridge
   if (window.anakotDesktop?.saveImageBuffer) {
     try {
-      // Read file as ArrayBuffer
       const buffer = await file.arrayBuffer()
       const ext = file.name.split('.').pop() || 'png'
       const savedPath = await window.anakotDesktop.saveImageBuffer(
@@ -90,7 +86,7 @@ export async function saveUploadedImage(file: File): Promise<string> {
     }
   }
 
-  // Fallback: store as base64 data URL in localStorage
+  // Fallback: store as base64 data URL
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
