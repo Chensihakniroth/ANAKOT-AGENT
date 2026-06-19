@@ -155,13 +155,33 @@ export function AppShell({
       <main
         className={cn(
           'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
-          hasBgImage && 'app-bg-image'
+          !hasBgImage && 'bg-background'
         )}
-        style={resolvedBgUrl ? {
-          '--app-bg-image': `url(${resolvedBgUrl})`,
-          '--app-bg-overlay': `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`
-        } as CSSProperties : undefined}
       >
+        {/* Background image layer — sits behind all content within <main> */}
+        {resolvedBgUrl && (
+          <>
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: `url(${resolvedBgUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+                zIndex: 0,
+              }}
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
+                zIndex: 1,
+              }}
+            />
+          </>
+        )}
         <PaneShell className="min-h-0 flex-1">
           <div
             aria-hidden="true"

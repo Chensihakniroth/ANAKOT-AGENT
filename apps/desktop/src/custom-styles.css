@@ -28,27 +28,5 @@
 }
 
 /* ─── 2. Background Image ────────────────────────────────────────────────── */
-/* Applied via inline style on <main> by AppShell. The image is stored as a
-   base64 data URL in localStorage and injected at boot time. */
-.app-bg-image {
-  background-image: var(--app-bg-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-}
-
-.app-bg-image::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: var(--app-bg-overlay, color-mix(in srgb, var(--ui-chat-surface-background) 85%, transparent));
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Ensure content sits above the overlay */
-.app-bg-image > * {
-  position: relative;
-  z-index: 1;
-}
+/* Background is rendered via dedicated div layers in AppShell, not via CSS classes. */
+/* This section intentionally empty — see app-shell.tsx for the implementation. */
