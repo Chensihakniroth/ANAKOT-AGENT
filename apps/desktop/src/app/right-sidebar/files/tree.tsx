@@ -86,7 +86,7 @@ export function ProjectTree({
   )
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden" ref={containerRef}>
+    <div className="h-full" ref={containerRef}>
       {size.height > 0 && size.width > 0 ? (
         <Tree<TreeNode>
           childrenAccessor={node => (node?.isDirectory ? (node.children ?? []) : null)}

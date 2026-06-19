@@ -17,9 +17,12 @@ import {
   readFileAsDataUrl,
   saveUploadedImage,
   setBackgroundImage,
-  setBackgroundOpacity
+  setBackgroundOpacity,
+  setBackgroundPositionX,
+  setBackgroundPositionY,
+  setBackgroundSize
 } from './background-image-settings'
-import { $backgroundImage, $backgroundOpacity } from '@/store/background'
+import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize } from '@/store/background'
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 
 function ThemePreview({ name }: { name: string }) {
@@ -122,10 +125,18 @@ function BackgroundImageSettings() {
   // Use nanostore for reactive state
   const image = useStore($backgroundImage)
   const opacity = useStore($backgroundOpacity)
+  const posX = useStore($backgroundPositionX)
+  const posY = useStore($backgroundPositionY)
+  const size = useStore($backgroundSize)
 
   // For the gallery, check if current image matches a built-in path
   const currentBuiltInId = image
     ? BUILT_IN_BACKGROUNDS.find(b => b.path === image || image.endsWith(b.path))?.id ?? null
+    : null
+
+  // Resolve the current image src for the preview
+  const previewSrc = image
+    ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(image) ? image : `${import.meta.env.BASE_URL}${image.replace(/^\/+/, '')}`)
     : null
 
   return (
@@ -248,6 +259,107 @@ function BackgroundImageSettings() {
               <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
                 <span>Subtle</span>
                 <span>Full</span>
+              </div>
+            </div>
+          )}
+
+          {/* Position & Size */}
+          {image && (
+            <div className="grid gap-3">
+              {/* Live preview */}
+              <div className="grid gap-1.5">
+                <span className="text-xs text-muted-foreground">Preview</span>
+                <div className="relative h-32 w-full overflow-hidden rounded-lg border border-(--ui-stroke-tertiary)">
+                  {previewSrc && (
+                    <img
+                      alt="Position preview"
+                      className="h-full w-full"
+                      src={previewSrc}
+                      style={{
+                        objectPosition: `${posX}% ${posY}%`,
+                        objectFit: size as React.CSSProperties['objectFit'],
+                        opacity: opacity
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Size selector */}
+              <div className="grid gap-1.5">
+                <span className="text-xs text-muted-foreground">Fit</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['cover', 'contain', 'auto'] as const).map(opt => (
+                    <button
+                      className={cn(
+                        'rounded-md border px-3 py-1 text-xs transition-colors',
+                        size === opt
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) text-muted-foreground hover:bg-(--chrome-action-hover)'
+                      )}
+                      key={opt}
+                      onClick={() => setBackgroundSize(opt)}
+                      type="button"
+                    >
+                      {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Position X slider */}
+              <div className="grid gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Position X</span>
+                  <span className="text-xs font-mono text-muted-foreground">{posX}%</span>
+                </div>
+                <input
+                  className="w-full accent-primary"
+                  max={100}
+                  min={0}
+                  onChange={e => setBackgroundPositionX(parseInt(e.target.value, 10))}
+                  step={1}
+                  type="range"
+                  value={posX}
+                />
+                <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
+                  <span>Left</span>
+                  <span>Center</span>
+                  <span>Right</span>
+                </div>
+              </div>
+
+              {/* Position Y slider */}
+              <div className="grid gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Position Y</span>
+                  <span className="text-xs font-mono text-muted-foreground">{posY}%</span>
+                </div>
+                <input
+                  className="w-full accent-primary"
+                  max={100}
+                  min={0}
+                  onChange={e => setBackgroundPositionY(parseInt(e.target.value, 10))}
+                  step={1}
+                  type="range"
+                  value={posY}
+                />
+                <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
+                  <span>Top</span>
+                  <span>Center</span>
+                  <span>Bottom</span>
+                </div>
+              </div>
+
+              {/* Reset position button */}
+              <div className="flex justify-end">
+                <button
+                  className="text-xs text-muted-foreground underline decoration-muted-foreground/30 underline-offset-2 transition-colors hover:text-(--ui-text-secondary) hover:decoration-(--ui-text-secondary)/50"
+                  onClick={() => { setBackgroundPositionX(50); setBackgroundPositionY(50) }}
+                  type="button"
+                >
+                  Reset to center
+                </button>
               </div>
             </div>
           )}

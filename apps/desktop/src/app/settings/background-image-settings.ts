@@ -9,17 +9,29 @@
 import {
   getBackgroundImage,
   getBackgroundOpacity,
+  getBackgroundPositionX,
+  getBackgroundPositionY,
+  getBackgroundSize,
   saveUploadedImage,
   setBackgroundImage,
-  setBackgroundOpacity
+  setBackgroundOpacity,
+  setBackgroundPositionX,
+  setBackgroundPositionY,
+  setBackgroundSize
 } from '@/store/background'
 
 export {
   getBackgroundImage,
   getBackgroundOpacity,
+  getBackgroundPositionX,
+  getBackgroundPositionY,
+  getBackgroundSize,
   saveUploadedImage,
   setBackgroundImage,
-  setBackgroundOpacity
+  setBackgroundOpacity,
+  setBackgroundPositionX,
+  setBackgroundPositionY,
+  setBackgroundSize
 }
 
 /** Built-in background images shipped with the app. */

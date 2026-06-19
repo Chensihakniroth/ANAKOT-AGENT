@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react'
 import { Leva, useControls } from 'leva'
 import { type CSSProperties, useEffect, useState } from 'react'
 
-import { $backgroundImage, $backgroundOpacity } from '@/store/background'
+import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize } from '@/store/background'
 
 const BLEND_MODES = [
   'normal',
@@ -30,6 +30,9 @@ export function Backdrop() {
   const [controlsOpen, setControlsOpen] = useState(false)
   const bgImage = useStore($backgroundImage)
   const bgOpacity = useStore($backgroundOpacity)
+  const bgPosX = useStore($backgroundPositionX)
+  const bgPosY = useStore($backgroundPositionY)
+  const bgSize = useStore($backgroundSize)
 
   // Resolve the image URL: if it's a data URL or absolute URL use as-is,
   // otherwise prepend BASE_URL for relative paths like "ds-assets/filler-bg0.jpg"
@@ -114,7 +117,8 @@ export function Backdrop() {
             src={resolvedSrc}
             style={{
               height: `${statue.scale}dvh`,
-              objectPosition: statue.objectPosition,
+              objectPosition: `${bgPosX}% ${bgPosY}%`,
+              objectFit: bgSize as CSSProperties['objectFit'],
               filter: `invert(calc(${statue.invert ? 1 : 0} * var(--backdrop-invert-mul, 1))) saturate(${statue.saturate}) brightness(${statue.brightness})`
             }}
           />
