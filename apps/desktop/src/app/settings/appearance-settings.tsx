@@ -175,11 +175,11 @@ function BackgroundImageSettings() {
                 <span className="text-[0.65rem] text-muted-foreground">Click one to apply</span>
               )}
             </div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="flex flex-wrap gap-2">
               {/* Upload card */}
               <button
                 className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-2 transition-colors',
+                  'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-3 transition-colors',
                   dragOver
                     ? 'border-primary bg-primary/5'
                     : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
@@ -191,7 +191,7 @@ function BackgroundImageSettings() {
                 type="button"
               >
                 <Plus className="size-5 text-muted-foreground" />
-                <span className="text-[0.6rem] leading-tight text-muted-foreground">Upload</span>
+                <span className="text-[0.65rem] leading-tight text-muted-foreground">Upload</span>
               </button>
 
               {/* Built-in images */}
@@ -202,7 +202,7 @@ function BackgroundImageSettings() {
                 return (
                   <button
                     className={cn(
-                      'group relative overflow-hidden rounded-lg border-2 transition-all',
+                      'group relative h-20 w-28 overflow-hidden rounded-lg border-2 transition-all',
                       active
                         ? 'border-primary ring-2 ring-primary/20'
                         : 'border-transparent hover:border-(--ui-stroke-secondary)'
@@ -214,7 +214,7 @@ function BackgroundImageSettings() {
                   >
                     <img
                       alt={bg.label}
-                      className="aspect-video h-full w-full object-cover"
+                      className="h-full w-full object-cover"
                       src={url}
                     />
                     {active && (
@@ -224,8 +224,8 @@ function BackgroundImageSettings() {
                         </span>
                       </div>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <span className="text-[0.55rem] font-medium text-white">{bg.label}</span>
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-0.5">
+                      <span className="text-[0.6rem] font-medium text-white">{bg.label}</span>
                     </div>
                   </button>
                 )
@@ -268,7 +268,7 @@ function BackgroundImageSettings() {
         </div>
       }
       title="Background Image"
-      description="Choose a built-in background or upload your own"
+      description="Choose a built-in background or upload your own for the chat area"
       wide
     />
   )

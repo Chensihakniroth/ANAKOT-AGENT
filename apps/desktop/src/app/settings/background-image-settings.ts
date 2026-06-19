@@ -9,14 +9,6 @@ const DEFAULT_OPACITY = 0.15
 
 /** Built-in background images shipped with the app. */
 export const BUILT_IN_BACKGROUNDS: Array<{ id: string; label: string; path: string }> = [
-  { id: 'frame-0', label: 'Aurora 1', path: 'anakot-frames/anakot-frame-0.png' },
-  { id: 'frame-1', label: 'Aurora 2', path: 'anakot-frames/anakot-frame-1.png' },
-  { id: 'frame-2', label: 'Aurora 3', path: 'anakot-frames/anakot-frame-2.png' },
-  { id: 'frame-3', label: 'Aurora 4', path: 'anakot-frames/anakot-frame-3.png' },
-  { id: 'frame-4', label: 'Aurora 5', path: 'anakot-frames/anakot-frame-4.png' },
-  { id: 'frame-5', label: 'Aurora 6', path: 'anakot-frames/anakot-frame-5.png' },
-  { id: 'frame-6', label: 'Aurora 7', path: 'anakot-frames/anakot-frame-6.png' },
-  { id: 'frame-7', label: 'Aurora 8', path: 'anakot-frames/anakot-frame-7.png' },
   { id: 'filler-bg0', label: 'Filler', path: 'ds-assets/filler-bg0.jpg' },
   { id: 'callmemo-girl', label: 'Callmemo Girl', path: 'callmemo-girl.jpg' },
 ]
