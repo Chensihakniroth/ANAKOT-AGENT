@@ -13,6 +13,7 @@ import { BUILTIN_THEMES } from '@/themes/presets'
 
 import { MODE_OPTIONS } from './constants'
 import {
+  BUILT_IN_BACKGROUNDS,
   getBackgroundImage,
   getBackgroundOpacity,
   readFileAsDataUrl,
@@ -62,12 +63,19 @@ function ThemePreview({ name }: { name: string }) {
 }
 
 function BackgroundImageSettings() {
-  const { t } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [image, setImage] = useState<string | null>(getBackgroundImage)
   const [opacity, setOpacity] = useState(getBackgroundOpacity)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
+
+  // Resolve a built-in path to a full URL (works in both dev and built app)
+  const resolveBuiltIn = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
+
+  const isBuiltIn = (src: string | null) => {
+    if (!src) return false
+    return BUILT_IN_BACKGROUNDS.some(b => resolveBuiltIn(b.path) === src || b.path === src)
+  }
 
   const handleFile = async (file: File) => {
     setError(null)
@@ -114,12 +122,24 @@ function BackgroundImageSettings() {
     setBackgroundOpacity(value)
   }
 
+  const handleSelectBuiltIn = (bg: typeof BUILT_IN_BACKGROUNDS[number]) => {
+    const url = resolveBuiltIn(bg.path)
+    setBackgroundImage(url)
+    setImage(url)
+    triggerHaptic('crisp')
+  }
+
+  const currentIsBuiltIn = isBuiltIn(image)
+  const currentBuiltInId = currentIsBuiltIn
+    ? BUILT_IN_BACKGROUNDS.find(b => resolveBuiltIn(b.path) === image || b.path === image)?.id ?? null
+    : null
+
   return (
     <ListRow
       below={
-        <div className="mt-3 grid gap-3">
-          {/* Drop zone / preview */}
-          {image ? (
+        <div className="mt-3 grid gap-4">
+          {/* Current image preview */}
+          {image && (
             <div className="relative overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
               <img
                 alt="Background preview"
@@ -145,27 +165,73 @@ function BackgroundImageSettings() {
                 </button>
               </div>
             </div>
-          ) : (
-            <button
-              className={cn(
-                'flex h-32 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors',
-                dragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
-              )}
-              onClick={() => inputRef.current?.click()}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              type="button"
-            >
-              <Plus className={cn('size-6', dragOver ? 'text-primary' : 'text-muted-foreground')} />
-              <span className="text-xs text-muted-foreground">
-                {dragOver ? 'Drop image here' : 'Click to upload or drag & drop'}
-              </span>
-              <span className="text-[0.65rem] text-muted-foreground/60">PNG, JPG, WEBP — max 10 MB</span>
-            </button>
           )}
+
+          {/* Built-in gallery */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-(--ui-text-secondary)">Built-in Backgrounds</span>
+              {!image && (
+                <span className="text-[0.65rem] text-muted-foreground">Click one to apply</span>
+              )}
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {/* Upload card */}
+              <button
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-2 transition-colors',
+                  dragOver
+                    ? 'border-primary bg-primary/5'
+                    : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
+                )}
+                onClick={() => inputRef.current?.click()}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                type="button"
+              >
+                <Plus className="size-5 text-muted-foreground" />
+                <span className="text-[0.6rem] leading-tight text-muted-foreground">Upload</span>
+              </button>
+
+              {/* Built-in images */}
+              {BUILT_IN_BACKGROUNDS.map(bg => {
+                const url = resolveBuiltIn(bg.path)
+                const active = currentBuiltInId === bg.id
+
+                return (
+                  <button
+                    className={cn(
+                      'group relative overflow-hidden rounded-lg border-2 transition-all',
+                      active
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'border-transparent hover:border-(--ui-stroke-secondary)'
+                    )}
+                    key={bg.id}
+                    onClick={() => handleSelectBuiltIn(bg)}
+                    title={bg.label}
+                    type="button"
+                  >
+                    <img
+                      alt={bg.label}
+                      className="aspect-video h-full w-full object-cover"
+                      src={url}
+                    />
+                    {active && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+                        <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                          <Check className="size-3" />
+                        </span>
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="text-[0.55rem] font-medium text-white">{bg.label}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -202,7 +268,7 @@ function BackgroundImageSettings() {
         </div>
       }
       title="Background Image"
-      description="Upload a custom background image for the chat area"
+      description="Choose a built-in background or upload your own"
       wide
     />
   )
