@@ -2,14 +2,14 @@
  * Custom Desktop GUI Styles
  *
  * Background image is applied via --app-bg-image and --app-bg-opacity CSS custom
- * properties set on <main> by AppShell. Any child with .bg-background or .bg-chrome
- * inside a [data-bg-image] parent will show the background image.
+ * properties set on the outer <main> by AppShell. When data-bg-image is present,
+ * the sidebar and chat area backgrounds are replaced with the image.
  */
 
 /* ─── Background Image ──────────────────────────────────────────────────── */
-/* When <main> has data-bg-image, make the sidebar and chat area show the bg image */
-[data-bg-image] .bg-background,
-[data-bg-image] .bg-chrome {
+
+/* Chat area (SidebarInset renders a <main> with bg-background) */
+main[data-bg-image] [data-slot="sidebar-inset"].bg-background {
   background-image: var(--app-bg-image) !important;
   background-size: cover !important;
   background-position: center !important;
@@ -17,9 +17,8 @@
   position: relative;
 }
 
-/* Semi-transparent overlay to keep text readable over the image */
-[data-bg-image] .bg-background::before,
-[data-bg-image] .bg-chrome::before {
+/* Overlay for chat area to keep text readable */
+main[data-bg-image] [data-slot="sidebar-inset"].bg-background::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -28,22 +27,23 @@
   z-index: 0;
 }
 
-/* Ensure content sits above the overlay */
-[data-bg-image] .bg-background > *,
-[data-bg-image] .bg-chrome > * {
+/* Ensure chat content sits above overlay */
+main[data-bg-image] [data-slot="sidebar-inset"].bg-background > * {
   position: relative;
   z-index: 1;
 }
 
-/* Also target the sidebar specifically */
-[data-bg-image] .bg-sidebar {
+/* Sidebar — make transparent so bg shows through */
+main[data-bg-image] [data-sidebar="sidebar"] {
   background: transparent !important;
 }
 
-[data-bg-image] [data-sidebar="sidebar"] {
+/* Sidebar inner wrapper */
+main[data-bg-image] [data-sidebar="sidebar"] [data-sidebar="sidebar"] {
   background: transparent !important;
 }
 
-[data-bg-image] [data-sidebar="content"] {
+/* Sidebar wrapper */
+main[data-bg-image] [data-slot="sidebar-wrapper"] {
   background: transparent !important;
 }
