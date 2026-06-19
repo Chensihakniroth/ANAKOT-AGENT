@@ -77,12 +77,11 @@ export function AppShell({
     ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(bgImage) ? bgImage : `${import.meta.env.BASE_URL}${bgImage.replace(/^\/+/, '')}`)
     : null
 
-  if (hasBgImage) {
-    console.log('[BG] image:', bgImage, 'resolved:', resolvedBgUrl, 'opacity:', bgOpacity)
-  }
+  // Resolve the background image URL for CSS.
+  // Built-in paths (e.g. "ds-assets/filler-bg0.jpg") are relative to the app root.
+  // Uploaded images are file:// URLs. Data URLs are used as-is.
 
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
-  // Width Windows/Linux reserve for the OS-painted min/max/close overlay (zero
   // on macOS, where window controls sit on the left and are reported via
   // windowButtonPosition instead). The right tool cluster has to clear them.
   const nativeOverlayWidth = connection?.nativeOverlayWidth ?? 0
@@ -156,35 +155,39 @@ export function AppShell({
     >
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
-      {/* Background image layer — fixed behind everything, only visible where content is transparent */}
+      {/* Background image layer — rendered behind <main> content */}
       {resolvedBgUrl && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed inset-0 z-0"
-          style={{
-            backgroundImage: `url(${resolvedBgUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        />
-      )}
-      {resolvedBgUrl && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none fixed inset-0 z-0"
-          style={{
-            background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
-          }}
-        />
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              backgroundImage: `url(${resolvedBgUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
+            }}
+          />
+        </>
       )}
 
       <main
         className={cn(
           'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
-          !hasBgImage && 'bg-background',
-          hasBgImage && 'has-bg-image'
+          !hasBgImage && 'bg-background'
         )}
+        style={resolvedBgUrl ? {
+          '--app-bg-image': `url(${resolvedBgUrl})`,
+          '--app-bg-overlay': `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
+        } as CSSProperties : undefined}
+        data-bg-image={resolvedBgUrl ? 'true' : undefined}
       >
         <PaneShell className="min-h-0 flex-1">
           <div

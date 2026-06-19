@@ -1,60 +1,49 @@
 /**
  * Custom Desktop GUI Styles
  *
- * This file is loaded AFTER styles.css — every rule here overrides the default.
- * Keep all your visual customizations here so upstream updates to styles.css
- * never clobber your changes.
- *
- * Sections:
- *   1. CSS Variable Overrides
- *   2. Background Image
- *   3. Typography
- *   4. Layout & Spacing
- *   5. Chat & Messages
- *   6. Sidebar
- *   7. Composer
- *   8. Scrollbar
- *   9. Animations
- *   10. Component Overrides
+ * Background image is applied via --app-bg-image and --app-bg-opacity CSS custom
+ * properties set on <main> by AppShell. Any child with .bg-background or .bg-chrome
+ * inside a [data-bg-image] parent will show the background image.
  */
 
-/* ─── 1. CSS Variable Overrides ─────────────────────────────────────────── */
-:root {
-  /* Override any --dt-*, --ui-*, --theme-* variables here */
+/* ─── Background Image ──────────────────────────────────────────────────── */
+/* When <main> has data-bg-image, make the sidebar and chat area show the bg image */
+[data-bg-image] .bg-background,
+[data-bg-image] .bg-chrome {
+  background-image: var(--app-bg-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  position: relative;
 }
 
-:root.dark {
-  /* Dark-mode overrides */
+/* Semi-transparent overlay to keep text readable over the image */
+[data-bg-image] .bg-background::before,
+[data-bg-image] .bg-chrome::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--app-bg-overlay, color-mix(in srgb, var(--ui-chat-surface-background) 85%, transparent)) !important;
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* ─── 2. Background Image ────────────────────────────────────────────────── */
-/* When has-bg-image class is on <main>, make the sidebar and chat area transparent
-   so the fixed background image layer behind <main> shows through. */
-.has-bg-image .bg-sidebar,
-.has-bg-image [data-sidebar="sidebar"] {
+/* Ensure content sits above the overlay */
+[data-bg-image] .bg-background > *,
+[data-bg-image] .bg-chrome > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Also target the sidebar specifically */
+[data-bg-image] .bg-sidebar {
   background: transparent !important;
 }
 
-.has-bg-image .bg-background,
-.has-bg-image [data-sidebar="content"] {
+[data-bg-image] [data-sidebar="sidebar"] {
   background: transparent !important;
 }
 
-/* Also target the PaneShell inner content area */
-.has-bg-image .bg-chrome {
-  background: transparent !important;
-}
-
-/* Make the sidebar menu items slightly visible on transparent bg */
-.has-bg-image [data-sidebar="menu-button"] {
-  background: color-mix(in srgb, var(--sidebar) 50%, transparent) !important;
-}
-
-.has-bg-image [data-sidebar="menu-button"]:hover {
-  background: color-mix(in srgb, var(--sidebar-accent) 60%, transparent) !important;
-}
-
-/* Session rows and other sidebar children */
-.has-bg-image [data-sidebar="menu-item"] {
+[data-bg-image] [data-sidebar="content"] {
   background: transparent !important;
 }

@@ -74,7 +74,6 @@ function BackgroundImageSettings() {
     setError(null)
     try {
       const url = await saveUploadedImage(file)
-      console.log('[BG] uploaded, url length:', url.length, 'prefix:', url.substring(0, 50))
       setBackgroundImage(url)
       triggerHaptic('success')
     } catch (err) {
@@ -116,7 +115,6 @@ function BackgroundImageSettings() {
   const handleSelectBuiltIn = (bg: typeof BUILT_IN_BACKGROUNDS[number]) => {
     // Store the raw relative path (e.g. "ds-assets/filler-bg0.jpg")
     // AppShell will resolve it against BASE_URL at render time
-    console.log('[BG] select built-in:', bg.path)
     setBackgroundImage(bg.path)
     triggerHaptic('crisp')
   }
