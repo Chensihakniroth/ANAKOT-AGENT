@@ -15,10 +15,7 @@ import {
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
-import {
-  getBackgroundImage,
-  getBackgroundOpacity
-} from '@/app/settings/background-image-settings'
+import { $backgroundImage, $backgroundOpacity } from '@/store/background'
 import { cn } from '@/lib/utils'
 
 import { KeybindPanel } from './keybind-panel'
@@ -68,10 +65,11 @@ export function AppShell({
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
   const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
 
-  // Background image from settings
-  const bgImage = getBackgroundImage()
-  const bgOpacity = getBackgroundOpacity()
+  // Background image — reactive via nanostore
+  const bgImage = useStore($backgroundImage)
+  const bgOpacity = useStore($backgroundOpacity)
   const hasBgImage = Boolean(bgImage)
+
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   // Width Windows/Linux reserve for the OS-painted min/max/close overlay (zero
   // on macOS, where window controls sit on the left and are reported via

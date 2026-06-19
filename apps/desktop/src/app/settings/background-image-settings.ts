@@ -1,54 +1,30 @@
 /**
- * Background image settings — persisted to localStorage as base64 data URL.
- * Applied to the app shell via --app-bg-image CSS custom property.
+ * Background image settings — reactive nanostore-backed.
+ * For use in settings UI components.
+ *
+ * The actual persistence + reactivity lives in @/store/background.
+ * This module re-exports the store functions and adds file-reading helpers.
  */
 
-const STORAGE_KEY = 'anakot-desktop-bg-image-v1'
-const OPACITY_KEY = 'anakot-desktop-bg-opacity-v1'
-const DEFAULT_OPACITY = 0.15
+import {
+  getBackgroundImage,
+  getBackgroundOpacity,
+  setBackgroundImage,
+  setBackgroundOpacity
+} from '@/store/background'
+
+export {
+  getBackgroundImage,
+  getBackgroundOpacity,
+  setBackgroundImage,
+  setBackgroundOpacity
+}
 
 /** Built-in background images shipped with the app. */
 export const BUILT_IN_BACKGROUNDS: Array<{ id: string; label: string; path: string }> = [
   { id: 'filler-bg0', label: 'Filler', path: 'ds-assets/filler-bg0.jpg' },
   { id: 'callmemo-girl', label: 'Callmemo Girl', path: 'callmemo-girl.jpg' },
 ]
-
-export function getBackgroundImage(): string | null {
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) || null
-  } catch {
-    return null
-  }
-}
-
-export function setBackgroundImage(dataUrl: string | null) {
-  try {
-    if (dataUrl) {
-      window.localStorage.setItem(STORAGE_KEY, dataUrl)
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY)
-    }
-  } catch {
-    // storage full or unavailable
-  }
-}
-
-export function getBackgroundOpacity(): number {
-  try {
-    const v = window.localStorage.getItem(OPACITY_KEY)
-    return v ? parseFloat(v) : DEFAULT_OPACITY
-  } catch {
-    return DEFAULT_OPACITY
-  }
-}
-
-export function setBackgroundOpacity(value: number) {
-  try {
-    window.localStorage.setItem(OPACITY_KEY, String(value))
-  } catch {
-    // ignore
-  }
-}
 
 /**
  * Read a File as a data URL. Rejects if the file is not an image or exceeds maxBytes.
