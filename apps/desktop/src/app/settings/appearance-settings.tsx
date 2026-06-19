@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useRef, useState } from 'react'
+import { useRef, useMemo, useState } from 'react'
 
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -14,12 +14,12 @@ import { BUILTIN_THEMES } from '@/themes/presets'
 import { MODE_OPTIONS } from './constants'
 import {
   BUILT_IN_BACKGROUNDS,
-  getBackgroundImage,
-  getBackgroundOpacity,
   readFileAsDataUrl,
+  saveUploadedImage,
   setBackgroundImage,
   setBackgroundOpacity
 } from './background-image-settings'
+import { $backgroundImage, $backgroundOpacity } from '@/store/background'
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 
 function ThemePreview({ name }: { name: string }) {
@@ -64,25 +64,28 @@ function ThemePreview({ name }: { name: string }) {
 
 function BackgroundImageSettings() {
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const [image, setImage] = useState<string | null>(getBackgroundImage)
-  const [opacity, setOpacity] = useState(getBackgroundOpacity)
   const [error, setError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
   // Resolve a built-in path to a full URL (works in both dev and built app)
   const resolveBuiltIn = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
 
+  const builtInUrlSet = useMemo(
+    () => new Set(BUILT_IN_BACKGROUNDS.map(b => resolveBuiltIn(b.path))),
+    []
+  )
+
   const isBuiltIn = (src: string | null) => {
     if (!src) return false
-    return BUILT_IN_BACKGROUNDS.some(b => resolveBuiltIn(b.path) === src || b.path === src)
+    if (builtInUrlSet.has(src)) return true
+    return BUILT_IN_BACKGROUNDS.some(b => b.path === src)
   }
 
   const handleFile = async (file: File) => {
     setError(null)
     try {
-      const dataUrl = await readFileAsDataUrl(file)
-      setBackgroundImage(dataUrl)
-      setImage(dataUrl)
+      const url = await saveUploadedImage(file)
+      setBackgroundImage(url)
       triggerHaptic('success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load image.')
@@ -112,23 +115,23 @@ function BackgroundImageSettings() {
 
   const handleClear = () => {
     setBackgroundImage(null)
-    setImage(null)
     setError(null)
     triggerHaptic('selection')
   }
 
   const handleOpacityChange = (value: number) => {
-    setOpacity(value)
     setBackgroundOpacity(value)
   }
 
   const handleSelectBuiltIn = (bg: typeof BUILT_IN_BACKGROUNDS[number]) => {
     const url = resolveBuiltIn(bg.path)
     setBackgroundImage(url)
-    setImage(url)
     triggerHaptic('crisp')
   }
 
+  // Use nanostore for reactive state
+  const image = useStore($backgroundImage)
+  const opacity = useStore($backgroundOpacity)
   const currentIsBuiltIn = isBuiltIn(image)
   const currentBuiltInId = currentIsBuiltIn
     ? BUILT_IN_BACKGROUNDS.find(b => resolveBuiltIn(b.path) === image || b.path === image)?.id ?? null

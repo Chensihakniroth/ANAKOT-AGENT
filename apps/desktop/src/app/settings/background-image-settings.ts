@@ -9,6 +9,7 @@
 import {
   getBackgroundImage,
   getBackgroundOpacity,
+  saveUploadedImage,
   setBackgroundImage,
   setBackgroundOpacity
 } from '@/store/background'
@@ -16,6 +17,7 @@ import {
 export {
   getBackgroundImage,
   getBackgroundOpacity,
+  saveUploadedImage,
   setBackgroundImage,
   setBackgroundOpacity
 }
