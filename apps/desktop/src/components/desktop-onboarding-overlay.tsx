@@ -167,13 +167,11 @@ function useApiKeyCatalog(): ApiKeyOption[] {
 }
 
 const PROVIDER_DISPLAY: Record<string, { order: number; title: string }> = {
-  nous: { order: 0, title: 'callmemo Portal' },
+  local: { order: 0, title: 'Local AI Gateway' },
   'openai-codex': { order: 1, title: 'OpenAI OAuth (ChatGPT)' },
   'minimax-oauth': { order: 2, title: 'MiniMax' },
   'qwen-oauth': { order: 3, title: 'Qwen Code' },
   'xai-oauth': { order: 4, title: 'xAI Grok' },
-  // Both Anthropic entries sit at the bottom: the API-key path first, then
-  // the subscription OAuth path (only works with extra usage credits).
   anthropic: { order: 5, title: 'Anthropic API Key' },
   'claude-code': { order: 6, title: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription' }
 }
@@ -407,7 +405,6 @@ function Header() {
   )
 }
 
-export const FEATURED_ID = 'nous'
 const SHOW_ALL_KEY = 'anakot-onboarding-show-all-v1'
 
 const readShowAll = () => {
@@ -459,20 +456,17 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   }
 
   const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-  const featured = ordered.find(p => p.id === FEATURED_ID) ?? null
-  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
-  // Collapse the secondary providers behind a disclosure only when callmemo
-  // Portal is present to anchor the choice — otherwise show the full list.
-  const collapsible = Boolean(featured) && rest.length > 0
+  // No featured provider — show all providers in a single flat list,
+  // collapsed behind a disclosure when there are more than a few.
+  const collapsible = ordered.length > 5
   const showRest = !collapsible || showAll
 
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
         {showRest ? (
           <>
-            {rest.map(p => (
+            {ordered.map(p => (
               <ProviderRow key={p.id} onSelect={select} provider={p} />
             ))}
             <KeyProviderRow onClick={() => setOnboardingMode('apikey')} />
@@ -492,10 +486,11 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
         </Button>
       ) : null}
       <div className="flex items-center justify-between gap-3 pt-1">
-        {/* First run only: let the user defer the choice and land in the app.
-            In manual mode the overlay already has a close affordance, so the
-            "choose later" escape would be redundant — hide it. */}
-        {manual ? <span /> : <ChooseLaterLink />}
+        {manual ? null : (
+          <div className="flex justify-center border-t border-(--ui-stroke-tertiary) pt-3">
+            <ChooseLaterLink />
+          </div>
+        )}
         <Button
           className="-mr-2 font-medium"
           onClick={() => setOnboardingMode('apikey')}
@@ -509,7 +504,6 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
     </div>
   )
 }
-
 // "I'll choose a provider later" — dismisses the first-run picker and persists
 // the skip so it never re-nags. The user connects a provider any time from
 // Settings → Providers. Rendered only on the unconfigured first-run flow.
@@ -526,45 +520,6 @@ function ChooseLaterLink() {
     >
       {t.onboarding.chooseLater}
     </Button>
-  )
-}
-
-export function FeaturedProviderRow({
-  onSelect,
-  provider
-}: {
-  onSelect: (provider: OAuthProvider) => void
-  provider: OAuthProvider
-}) {
-  const { t } = useI18n()
-  const loggedIn = provider.status?.logged_in
-
-  return (
-    <button
-      className="group relative flex w-full items-center justify-between gap-4 rounded-[8px] bg-primary/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-primary/10"
-      onClick={() => onSelect(provider)}
-      type="button"
-    >
-      <span aria-hidden className="arc-border arc-reverse arc-nous" />
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <img alt="" className="size-5 shrink-0 rounded" src={assetPath('apple-touch-icon.png')} />
-          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">
-            {providerTitle(provider)}
-          </span>
-          {loggedIn ? (
-            <ConnectedTag />
-          ) : (
-            <span className="inline-flex items-center gap-1.5 bg-primary px-2 py-0.5 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-primary-foreground">
-              <span aria-hidden="true" className="dither inline-block size-2 shrink-0" />
-              {t.onboarding.recommended}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.featuredPitch}</p>
-      </div>
-      <ChevronRight className="size-4 shrink-0 text-primary transition group-hover:translate-x-0.5" />
-    </button>
   )
 }
 
