@@ -32,19 +32,29 @@
    so the fixed background image layer behind <main> shows through. */
 .has-bg-image .bg-sidebar,
 .has-bg-image [data-sidebar="sidebar"] {
-  background-color: transparent !important;
+  background: transparent !important;
 }
 
 .has-bg-image .bg-background,
 .has-bg-image [data-sidebar="content"] {
-  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Also target the PaneShell inner content area */
+.has-bg-image .bg-chrome {
+  background: transparent !important;
 }
 
 /* Make the sidebar menu items slightly visible on transparent bg */
 .has-bg-image [data-sidebar="menu-button"] {
-  background-color: color-mix(in srgb, var(--sidebar) 50%, transparent);
+  background: color-mix(in srgb, var(--sidebar) 50%, transparent) !important;
 }
 
 .has-bg-image [data-sidebar="menu-button"]:hover {
-  background-color: color-mix(in srgb, var(--sidebar-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--sidebar-accent) 60%, transparent) !important;
+}
+
+/* Session rows and other sidebar children */
+.has-bg-image [data-sidebar="menu-item"] {
+  background: transparent !important;
 }
