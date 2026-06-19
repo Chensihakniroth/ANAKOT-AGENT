@@ -67,26 +67,11 @@ export function getBackgroundOpacity(): number {
 
 /**
  * Save an uploaded image file to disk via the desktop bridge.
- * Returns a file:// URL on success, or falls back to a data URL.
+ * Returns a data URL for use in CSS.
  */
 export async function saveUploadedImage(file: File): Promise<string> {
-  if (window.anakotDesktop?.saveImageBuffer) {
-    try {
-      const buffer = await file.arrayBuffer()
-      const ext = file.name.split('.').pop() || 'png'
-      const savedPath = await window.anakotDesktop.saveImageBuffer(
-        new Uint8Array(buffer),
-        ext
-      )
-      if (savedPath) {
-        return `file://${savedPath}`
-      }
-    } catch {
-      // Fall through to data URL fallback
-    }
-  }
-
-  // Fallback: store as base64 data URL
+  // Always convert to data URL for reliable CSS rendering.
+  // file:// URLs are blocked by Electron's CSP in the renderer.
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)

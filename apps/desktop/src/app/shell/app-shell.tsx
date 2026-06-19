@@ -152,36 +152,36 @@ export function AppShell({
     >
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
+      {/* Background image layer — fixed behind everything, only visible where content is transparent */}
+      {resolvedBgUrl && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-0"
+          style={{
+            backgroundImage: `url(${resolvedBgUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+      )}
+      {resolvedBgUrl && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-0"
+          style={{
+            background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
+          }}
+        />
+      )}
+
       <main
         className={cn(
           'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
-          !hasBgImage && 'bg-background'
+          !hasBgImage && 'bg-background',
+          hasBgImage && 'has-bg-image'
         )}
       >
-        {/* Background image layer — sits behind all content within <main> */}
-        {resolvedBgUrl && (
-          <>
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{
-                backgroundImage: `url(${resolvedBgUrl})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundRepeat: 'no-repeat',
-                zIndex: 0,
-              }}
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
-                zIndex: 1,
-              }}
-            />
-          </>
-        )}
         <PaneShell className="min-h-0 flex-1">
           <div
             aria-hidden="true"
