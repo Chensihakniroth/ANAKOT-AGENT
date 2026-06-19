@@ -77,6 +77,10 @@ export function AppShell({
     ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(bgImage) ? bgImage : `${import.meta.env.BASE_URL}${bgImage.replace(/^\/+/, '')}`)
     : null
 
+  if (hasBgImage) {
+    console.log('[BG] image:', bgImage, 'resolved:', resolvedBgUrl, 'opacity:', bgOpacity)
+  }
+
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   // Width Windows/Linux reserve for the OS-painted min/max/close overlay (zero
   // on macOS, where window controls sit on the left and are reported via
