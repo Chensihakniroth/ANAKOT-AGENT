@@ -15,6 +15,11 @@ import {
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
+import {
+  getBackgroundImage,
+  getBackgroundOpacity
+} from '@/app/settings/background-image-settings'
+import { cn } from '@/lib/utils'
 
 import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
@@ -62,6 +67,11 @@ export function AppShell({
   const connection = useStore($connection)
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
   const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
+
+  // Background image from settings
+  const bgImage = getBackgroundImage()
+  const bgOpacity = getBackgroundOpacity()
+  const hasBgImage = Boolean(bgImage)
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   // Width Windows/Linux reserve for the OS-painted min/max/close overlay (zero
   // on macOS, where window controls sit on the left and are reported via
@@ -137,7 +147,16 @@ export function AppShell({
     >
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
-      <main className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none">
+      <main
+        className={cn(
+          'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
+          hasBgImage && 'app-bg-image'
+        )}
+        style={hasBgImage ? {
+          '--app-bg-image': `url(${bgImage})`,
+          '--app-bg-overlay': `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`
+        } as CSSProperties : undefined}
+      >
         <PaneShell className="min-h-0 flex-1">
           <div
             aria-hidden="true"

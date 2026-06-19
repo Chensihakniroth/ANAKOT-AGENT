@@ -1,16 +1,24 @@
 import { useStore } from '@nanostores/react'
+import { useRef, useState } from 'react'
 
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Check, Palette } from '@/lib/icons'
+import { Check, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
 import { useTheme } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
 
 import { MODE_OPTIONS } from './constants'
+import {
+  getBackgroundImage,
+  getBackgroundOpacity,
+  readFileAsDataUrl,
+  setBackgroundImage,
+  setBackgroundOpacity
+} from './background-image-settings'
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 
 function ThemePreview({ name }: { name: string }) {
@@ -50,6 +58,153 @@ function ThemePreview({ name }: { name: string }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function BackgroundImageSettings() {
+  const { t } = useI18n()
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [image, setImage] = useState<string | null>(getBackgroundImage)
+  const [opacity, setOpacity] = useState(getBackgroundOpacity)
+  const [error, setError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const handleFile = async (file: File) => {
+    setError(null)
+    try {
+      const dataUrl = await readFileAsDataUrl(file)
+      setBackgroundImage(dataUrl)
+      setImage(dataUrl)
+      triggerHaptic('success')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load image.')
+      triggerHaptic('warning')
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) void handleFile(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) void handleFile(file)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDragLeave = () => setDragOver(false)
+
+  const handleClear = () => {
+    setBackgroundImage(null)
+    setImage(null)
+    setError(null)
+    triggerHaptic('selection')
+  }
+
+  const handleOpacityChange = (value: number) => {
+    setOpacity(value)
+    setBackgroundOpacity(value)
+  }
+
+  return (
+    <ListRow
+      below={
+        <div className="mt-3 grid gap-3">
+          {/* Drop zone / preview */}
+          {image ? (
+            <div className="relative overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
+              <img
+                alt="Background preview"
+                className="h-40 w-full object-cover"
+                src={image}
+              />
+              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+                <button
+                  className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-white/30"
+                  onClick={() => inputRef.current?.click()}
+                  type="button"
+                >
+                  <Plus className="size-3.5" />
+                  Replace
+                </button>
+                <button
+                  className="flex items-center gap-1.5 rounded-lg bg-red-500/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-red-500/80"
+                  onClick={handleClear}
+                  type="button"
+                >
+                  <Trash2 className="size-3.5" />
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className={cn(
+                'flex h-32 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors',
+                dragOver
+                  ? 'border-primary bg-primary/5'
+                  : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
+              )}
+              onClick={() => inputRef.current?.click()}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              type="button"
+            >
+              <Plus className={cn('size-6', dragOver ? 'text-primary' : 'text-muted-foreground')} />
+              <span className="text-xs text-muted-foreground">
+                {dragOver ? 'Drop image here' : 'Click to upload or drag & drop'}
+              </span>
+              <span className="text-[0.65rem] text-muted-foreground/60">PNG, JPG, WEBP — max 10 MB</span>
+            </button>
+          )}
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          {/* Opacity slider */}
+          {image && (
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Opacity</span>
+                <span className="text-xs font-mono text-muted-foreground">{Math.round(opacity * 100)}%</span>
+              </div>
+              <input
+                className="w-full accent-primary"
+                max={1}
+                min={0}
+                onChange={e => handleOpacityChange(parseFloat(e.target.value))}
+                step={0.01}
+                type="range"
+                value={opacity}
+              />
+              <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
+                <span>Subtle</span>
+                <span>Full</span>
+              </div>
+            </div>
+          )}
+
+          <input
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={handleInputChange}
+            ref={inputRef}
+            type="file"
+          />
+        </div>
+      }
+      title="Background Image"
+      description="Upload a custom background image for the chat area"
+      wide
+    />
   )
 }
 
@@ -140,6 +295,8 @@ export function AppearanceSettings() {
             title={a.themeTitle}
             wide
           />
+
+          <BackgroundImageSettings />
 
           <ListRow
             action={
