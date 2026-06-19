@@ -1,49 +1,9 @@
 /**
  * Custom Desktop GUI Styles
  *
- * Background image is applied via --app-bg-image and --app-bg-opacity CSS custom
- * properties set on the outer <main> by AppShell. When data-bg-image is present,
- * the sidebar and chat area backgrounds are replaced with the image.
+ * Background image is handled by the Backdrop component which reads
+ * from @/store/background. No CSS overrides needed here.
  */
 
 /* ─── Background Image ──────────────────────────────────────────────────── */
-
-/* Chat area (SidebarInset renders a <main> with bg-background) */
-main[data-bg-image] [data-slot="sidebar-inset"].bg-background {
-  background-image: var(--app-bg-image) !important;
-  background-size: cover !important;
-  background-position: center !important;
-  background-repeat: no-repeat !important;
-  position: relative;
-}
-
-/* Overlay for chat area to keep text readable */
-main[data-bg-image] [data-slot="sidebar-inset"].bg-background::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--app-bg-overlay, color-mix(in srgb, var(--ui-chat-surface-background) 85%, transparent)) !important;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Ensure chat content sits above overlay */
-main[data-bg-image] [data-slot="sidebar-inset"].bg-background > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Sidebar — make transparent so bg shows through */
-main[data-bg-image] [data-sidebar="sidebar"] {
-  background: transparent !important;
-}
-
-/* Sidebar inner wrapper */
-main[data-bg-image] [data-sidebar="sidebar"] [data-sidebar="sidebar"] {
-  background: transparent !important;
-}
-
-/* Sidebar wrapper */
-main[data-bg-image] [data-slot="sidebar-wrapper"] {
-  background: transparent !important;
-}
+/* Intentionally empty — see Backdrop.tsx and @/store/background.ts */

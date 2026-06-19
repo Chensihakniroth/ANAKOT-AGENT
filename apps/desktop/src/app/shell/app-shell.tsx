@@ -15,8 +15,6 @@ import {
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
-import { $backgroundImage, $backgroundOpacity } from '@/store/background'
-import { cn } from '@/lib/utils'
 
 import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
@@ -64,22 +62,6 @@ export function AppShell({
   const connection = useStore($connection)
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
   const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
-
-  // Background image — reactive via nanostore
-  const bgImage = useStore($backgroundImage)
-  const bgOpacity = useStore($backgroundOpacity)
-  const hasBgImage = Boolean(bgImage)
-
-  // Resolve the background image URL for CSS.
-  // Built-in paths (e.g. "ds-assets/filler-bg0.jpg") are relative to the app root.
-  // Uploaded images are file:// URLs. Data URLs are used as-is.
-  const resolvedBgUrl = bgImage
-    ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(bgImage) ? bgImage : `${import.meta.env.BASE_URL}${bgImage.replace(/^\/+/, '')}`)
-    : null
-
-  // Resolve the background image URL for CSS.
-  // Built-in paths (e.g. "ds-assets/filler-bg0.jpg") are relative to the app root.
-  // Uploaded images are file:// URLs. Data URLs are used as-is.
 
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   // on macOS, where window controls sit on the left and are reported via
@@ -155,39 +137,8 @@ export function AppShell({
     >
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
-      {/* Background image layer — rendered behind <main> content */}
-      {resolvedBgUrl && (
-        <>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0"
-            style={{
-              backgroundImage: `url(${resolvedBgUrl})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-            }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0"
-            style={{
-              background: `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
-            }}
-          />
-        </>
-      )}
-
       <main
-        className={cn(
-          'relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden transition-none',
-          !hasBgImage && 'bg-background'
-        )}
-        style={resolvedBgUrl ? {
-          '--app-bg-image': `url(${resolvedBgUrl})`,
-          '--app-bg-overlay': `color-mix(in srgb, var(--ui-chat-surface-background) ${Math.round((1 - bgOpacity) * 100)}%, transparent)`,
-        } as CSSProperties : undefined}
-        data-bg-image={resolvedBgUrl ? 'true' : undefined}
+        className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none"
       >
         <PaneShell className="min-h-0 flex-1">
           <div
