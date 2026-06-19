@@ -1,0 +1,65 @@
+/**
+ * Custom Desktop GUI Styles
+ * 
+ * This file is loaded AFTER styles.css — every rule here overrides the default.
+ * Keep all your visual customizations here so upstream updates to styles.css
+ * never clobber your changes.
+ *
+ * Sections:
+ *   1. CSS Variable Overrides
+ *   2. Typography
+ *   3. Layout & Spacing
+ *   4. Chat & Messages
+ *   5. Sidebar
+ *   6. Composer
+ *   7. Scrollbar
+ *   8. Animations
+ *   9. Component Overrides
+ */
+
+/* ─── 1. CSS Variable Overrides ─────────────────────────────────────────── */
+:root {
+  /* Override any --dt-*, --ui-*, --theme-* variables here */
+  /* Example: */
+  /* --dt-background: #0a0a0f; */
+  /* --dt-foreground: #e8e8f0; */
+  /* --dt-border: #1e1e2e; */
+  /* --dt-ring: #6366f1; */
+  /* --dt-midground: #818cf8; */
+  /* --radius: 0.5rem; */
+  /* --radius-scalar: 0.5; */
+}
+
+:root.dark {
+  /* Dark-mode overrides */
+}
+
+/* ─── 2. Typography ─────────────────────────────────────────────────────── */
+/* Override font families, sizes, line-heights here */
+/* Example: */
+/* body { font-family: 'Inter', sans-serif; } */
+
+/* ─── 3. Layout & Spacing ───────────────────────────────────────────────── */
+/* Override padding, margins, gaps here */
+
+/* ─── 4. Chat & Messages ────────────────────────────────────────────────── */
+/* Override message bubbles, thread spacing, code blocks here */
+
+/* ─── 5. Sidebar ────────────────────────────────────────────────────────── */
+/* Override sidebar width, colors, session row styling here */
+
+/* ─── 6. Composer ───────────────────────────────────────────────────────── */
+/* Override input area, send button, attachments here */
+
+/* ─── 7. Scrollbar ──────────────────────────────────────────────────────── */
+/* Custom scrollbar styling */
+/* Example: */
+/* ::-webkit-scrollbar { width: 6px; } */
+/* ::-webkit-scrollbar-track { background: transparent; } */
+/* ::-webkit-scrollbar-thumb { background: var(--dt-border); border-radius: 3px; } */
+
+/* ─── 8. Animations ─────────────────────────────────────────────────────── */
+/* Custom transitions, keyframes here */
+
+/* ─── 9. Component Overrides ────────────────────────────────────────────── */
+/* Target specific components by class or data attribute here */
