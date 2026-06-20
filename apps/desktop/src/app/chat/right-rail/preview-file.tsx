@@ -333,7 +333,7 @@ function startLineDrag(event: ReactDragEvent<HTMLElement>, filePath: string, { e
   event.dataTransfer.effectAllowed = 'copy'
 }
 
-function SourceView({ filePath, language, text, isEditing, onContentChange }: { filePath: string; language: string; text: string; isEditing: boolean; onContentChange: (content: string) => void }) {
+function SourceView({ filePath, language, text, isEditing, onContentChange, onSave }: { filePath: string; language: string; text: string; isEditing: boolean; onContentChange: (content: string) => void; onSave?: () => void }) {
   const { t } = useI18n()
   const lineCount = useMemo(() => Math.max(1, text.split('\n').length), [text])
   const [selection, setSelection] = useState<LineSelection | null>(null)
@@ -383,6 +383,13 @@ function SourceView({ filePath, language, text, isEditing, onContentChange }: { 
         onContentChange(newContent)
         setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = start + 2 }, 0)
       }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      onSave?.()
+    }
+    if (e.key === 'Escape') {
+      // Exit edit mode - handled by parent
     }
   }
 
@@ -690,6 +697,7 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
             text={isEditing ? editContent : state.text}
             isEditing={isEditing}
             onContentChange={setEditContent}
+            onSave={handleSave}
           />
         )}
       </div>
