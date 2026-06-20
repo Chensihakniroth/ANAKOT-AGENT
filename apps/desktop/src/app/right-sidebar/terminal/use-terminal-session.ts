@@ -93,6 +93,7 @@ function stripInitialPromptGap(data: string) {
 interface UseTerminalSessionOptions {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
+  shell?: 'powershell' | 'git-bash' | 'cmd'
 }
 
 function transferHasDropCandidates(t: DataTransfer): boolean {
@@ -183,7 +184,7 @@ function quotePathForShell(path: string, shellName: string): string {
   return `'${path.replace(/'/g, "'\\''")}'`
 }
 
-export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSessionOptions) {
+export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerminalSessionOptions) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
   const sessionIdRef = useRef<string | null>(null)

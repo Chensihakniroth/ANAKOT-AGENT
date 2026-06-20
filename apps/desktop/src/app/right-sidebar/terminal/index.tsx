@@ -17,13 +17,15 @@ import { useTerminalSession } from './use-terminal-session'
 interface TerminalTabProps {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
+  shell?: 'powershell' | 'git-bash' | 'cmd'
 }
 
-export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
+export function TerminalTab({ cwd, onAddSelectionToChat, shell }: TerminalTabProps) {
   const { t } = useI18n()
   const { addSelectionToChat, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
     cwd,
-    onAddSelectionToChat
+    onAddSelectionToChat,
+    shell
   })
 
   const takeover = useStore($terminalTakeover)

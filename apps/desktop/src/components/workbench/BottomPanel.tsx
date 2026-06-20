@@ -112,7 +112,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {/* Panel content */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {activeTab === 'terminal' && (
-          <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} />
+          <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         )}
         {activeTab === 'output' && (
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
