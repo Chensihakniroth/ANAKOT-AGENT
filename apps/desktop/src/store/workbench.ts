@@ -48,7 +48,6 @@ export function setBottomPanelTab(tab: BottomPanelTabId) {
 }
 
 export function openEditorTab(tab: EditorTab) {
-  console.log('[workbench] openEditorTab:', tab)
   const tabs = $editorTabs.get()
   const existing = tabs.find(t => t.id === tab.id)
   if (existing) {
@@ -57,7 +56,6 @@ export function openEditorTab(tab: EditorTab) {
   }
   $editorTabs.set([...tabs, tab])
   $activeEditorTabId.set(tab.id)
-  console.log('[workbench] editorTabs now:', $editorTabs.get())
 }
 
 export function closeEditorTab(id: string) {

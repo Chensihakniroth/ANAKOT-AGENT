@@ -182,6 +182,7 @@ function ProjectTreeRow({
 
         if (!isFolder && !isPlaceholder) {
           onPreviewFile?.(node.data.id)
+          onAttachFile?.(node.data.id)
         }
       }}
       onDragStart={event => {
