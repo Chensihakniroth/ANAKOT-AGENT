@@ -417,6 +417,13 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     void terminalApi
       .start({ cols: term.cols, cwd, rows: term.rows, shell })
       .then(session => {
+        // Re-fit after a short delay to ensure the container has settled
+        setTimeout(() => {
+          if (!disposed) {
+            fitAndResize()
+          }
+        }, 100)
+
         if (disposed) {
           void terminalApi.dispose(session.id)
 
@@ -492,7 +499,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       selectionRef.current = ''
       selectionLabelRef.current = ''
     }
-  }, [addSelectionToChat, cwd])
+  }, [addSelectionToChat, cwd, shell])
 
   return {
     addSelectionToChat,

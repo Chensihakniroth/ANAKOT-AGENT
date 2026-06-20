@@ -41,7 +41,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   }
 
   return (
-    <div className="flex h-48 shrink-0 flex-col border-t border-(--ui-stroke-secondary)">
+    <div className="flex min-h-[120px] shrink-0 flex-col border-t border-(--ui-stroke-secondary)">
       {/* Tab bar */}
       <div className="flex h-7 shrink-0 items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
         <div className="flex items-center gap-0.5">
