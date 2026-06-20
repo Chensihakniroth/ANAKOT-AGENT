@@ -54,6 +54,7 @@ class TraceState:
 
 _STATE_LOCK = threading.Lock()
 _TRACE_STATE: Dict[str, TraceState] = {}
+_TRACE_STATE_MAX = 200  # bound _TRACE_STATE growth from interrupted/empty-turn leaks
 _LANGFUSE_CLIENT = None
 _READ_FILE_LINE_RE = re.compile(r"^\s*(\d+)\|(.*)$")
 _READ_FILE_HEAD_LINES = 25
@@ -711,6 +712,15 @@ def on_pre_llm_call(*, task_id: str = "", session_id: str = "", platform: str = 
     with _STATE_LOCK:
         state = _TRACE_STATE.get(task_key)
         if state is None:
+            # Evict oldest entries if _TRACE_STATE has grown beyond the cap
+            # (e.g. from interrupted turns that never call _finish_trace).
+            if len(_TRACE_STATE) >= _TRACE_STATE_MAX:
+                oldest_keys = sorted(
+                    _TRACE_STATE.keys(),
+                    key=lambda k: _TRACE_STATE[k].created_at,
+                )[:50]
+                for old_key in oldest_keys:
+                    _TRACE_STATE.pop(old_key, None)
             state = _start_root_trace(
                 task_key,
                 task_id=task_id,

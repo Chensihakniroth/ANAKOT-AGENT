@@ -635,7 +635,25 @@ def _rmtree_writable(path: Path) -> None:
     (``r-xr-xr-x``).  Removing a child requires write permission on its
     parent directory, so the retry handler makes the failing path **and its
     parent** writable before re-attempting.  See #34860, #34972.
+
+    Guard: refuses to rmtree anything that is not a strict child of
+    SKILLS_DIR.  This prevents a path validation bug from cascading into
+    a full wipe of ~/.anakot/ (including .env, MEMORY.md, skills, etc.).
+    No call site ever passes the SKILLS_DIR root itself — every site passes
+    a skill subdir or its .bak sibling — so this guard is a no-op for
+    current call sites while closing the footgun.
     """
+    # Guard: must be a strict child of SKILLS_DIR, not the root itself.
+    try:
+        resolved = path.resolve()
+        if resolved == SKILLS_DIR.resolve() or not str(resolved).startswith(str(SKILLS_DIR.resolve())):
+            raise ValueError(
+                f"_rmtree_writable: refused to rmtree {path!r} "
+                f"(outside or equal to SKILLS_DIR {SKILLS_DIR!r})"
+            )
+    except (OSError, ValueError):
+        raise
+
     import stat
 
     def _on_error(func, fpath, exc_info):

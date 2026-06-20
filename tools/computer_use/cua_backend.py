@@ -235,10 +235,11 @@ class _CuaDriverSession:
         if not cua_driver_binary_available():
             raise RuntimeError(cua_driver_install_hint())
 
+        from tools.environments.local import _sanitize_subprocess_env
         params = StdioServerParameters(
             command=_CUA_DRIVER_CMD,
             args=_CUA_DRIVER_ARGS,
-            env={**os.environ},
+            env=_sanitize_subprocess_env(os.environ),
         )
         stack = AsyncExitStack()
         read, write = await stack.enter_async_context(stdio_client(params))
