@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
 import { TerminalTab } from '@/app/right-sidebar/terminal'
 import { $currentCwd } from '@/store/session'
-import { useState } from 'react'
+import { useState, useCallback, useRef, type ReactNode } from 'react'
 
 type ShellType = 'powershell' | 'git-bash' | 'cmd'
 
@@ -24,6 +24,32 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const cwd = useStore($currentCwd)
   const [selectedShell, setSelectedShell] = useState<ShellType>('powershell')
   const [showShellPicker, setShowShellPicker] = useState(false)
+  const [panelHeight, setPanelHeight] = useState(200)
+  const resizeRef = useRef<HTMLDivElement>(null)
+  const isDraggingRef = useRef(false)
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDraggingRef.current = true
+    const startY = e.clientY
+    const startHeight = panelHeight
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      const delta = startY - e.clientY
+      const newHeight = Math.max(120, Math.min(600, startHeight + delta))
+      setPanelHeight(newHeight)
+    }
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [panelHeight])
 
   if (!isOpen) {
     return (
@@ -41,7 +67,17 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   }
 
   return (
-    <div className="flex min-h-[120px] shrink-0 flex-col border-t border-(--ui-stroke-secondary)">
+    <div
+      className="shrink-0 flex-col border-t border-(--ui-stroke-secondary)"
+      style={{ height: panelHeight }}
+    >
+      {/* Resize handle */}
+      <div
+        ref={resizeRef}
+        className="h-1 shrink-0 cursor-ns-resize bg-transparent hover:bg-(--ui-stroke-secondary) active:bg-primary/30 transition-colors"
+        onMouseDown={handleMouseDown}
+      />
+
       {/* Tab bar */}
       <div className="flex h-7 shrink-0 items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
         <div className="flex items-center gap-0.5">
@@ -63,7 +99,6 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
           ))}
         </div>
         <div className="flex items-center gap-1">
-          {/* Shell selector - only show when terminal tab is active */}
           {activeTab === 'terminal' && (
             <div className="relative">
               <button
@@ -129,8 +164,8 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   )
 }
 
-const BOTTOM_TABS = [
-  { id: 'terminal' as const, icon: 'terminal', label: 'Terminal' },
-  { id: 'output' as const, icon: 'output', label: 'Output' },
-  { id: 'problems' as const, icon: 'warning', label: 'Problems' },
+const BOTTOM_TABS: { id: BottomPanelTabId; icon: string; label: string }[] = [
+  { id: 'terminal', icon: 'terminal', label: 'Terminal' },
+  { id: 'output', icon: 'output', label: 'Output' },
+  { id: 'problems', icon: 'warning', label: 'Problems' },
 ]

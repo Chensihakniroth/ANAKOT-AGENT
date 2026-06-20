@@ -279,6 +279,22 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     term.unicode.activeVersion = '11'
     term.open(host)
 
+    // Initial fit after a short delay to ensure DOM has settled
+    const initialFitTimer = setTimeout(() => {
+      if (!disposed && host.isConnected && host.clientWidth > 0 && host.clientHeight > 0) {
+        try { fit.fit() } catch { /* ignore */ }
+      }
+    }, 100)
+    cleanup.push(() => clearTimeout(initialFitTimer))
+
+    // Also fit on next animation frame
+    const rafId = requestAnimationFrame(() => {
+      if (!disposed && host.isConnected && host.clientWidth > 0 && host.clientHeight > 0) {
+        try { fit.fit() } catch { /* ignore */ }
+      }
+    })
+    cleanup.push(() => cancelAnimationFrame(rafId))
+
     // WebGL renderer
     try {
       const webgl = new WebglAddon()
