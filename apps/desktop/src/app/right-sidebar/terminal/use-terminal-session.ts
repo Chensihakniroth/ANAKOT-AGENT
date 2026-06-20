@@ -415,7 +415,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     fitAndResize()
 
     void terminalApi
-      .start({ cols: term.cols, cwd, rows: term.rows })
+      .start({ cols: term.cols, cwd, rows: term.rows, shell })
       .then(session => {
         if (disposed) {
           void terminalApi.dispose(session.id)
