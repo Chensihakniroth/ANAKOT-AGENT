@@ -153,7 +153,6 @@ export function DesktopController() {
   const [activeEditorTabId, setActiveEditorTabId] = useState<string | null>(null)
 
   const openEditorTab = useCallback((tab: EditorTab) => {
-    console.log('[DesktopController] openEditorTab:', tab)
     setEditorTabs(prev => {
       const existing = prev.find(t => t.id === tab.id)
       if (existing) {
@@ -164,6 +163,19 @@ export function DesktopController() {
       return [...prev, tab]
     })
   }, [])
+
+  // Listen for open-file-in-editor events from the preview pane
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { path } = (e as CustomEvent).detail
+      if (path) {
+        const label = path.split(/[\\/]+/).filter(Boolean).pop() || path
+        openEditorTab({ id: path, path, label, dirty: false })
+      }
+    }
+    window.addEventListener('open-file-in-editor', handler)
+    return () => window.removeEventListener('open-file-in-editor', handler)
+  }, [openEditorTab])
 
   const closeEditorTab = useCallback((id: string) => {
     setEditorTabs(prev => {
@@ -649,6 +661,10 @@ export function DesktopController() {
 
   const explorerPanel = (
     <Explorer onOpenFile={(path: string) => {
+      // Don't open .md files in the editor — they're handled by the preview pane
+      if (path.endsWith('.md') || path.endsWith('.markdown')) {
+        return
+      }
       const label = path.split(/[\\/]+/).filter(Boolean).pop() || path
       openEditorTab({ id: path, path, label, dirty: false })
     }} />

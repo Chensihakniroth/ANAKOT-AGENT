@@ -11,6 +11,7 @@ import ShikiHighlighter from 'react-shiki'
 import { Streamdown } from 'streamdown'
 
 import { ANAKOT_PATHS_MIME } from '@/app/chat/hooks/use-composer-actions'
+import { Codicon } from '@/components/ui/codicon'
 import { PageLoader } from '@/components/page-loader'
 import { translateNow, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -411,7 +412,7 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
   )
 }
 
-export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; target: PreviewTarget }) {
+export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reloadKey: number; target: PreviewTarget; onOpenInEditor?: (path: string) => void }) {
   const { t } = useI18n()
   const [state, setState] = useState<LocalPreviewState>({ loading: true })
   const [forcePreview, setForcePreview] = useState(false)
@@ -540,7 +541,28 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
             {t.preview.truncated}
           </div>
         )}
-        {isMarkdown && <PreviewToggle asSource={!showRendered} onToggle={() => setRenderMarkdownAsSource(s => !s)} />}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/40 bg-transparent px-3 py-1 backdrop-blur">
+          {isMarkdown && (
+            <button
+              className="text-[0.625rem] font-bold text-muted-underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground"
+              onClick={() => setRenderMarkdownAsSource(s => !s)}
+              type="button"
+            >
+              {showRendered ? t.preview.source : t.preview.renderedPreview}
+            </button>
+          )}
+          <button
+            className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+            onClick={() => {
+              // Dispatch a custom event to open the file in the editor
+              window.dispatchEvent(new CustomEvent('open-file-in-editor', { detail: { path: filePath } }))
+            }}
+            type="button"
+          >
+            <Codicon name="edit" size="0.75rem" />
+            Edit
+          </button>
+        </div>
         {showRendered ? (
           <MarkdownPreview text={state.text} />
         ) : (
