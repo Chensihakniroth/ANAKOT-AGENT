@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
@@ -60,7 +60,7 @@ import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
 import { BottomPanel } from '@/components/workbench/BottomPanel'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
-import { openEditorTab, $editorTabs } from '@/store/workbench'
+import { type EditorTab } from '@/store/workbench'
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
 import {
@@ -147,7 +147,33 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
-  const editorTabs = useStore($editorTabs)
+
+  // Use React state for editor tabs to ensure re-renders
+  const [editorTabs, setEditorTabs] = useState<EditorTab[]>([])
+  const [activeEditorTabId, setActiveEditorTabId] = useState<string | null>(null)
+
+  const openEditorTab = useCallback((tab: EditorTab) => {
+    console.log('[DesktopController] openEditorTab:', tab)
+    setEditorTabs(prev => {
+      const existing = prev.find(t => t.id === tab.id)
+      if (existing) {
+        setActiveEditorTabId(tab.id)
+        return prev
+      }
+      setActiveEditorTabId(tab.id)
+      return [...prev, tab]
+    })
+  }, [])
+
+  const closeEditorTab = useCallback((id: string) => {
+    setEditorTabs(prev => {
+      const next = prev.filter(t => t.id !== id)
+      if (activeEditorTabId === id) {
+        setActiveEditorTabId(next.length > 0 ? next[next.length - 1].id : null)
+      }
+      return next
+    })
+  }, [activeEditorTabId])
 
   const routedSessionId = routeSessionId(location.pathname)
   const routeToken = `${location.pathname}:${location.search}:${location.hash}`
@@ -829,14 +855,26 @@ export function DesktopController() {
         />
       </Pane>
 
-      {/* Main area — Editor (when files open) or Chat view (default) + Bottom Panel */}
+      {/* Main area — Chat + Editor side by side + Bottom Panel */}
       <PaneMain>
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {editorTabs.length > 0 ? <EditorArea /> : chatView}
+        <div className="flex h-full min-h-0 min-w-0 flex-row overflow-hidden">
+          {/* Chat view - always visible, takes remaining space */}
+          <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
+            {chatView}
           </div>
-          <BottomPanel onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
+          {/* Editor - shown when files are open, fixed width */}
+          {editorTabs.length > 0 && (
+            <div className="min-w-0 w-[45%] flex flex-col overflow-hidden border-l border-(--ui-stroke-secondary)">
+              <EditorArea
+                tabs={editorTabs}
+                activeTabId={activeEditorTabId}
+                onSetActiveTab={setActiveEditorTabId}
+                onCloseTab={closeEditorTab}
+              />
+            </div>
+          )}
         </div>
+        <BottomPanel onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
       </PaneMain>
 
       {/* Preview pane (right side) */}

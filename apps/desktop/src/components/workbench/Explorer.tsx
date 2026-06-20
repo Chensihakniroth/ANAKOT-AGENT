@@ -52,13 +52,16 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
   }
 
   const handleActivateFile = async (path: string) => {
+    console.log('[Explorer] handleActivateFile called:', path)
     try {
       const preview = await normalizeOrLocalPreviewTarget(path, currentCwd || undefined)
       if (preview) {
         setCurrentSessionPreviewTarget(preview, 'file-browser', path)
       }
+      console.log('[Explorer] calling onOpenFile:', path)
       onOpenFile(path)
     } catch (error) {
+      console.error('[Explorer] error:', error)
       notifyError(error, r.previewUnavailable)
     }
   }

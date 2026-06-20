@@ -80,9 +80,10 @@ export function ProjectTree({
     (node: NodeApi<TreeNode>) => {
       if (node.data && !node.data.isDirectory) {
         onPreviewFile?.(node.data.id)
+        onActivateFile?.(node.data.id)
       }
     },
-    [onPreviewFile]
+    [onPreviewFile, onActivateFile]
   )
 
   return (
