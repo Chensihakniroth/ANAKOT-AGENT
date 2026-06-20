@@ -5745,6 +5745,18 @@ app.on('before-quit', () => {
   flushDesktopLogBufferSync()
   closePreviewWatchers()
 
+  // Dispose live PTY sessions before the environment tears down.
+  // Without this, node-pty's ThreadSafeFunction::CallJS callback fires
+  // on a half-torn-down environment, throws an uncaught C++ exception,
+  // and the process aborts (microsoft/node-pty#904).
+  for (const [id] of terminalSessions) {
+    try {
+      disposeTerminalSession(id)
+    } catch {
+      void 0
+    }
+  }
+
   if (anakotProcess && !anakotProcess.killed) {
     anakotProcess.kill('SIGTERM')
   }
