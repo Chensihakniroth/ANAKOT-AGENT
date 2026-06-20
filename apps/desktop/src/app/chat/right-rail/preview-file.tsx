@@ -417,6 +417,8 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
   const [state, setState] = useState<LocalPreviewState>({ loading: true })
   const [forcePreview, setForcePreview] = useState(false)
   const [renderMarkdownAsSource, setRenderMarkdownAsSource] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(state.text || '')
   const filePath = filePathForTarget(target)
   const isImage = target.previewKind === 'image'
 
@@ -487,6 +489,13 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
     }
   }, [blockedByTarget, filePath, forcePreview, isImage, isText, reloadKey, target.language])
 
+  // Sync editContent when state.text changes (e.g. file reload)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditContent(state.text || '')
+    }
+  }, [state.text])
+
   if (state.loading) {
     return <PageLoader label={t.preview.loading} />
   }
@@ -532,7 +541,46 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
 
   if (isText && state.text !== undefined) {
     const isMarkdown = (state.language || target.language) === 'markdown'
-    const showRendered = isMarkdown && !renderMarkdownAsSource
+    const showRendered = isMarkdown && !renderMarkdownAsSource && !isEditing
+
+    const handleSave = () => {
+      // For now, just update local state. File saving will be implemented later.
+      setState(prev => ({ ...prev, text: editContent }))
+      setIsEditing(false)
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const target = e.target as HTMLTextAreaElement
+        const start = target.selectionStart
+        const end = target.selectionEnd
+        const spaces = '  '
+        if (e.shiftKey) {
+          const before = editContent.substring(0, start)
+          const lastNewline = before.lastIndexOf('\n')
+          const lineStart = lastNewline + 1
+          const lineContent = editContent.substring(lineStart, start)
+          if (lineContent.startsWith('  ')) {
+            const newContent = editContent.substring(0, lineStart) + lineContent.substring(2) + editContent.substring(start)
+            setEditContent(newContent)
+            setTimeout(() => { target.selectionStart = target.selectionEnd = Math.max(lineStart, start - 2) }, 0)
+          }
+        } else {
+          const newContent = editContent.substring(0, start) + spaces + editContent.substring(end)
+          setEditContent(newContent)
+          setTimeout(() => { target.selectionStart = target.selectionEnd = start + 2 }, 0)
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault()
+        handleSave()
+      }
+      if (e.key === 'Escape') {
+        setIsEditing(false)
+        setEditContent(state.text || '')
+      }
+    }
 
     return (
       <div className="h-full overflow-auto bg-transparent">
@@ -542,7 +590,7 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
           </div>
         )}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/40 bg-transparent px-3 py-1 backdrop-blur">
-          {isMarkdown && (
+          {isMarkdown && !isEditing && (
             <button
               className="text-[0.625rem] font-bold text-muted-underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground"
               onClick={() => setRenderMarkdownAsSource(s => !s)}
@@ -551,19 +599,52 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
               {showRendered ? t.preview.source : t.preview.renderedPreview}
             </button>
           )}
-          <button
-            className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
-            onClick={() => {
-              // Dispatch a custom event to open the file in the editor
-              window.dispatchEvent(new CustomEvent('open-file-in-editor', { detail: { path: filePath } }))
-            }}
-            type="button"
-          >
-            <Codicon name="edit" size="0.75rem" />
-            Edit
-          </button>
+          {isEditing && (
+            <span className="text-[0.625rem] font-medium text-foreground">Editing</span>
+          )}
+          <div className="flex items-center gap-1">
+            {isEditing && (
+              <>
+                <button
+                  className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-green-600 transition-colors hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                  onClick={handleSave}
+                  type="button"
+                >
+                  <Codicon name="check" size="0.75rem" />
+                  Save
+                </button>
+                <button
+                  className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                  onClick={() => { setIsEditing(false); setEditContent(state.text || '') }}
+                  type="button"
+                >
+                  <Codicon name="x" size="0.75rem" />
+                  Cancel
+                </button>
+              </>
+            )}
+            {!isEditing && (
+              <button
+                className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                onClick={() => setIsEditing(true)}
+                type="button"
+              >
+                <Codicon name="edit" size="0.75rem" />
+                Edit
+              </button>
+            )}
+          </div>
         </div>
-        {showRendered ? (
+        {isEditing ? (
+          <textarea
+            className="h-full w-full resize-none bg-transparent p-3 font-mono text-xs leading-relaxed text-foreground outline-none"
+            value={editContent}
+            onChange={e => setEditContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            spellCheck={false}
+            autoFocus
+          />
+        ) : showRendered ? (
           <MarkdownPreview text={state.text} />
         ) : (
           <SourceView filePath={filePath} language={state.language || 'text'} text={state.text} />
@@ -571,7 +652,6 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
       </div>
     )
   }
-
   return (
     <PreviewEmptyState
       body={t.preview.noInlineBody(target.mimeType || '')}
