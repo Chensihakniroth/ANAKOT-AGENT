@@ -6,7 +6,7 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode
 } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ShikiHighlighter from 'react-shiki'
 import { Streamdown } from 'streamdown'
 
@@ -333,39 +333,71 @@ function startLineDrag(event: ReactDragEvent<HTMLElement>, filePath: string, { e
   event.dataTransfer.effectAllowed = 'copy'
 }
 
-function SourceView({ filePath, language, text }: { filePath: string; language: string; text: string }) {
+function SourceView({ filePath, language, text, isEditing, onContentChange }: { filePath: string; language: string; text: string; isEditing: boolean; onContentChange: (content: string) => void }) {
   const { t } = useI18n()
   const lineCount = useMemo(() => Math.max(1, text.split('\n').length), [text])
   const [selection, setSelection] = useState<LineSelection | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const lineNumbersRef = useRef<HTMLDivElement>(null)
+
   const inSelection = (line: number) => selection != null && line >= selection.start && line <= selection.end
 
   const handleLineClick = (event: ReactMouseEvent, line: number) => {
+    if (isEditing) return
     if (event.shiftKey && selection) {
       setSelection({ end: Math.max(selection.end, line), start: Math.min(selection.start, line) })
-
       return
     }
-
     if (selection?.start === line && selection.end === line) {
       setSelection(null)
-
       return
     }
-
     setSelection({ end: line, start: line })
   }
 
   const handleDragStart = (event: ReactDragEvent<HTMLElement>, line: number) => {
+    if (isEditing) return
     startLineDrag(event, filePath, inSelection(line) && selection ? selection : { end: line, start: line })
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const textarea = textareaRef.current
+      if (!textarea) return
+      const start = textarea.selectionStart
+      const end = textarea.selectionEnd
+      const spaces = '  '
+      if (e.shiftKey) {
+        const before = text.substring(0, start)
+        const lastNewline = before.lastIndexOf('\n')
+        const lineStart = lastNewline + 1
+        const lineContent = text.substring(lineStart, start)
+        if (lineContent.startsWith('  ')) {
+          const newContent = text.substring(0, lineStart) + lineContent.substring(2) + text.substring(start)
+          onContentChange(newContent)
+          setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = Math.max(lineStart, start - 2) }, 0)
+        }
+      } else {
+        const newContent = text.substring(0, start) + spaces + text.substring(end)
+        onContentChange(newContent)
+        setTimeout(() => { textarea.selectionStart = textarea.selectionEnd = start + 2 }, 0)
+      }
+    }
+  }
+
+  const handleScroll = () => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop
+    }
   }
 
   return (
     <div className="grid min-w-max grid-cols-[auto_minmax(0,1fr)] font-mono text-xs leading-relaxed">
-      <div className="select-none py-3 text-right text-muted-foreground/55">
+      <div ref={lineNumbersRef} className="select-none overflow-hidden py-3 text-right text-muted-foreground/55">
         {Array.from({ length: lineCount }, (_, index) => {
           const line = index + 1
           const selected = inSelection(line)
-
           return (
             <div
               className={cn(
@@ -374,7 +406,7 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
                   ? 'bg-amber-200/45 text-amber-900 dark:bg-amber-300/20 dark:text-amber-100'
                   : 'hover:text-foreground'
               )}
-              draggable
+              draggable={!isEditing}
               key={line}
               onClick={event => handleLineClick(event, line)}
               onDragStart={event => handleDragStart(event, line)}
@@ -385,8 +417,8 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
           )
         })}
       </div>
-      <div className="relative [&_pre]:m-0 [&_pre]:px-3 [&_pre]:py-3 [&_pre]:bg-transparent!">
-        {selection && (
+      <div className="relative overflow-hidden [&_pre]:m-0 [&_pre]:px-3 [&_pre]:py-3 [&_pre]:bg-transparent!">
+        {selection && !isEditing && (
           <div
             aria-hidden
             className="pointer-events-none absolute inset-x-0 bg-amber-200/35 dark:bg-amber-300/10"
@@ -396,21 +428,35 @@ function SourceView({ filePath, language, text }: { filePath: string; language: 
             }}
           />
         )}
-        <ShikiHighlighter
-          addDefaultStyles={false}
-          as="div"
-          defaultColor="light-dark()"
-          delay={80}
-          language={language || 'text'}
-          showLanguage={false}
-          theme={SHIKI_THEME}
-        >
-          {text}
-        </ShikiHighlighter>
+        {isEditing ? (
+          <textarea
+            ref={textareaRef}
+            className="relative z-10 h-full w-full resize-none bg-transparent px-3 py-3 font-mono text-xs leading-relaxed text-foreground outline-none"
+            value={text}
+            onChange={e => onContentChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onScroll={handleScroll}
+            spellCheck={false}
+            autoFocus
+          />
+        ) : (
+          <ShikiHighlighter
+            addDefaultStyles={false}
+            as="div"
+            defaultColor="light-dark()"
+            delay={80}
+            language={language || 'text'}
+            showLanguage={false}
+            theme={SHIKI_THEME}
+          >
+            {text}
+          </ShikiHighlighter>
+        )}
       </div>
     </div>
   )
 }
+
 
 export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reloadKey: number; target: PreviewTarget; onOpenInEditor?: (path: string) => void }) {
   const { t } = useI18n()
@@ -635,19 +681,16 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
             )}
           </div>
         </div>
-        {isEditing ? (
-          <textarea
-            className="h-full w-full resize-none bg-transparent p-3 font-mono text-xs leading-relaxed text-foreground outline-none"
-            value={editContent}
-            onChange={e => setEditContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            spellCheck={false}
-            autoFocus
-          />
-        ) : showRendered ? (
+        {showRendered ? (
           <MarkdownPreview text={state.text} />
         ) : (
-          <SourceView filePath={filePath} language={state.language || 'text'} text={state.text} />
+          <SourceView
+            filePath={filePath}
+            language={state.language || 'text'}
+            text={isEditing ? editContent : state.text}
+            isEditing={isEditing}
+            onContentChange={setEditContent}
+          />
         )}
       </div>
     )
