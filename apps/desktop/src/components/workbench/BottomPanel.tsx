@@ -4,21 +4,26 @@ import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
 import { TerminalTab } from '@/app/right-sidebar/terminal'
 import { $currentCwd } from '@/store/session'
+import { useState } from 'react'
+
+type ShellType = 'powershell' | 'git-bash' | 'cmd'
+
+const SHELL_OPTIONS: { id: ShellType; label: string; icon: string }[] = [
+  { id: 'powershell', label: 'PowerShell', icon: 'terminal-powershell' },
+  { id: 'git-bash', label: 'Git Bash', icon: 'terminal-bash' },
+  { id: 'cmd', label: 'CMD', icon: 'terminal-cmd' },
+]
 
 interface BottomPanelProps {
   onAddSelectionToChat: (text: string, label?: string) => void
 }
 
-const BOTTOM_TABS = [
-  { id: 'terminal' as const, icon: 'terminal', label: 'Terminal' },
-  { id: 'output' as const, icon: 'output', label: 'Output' },
-  { id: 'problems' as const, icon: 'warning', label: 'Problems' },
-]
-
 export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const activeTab = useStore($bottomPanelTab)
   const isOpen = useStore($bottomPanelOpen)
   const cwd = useStore($currentCwd)
+  const [selectedShell, setSelectedShell] = useState<ShellType>('powershell')
+  const [showShellPicker, setShowShellPicker] = useState(false)
 
   if (!isOpen) {
     return (
@@ -57,13 +62,51 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
             </button>
           ))}
         </div>
-        <button
-          className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-          onClick={() => setBottomPanelOpen(false)}
-          type="button"
-        >
-          <Codicon name="chevron-down" size="0.75rem" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Shell selector - only show when terminal tab is active */}
+          {activeTab === 'terminal' && (
+            <div className="relative">
+              <button
+                className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.6rem] text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                onClick={() => setShowShellPicker(!showShellPicker)}
+                title="Select Shell"
+                type="button"
+              >
+                <Codicon name="terminal" size="0.7rem" />
+                {SHELL_OPTIONS.find(s => s.id === selectedShell)?.label || 'Shell'}
+                <Codicon name="chevron-down" size="0.6rem" />
+              </button>
+              {showShellPicker && (
+                <div className="absolute bottom-full right-0 z-50 mb-1 min-w-[120px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-lg">
+                  {SHELL_OPTIONS.map(shell => (
+                    <button
+                      key={shell.id}
+                      className={cn(
+                        'flex w-full items-center gap-2 px-2 py-1 text-[0.65rem] transition-colors hover:bg-(--ui-control-hover-background)',
+                        selectedShell === shell.id ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                      onClick={() => {
+                        setSelectedShell(shell.id)
+                        setShowShellPicker(false)
+                      }}
+                      type="button"
+                    >
+                      <Codicon name={shell.icon} size="0.7rem" />
+                      {shell.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+            onClick={() => setBottomPanelOpen(false)}
+            type="button"
+          >
+            <Codicon name="chevron-down" size="0.75rem" />
+          </button>
+        </div>
       </div>
 
       {/* Panel content */}
@@ -85,3 +128,9 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
     </div>
   )
 }
+
+const BOTTOM_TABS = [
+  { id: 'terminal' as const, icon: 'terminal', label: 'Terminal' },
+  { id: 'output' as const, icon: 'output', label: 'Output' },
+  { id: 'problems' as const, icon: 'warning', label: 'Problems' },
+]
