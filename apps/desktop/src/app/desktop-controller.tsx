@@ -98,6 +98,7 @@ import type { StatusbarItem } from './shell/statusbar-controls'
 import type { TitlebarTool } from './shell/titlebar-controls'
 import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
+import { OverlayModal } from './overlays/overlay-modal'
 
 const AgentsView = lazy(async () => ({ default: (await import('./agents')).AgentsView }))
 const ArtifactsView = lazy(async () => ({ default: (await import('./artifacts')).ArtifactsView }))
@@ -155,16 +156,19 @@ export function DesktopController() {
 
   const {
     agentsOpen,
+    artifactsOpen,
     chatOpen,
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
     cronOpen,
     currentView,
+    messagingOpen,
     openAgents,
     openCommandCenterSection,
     profilesOpen,
     settingsOpen,
+    skillsOpen,
     toggleCommandCenter
   } = useOverlayRouting()
 
@@ -690,6 +694,30 @@ export function DesktopController() {
       {profilesOpen && (
         <Suspense fallback={null}>
           <ProfilesView onClose={closeOverlayToPreviousRoute} />
+        </Suspense>
+      )}
+
+      {skillsOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Skills & Tools">
+            <SkillsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {messagingOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Messaging">
+            <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {artifactsOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Artifacts">
+            <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
         </Suspense>
       )}
     </>

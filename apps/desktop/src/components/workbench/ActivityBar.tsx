@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { triggerHaptic } from '@/lib/haptics'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
+import { useNavigate } from 'react-router-dom'
 import { $sidebarPanel, $sidebarOpen, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
 import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, CRON_ROUTE, PROFILES_ROUTE, AGENTS_ROUTE, COMMAND_CENTER_ROUTE } from '../../app/routes'
 
@@ -26,13 +27,14 @@ const TOP_ITEMS: ActivityBarItem[] = [
 ]
 
 export function ActivityBar() {
+  const navigate = useNavigate()
   const activePanel = useStore($sidebarPanel)
   const sidebarOpen = useStore($sidebarOpen)
 
   const handleClick = (item: ActivityBarItem) => {
     triggerHaptic('crisp')
     if (item.route) {
-      window.location.hash = item.route
+      navigate(item.route)
       return
     }
     if (item.panel) {
@@ -75,14 +77,15 @@ export function ActivityBar() {
 
       {/* Bottom items */}
       <div className="mb-1 flex flex-col items-center gap-0.5">
-        <a
+        <button
           aria-label="Settings"
           className="flex h-10 w-10 items-center justify-center transition-colors hover:text-foreground"
-          href={`#${SETTINGS_ROUTE}`}
+          onClick={() => navigate(SETTINGS_ROUTE)}
           title="Settings"
+          type="button"
         >
           <Codicon name="settings-gear" size="1.25rem" />
-        </a>
+        </button>
       </div>
     </div>
   )

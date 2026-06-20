@@ -16,8 +16,11 @@ export function useOverlayRouting() {
   const agentsOpen = currentView === 'agents'
   const cronOpen = currentView === 'cron'
   const profilesOpen = currentView === 'profiles'
+  const skillsOpen = currentView === 'skills'
+  const messagingOpen = currentView === 'messaging'
+  const artifactsOpen = currentView === 'artifacts'
   const chatOpen = currentView === 'chat'
-  const overlayOpen = isOverlayView(currentView)
+  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen
 
   // Overlay routes (settings/command-center/agents) stash the underlying path
   // so closing them returns there instead of bouncing to /.
@@ -56,16 +59,19 @@ export function useOverlayRouting() {
 
   return {
     agentsOpen,
+    artifactsOpen,
     chatOpen,
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
     cronOpen,
     currentView,
+    messagingOpen,
     openAgents,
     openCommandCenterSection,
     profilesOpen,
     settingsOpen,
+    skillsOpen,
     toggleCommandCenter
   }
 }
