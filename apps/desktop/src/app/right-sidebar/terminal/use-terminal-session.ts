@@ -96,7 +96,7 @@ interface UseTerminalSessionOptions {
   shell?: 'powershell' | 'git-bash' | 'cmd'
 }
 
-function transferHasDropCandidates(t: DataTransfer): boolean {
+function transferHasDropCandidates(t: DataTransfer) {
   if (t.types?.includes(ANAKOT_PATHS_MIME)) {
     return true
   }
@@ -243,15 +243,13 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [addSelectionToChat, selection])
 
-  const shellCleanupRef = useRef<Array<() => void>>([])
-
+  // Main terminal creation effect
   useEffect(() => {
     const host = hostRef.current
     const terminalApi = window.anakotDesktop?.terminal
 
     if (!host || !terminalApi) {
       setStatus('closed')
-
       return
     }
 
@@ -280,10 +278,8 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     term.loadAddon(new WebLinksAddon())
     term.unicode.activeVersion = '11'
     term.open(host)
-    term.focus()
 
-    // WebGL renderer matches the dashboard ChatPage path; xterm's default DOM
-    // renderer paints SGR via CSS classes that visibly mute against our skins.
+    // WebGL renderer
     try {
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => webgl.dispose())
@@ -292,11 +288,9 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       console.warn('[anakot-terminal] WebGL unavailable; falling back to DOM', err)
     }
 
+    // Drag and drop handlers
     const onDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) {
-        return
-      }
-
+      if (!e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
       e.preventDefault()
       e.stopPropagation()
       e.dataTransfer.dropEffect = 'copy'
@@ -304,19 +298,11 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
 
     const onDrop = (e: DragEvent) => {
       const id = sessionIdRef.current
-
-      if (!id || !e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) {
-        return
-      }
-
+      if (!id || !e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
       e.preventDefault()
       e.stopPropagation()
       const paths = collectDroppedPaths(e.dataTransfer)
-
-      if (!paths.length) {
-        return
-      }
-
+      if (!paths.length) return
       void terminalApi.write(id, `${paths.map(p => quotePathForShell(p, shellNameRef.current)).join(' ')} `)
       term.focus()
       triggerHaptic('selection')
@@ -331,51 +317,26 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       host.removeEventListener('drop', onDrop)
     })
 
+    // Fit and resize handler
     const fitAndResize = () => {
-      if (disposed || !host.isConnected) {
-        return
-      }
+      if (disposed || !host.isConnected) return
+      if (host.clientWidth <= 0 || host.clientHeight <= 0) return
 
-      // Ensure the host has dimensions before fitting
-      if (host.clientWidth <= 0 || host.clientHeight <= 0) {
-        // Retry after a short delay
-        const retryTimer = setTimeout(() => {
-          if (!disposed) fitAndResize()
-        }, 100)
-        cleanup.push(() => clearTimeout(retryTimer))
-        return
-      }
-
-      try {
-        fit.fit()
-      } catch {
-        return
-      }
+      try { fit.fit() } catch { return }
 
       const id = sessionIdRef.current
-
       if (id && (lastSentSize?.cols !== term.cols || lastSentSize?.rows !== term.rows)) {
         lastSentSize = { cols: term.cols, rows: term.rows }
         void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
       }
     }
 
-    // Coalesce ResizeObserver bursts through rAF — running fit.fit()
-    // synchronously while sibling panes are mid-transition (e.g. file browser
-    // collapsing to 0px) crashes the WebGL renderer mid texture-atlas rebuild.
     let pendingFrame = 0
-
     const scheduleResize = () => {
-      if (pendingFrame) {
-        return
-      }
-
+      if (pendingFrame) return
       pendingFrame = window.requestAnimationFrame(() => {
         pendingFrame = 0
-
-        if (!disposed) {
-          fitAndResize()
-        }
+        if (!disposed) fitAndResize()
       })
     }
 
@@ -383,22 +344,17 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     resizeObserver.observe(host)
     cleanup.push(() => {
       resizeObserver.disconnect()
-
-      if (pendingFrame) {
-        window.cancelAnimationFrame(pendingFrame)
-      }
+      if (pendingFrame) window.cancelAnimationFrame(pendingFrame)
     })
 
+    // Data handler
     const dataDisposable = term.onData(data => {
       const id = sessionIdRef.current
-
-      if (id) {
-        void terminalApi.write(id, data)
-      }
+      if (id) void terminalApi.write(id, data)
     })
-
     cleanup.push(() => dataDisposable.dispose())
 
+    // Selection handler
     const selectionDisposable = term.onSelectionChange(() => {
       const next = term.getSelection()
       selectionRef.current = next
@@ -406,156 +362,144 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       setSelection(next)
       setSelectionStyle(next.trim() ? terminalSelectionAnchor(host) : null)
     })
-
     cleanup.push(() => selectionDisposable.dispose())
 
+    // Key handler
     term.attachCustomKeyEventHandler(event => {
-      if (event.type !== 'keydown') {
-        return true
-      }
-
+      if (event.type !== 'keydown') return true
       if (isAddSelectionShortcut(event) && term.hasSelection()) {
         event.preventDefault()
         addSelectionToChat()
-
         return false
       }
-
       return true
     })
 
-    fitAndResize()
+    // Start PTY session after container is ready
+    const startPty = () => {
+      if (disposed) return
+      if (host.clientWidth <= 0 || host.clientHeight <= 0) {
+        const t = setTimeout(startPty, 50)
+        cleanup.push(() => clearTimeout(t))
+        return
+      }
 
-    void terminalApi
-      .start({ cols: term.cols, cwd, rows: term.rows, shell })
-      .then(session => {
-        // Re-fit after a short delay to ensure the container has settled
-        setTimeout(() => {
-          if (!disposed) {
-            fitAndResize()
+      try { fit.fit() } catch {
+        const t = setTimeout(startPty, 50)
+        cleanup.push(() => clearTimeout(t))
+        return
+      }
+
+      const cols = term.cols
+      const rows = term.rows
+      if (cols <= 0 || rows <= 0) {
+        const t = setTimeout(startPty, 50)
+        cleanup.push(() => clearTimeout(t))
+        return
+      }
+
+      void terminalApi
+        .start({ cols, cwd, rows, shell })
+        .then(session => {
+          if (disposed) {
+            void terminalApi.dispose(session.id)
+            return
           }
-        }, 100)
 
-        if (disposed) {
-          void terminalApi.dispose(session.id)
+          sessionIdRef.current = session.id
+          lastSentSize = { cols: term.cols, rows: term.rows }
+          shellNameRef.current = session.shell || 'shell'
+          setShellName(session.shell || 'shell')
+          setStatus('open')
 
-          return
-        }
+          if (term.hasSelection()) {
+            const currentSelection = term.getSelection()
+            selectionRef.current = currentSelection
+            selectionLabelRef.current = terminalSelectionLabel(term, shellNameRef.current, currentSelection)
+          } else {
+            selectionRef.current = ''
+            selectionLabelRef.current = ''
+          }
 
-        sessionIdRef.current = session.id
-        lastSentSize = { cols: term.cols, rows: term.rows }
-        shellNameRef.current = session.shell || 'shell'
-        setShellName(session.shell || 'shell')
+          let wrotePromptContent = false
 
-        if (term.hasSelection()) {
-          const currentSelection = term.getSelection()
-          selectionRef.current = currentSelection
-          selectionLabelRef.current = terminalSelectionLabel(term, shellNameRef.current, currentSelection)
-        } else {
-          selectionRef.current = ''
-          selectionLabelRef.current = ''
-        }
+          cleanup.push(
+            terminalApi.onData(session.id, data => {
+              if (wrotePromptContent) {
+                term.write(data)
+                return
+              }
+              if (isStartupSpacer(data)) return
+              const next = stripInitialPromptGap(data)
+              if (next) {
+                wrotePromptContent = true
+                term.write(next)
+              }
+            }),
+            terminalApi.onExit(session.id, sessionExit => {
+              setStatus('closed')
+              term.write(`\r\n[terminal exited${sessionExit.signal ? `: ${sessionExit.signal}` : sessionExit.code !== null ? `: ${sessionExit.code}` : ''}]\r\n`)
+            })
+          )
+        })
+        .catch(error => {
+          setStatus('closed')
+          term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
+        })
+    }
 
-        setStatus('open')
-        let wrotePromptContent = false
+    // Delay start to ensure DOM layout is complete
+    const startTimer = setTimeout(startPty, 100)
+    cleanup.push(() => clearTimeout(startTimer))
 
-        cleanup.push(
-          terminalApi.onData(session.id, data => {
-            if (wrotePromptContent) {
-              term.write(data)
-
-              return
-            }
-
-            if (isStartupSpacer(data)) {
-              return
-            }
-
-            const next = stripInitialPromptGap(data)
-
-            if (next) {
-              wrotePromptContent = true
-              term.write(next)
-            }
-          }),
-          terminalApi.onExit(session.id, sessionExit => {
-            const { code, signal } = sessionExit
-            setStatus('closed')
-            term.write(`\r\n[terminal exited${signal ? `: ${signal}` : code !== null ? `: ${code}` : ''}]\r\n`)
-          })
-        )
-        // Delay fitAndResize to ensure the container has its final size
-        const resizeTimer = setTimeout(() => {
-          fitAndResize()
-          term.focus()
-        }, 50)
-        cleanup.push(() => clearTimeout(resizeTimer))
-      })
-      .catch(error => {
-        setStatus('closed')
-        term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
-      })
+    term.focus()
 
     return () => {
       disposed = true
       cleanup.forEach(run => run())
-      shellCleanupRef.current.forEach(run => run())
-      shellCleanupRef.current = []
-
       const id = sessionIdRef.current
       sessionIdRef.current = null
-
-      if (id) {
-        void terminalApi.dispose(id)
-      }
-
+      if (id) void terminalApi.dispose(id)
       term.dispose()
       termRef.current = null
       shellNameRef.current = 'shell'
       selectionRef.current = ''
       selectionLabelRef.current = ''
     }
-  }, [addSelectionToChat, cwd])
+  }, [cwd])
 
-  // Handle shell switching separately — dispose old PTY, start new one
-  const shellRef = useRef(shell)
+  // Shell switching effect
   useEffect(() => {
-    if (shellRef.current === shell) return
-    shellRef.current = shell
-
     const terminalApi = window.anakotDesktop?.terminal
     const id = sessionIdRef.current
     const term = termRef.current
-    const host = hostRef.current
 
-    if (!terminalApi || !id || !term || !host) return
+    if (!terminalApi || !id || !term) return
 
     // Dispose old PTY session
     void terminalApi.dispose(id)
     sessionIdRef.current = null
-
-    // Clear the terminal
     term.clear()
 
     // Start new PTY session with new shell
+    const cols = term.cols
+    const rows = term.rows
+    if (cols <= 0 || rows <= 0) return
+
     void terminalApi
-      .start({ cols: term.cols, cwd, rows: term.rows, shell })
+      .start({ cols, cwd, rows, shell })
       .then(session => {
         sessionIdRef.current = session.id
         shellNameRef.current = session.shell || 'shell'
         setShellName(session.shell || 'shell')
         setStatus('open')
 
-        // Set up data/exit handlers for new session
         const dataCleanup = terminalApi.onData(session.id, data => {
           term.write(data)
         })
         const exitCleanup = terminalApi.onExit(session.id, sessionExit => {
           term.write(`\r\n[terminal exited${sessionExit.signal ? `: ${sessionExit.signal}` : sessionExit.code !== null ? `: ${sessionExit.code}` : ''}]\r\n`)
         })
-
-        // Store cleanup functions
-        shellCleanupRef.current.push(dataCleanup, exitCleanup)
       })
       .catch(error => {
         setStatus('closed')
