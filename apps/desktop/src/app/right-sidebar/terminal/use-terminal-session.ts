@@ -243,6 +243,8 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [addSelectionToChat, selection])
 
+  const shellCleanupRef = useRef<Array<() => void>>([])
+
   useEffect(() => {
     const host = hostRef.current
     const terminalApi = window.anakotDesktop?.terminal
@@ -330,7 +332,17 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     })
 
     const fitAndResize = () => {
-      if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) {
+      if (disposed || !host.isConnected) {
+        return
+      }
+
+      // Ensure the host has dimensions before fitting
+      if (host.clientWidth <= 0 || host.clientHeight <= 0) {
+        // Retry after a short delay
+        const retryTimer = setTimeout(() => {
+          if (!disposed) fitAndResize()
+        }, 100)
+        cleanup.push(() => clearTimeout(retryTimer))
         return
       }
 
@@ -472,10 +484,12 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
             term.write(`\r\n[terminal exited${signal ? `: ${signal}` : code !== null ? `: ${code}` : ''}]\r\n`)
           })
         )
-        window.requestAnimationFrame(() => {
+        // Delay fitAndResize to ensure the container has its final size
+        const resizeTimer = setTimeout(() => {
           fitAndResize()
           term.focus()
-        })
+        }, 50)
+        cleanup.push(() => clearTimeout(resizeTimer))
       })
       .catch(error => {
         setStatus('closed')
@@ -485,6 +499,8 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     return () => {
       disposed = true
       cleanup.forEach(run => run())
+      shellCleanupRef.current.forEach(run => run())
+      shellCleanupRef.current = []
 
       const id = sessionIdRef.current
       sessionIdRef.current = null
@@ -499,7 +515,53 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       selectionRef.current = ''
       selectionLabelRef.current = ''
     }
-  }, [addSelectionToChat, cwd, shell])
+  }, [addSelectionToChat, cwd])
+
+  // Handle shell switching separately — dispose old PTY, start new one
+  const shellRef = useRef(shell)
+  useEffect(() => {
+    if (shellRef.current === shell) return
+    shellRef.current = shell
+
+    const terminalApi = window.anakotDesktop?.terminal
+    const id = sessionIdRef.current
+    const term = termRef.current
+    const host = hostRef.current
+
+    if (!terminalApi || !id || !term || !host) return
+
+    // Dispose old PTY session
+    void terminalApi.dispose(id)
+    sessionIdRef.current = null
+
+    // Clear the terminal
+    term.clear()
+
+    // Start new PTY session with new shell
+    void terminalApi
+      .start({ cols: term.cols, cwd, rows: term.rows, shell })
+      .then(session => {
+        sessionIdRef.current = session.id
+        shellNameRef.current = session.shell || 'shell'
+        setShellName(session.shell || 'shell')
+        setStatus('open')
+
+        // Set up data/exit handlers for new session
+        const dataCleanup = terminalApi.onData(session.id, data => {
+          term.write(data)
+        })
+        const exitCleanup = terminalApi.onExit(session.id, sessionExit => {
+          term.write(`\r\n[terminal exited${sessionExit.signal ? `: ${sessionExit.signal}` : sessionExit.code !== null ? `: ${sessionExit.code}` : ''}]\r\n`)
+        })
+
+        // Store cleanup functions
+        shellCleanupRef.current.push(dataCleanup, exitCleanup)
+      })
+      .catch(error => {
+        setStatus('closed')
+        term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
+      })
+  }, [shell, cwd])
 
   return {
     addSelectionToChat,
