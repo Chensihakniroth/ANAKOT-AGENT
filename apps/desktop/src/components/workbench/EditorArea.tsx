@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { $editorTabs, $activeEditorTabId, setActiveEditorTab, closeEditorTab } from '@/store/workbench'
+import Editor from '@monaco-editor/react'
 
 function EditorTabBar() {
   const tabs = useStore($editorTabs)
@@ -59,17 +60,23 @@ function WelcomeTab() {
   )
 }
 
-function MonacoPlaceholder({ filePath }: { filePath: string }) {
+function MonacoEditorPane({ filePath }: { filePath: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-      <Codicon name="file-code" size="2.5rem" className="text-muted-foreground/30" />
-      <div>
-        <p className="text-xs font-mono text-muted-foreground">{filePath}</p>
-        <p className="mt-2 text-[0.65rem] text-muted-foreground/50">
-          Monaco Editor — loading...
-        </p>
-      </div>
-    </div>
+    <Editor
+      height="100%"
+      path={filePath}
+      theme="vs-dark"
+      options={{
+        fontSize: 13,
+        lineNumbers: 'on',
+        minimap: { enabled: true },
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        tabSize: 2,
+        wordWrap: 'on',
+        padding: { top: 8 },
+      }}
+    />
   )
 }
 
@@ -83,7 +90,7 @@ export function EditorArea() {
       <EditorTabBar />
       <div className="relative min-h-0 flex-1 overflow-hidden bg-(--ui-chat-surface-background)">
         {activeTab ? (
-          <MonacoPlaceholder filePath={activeTab.path} />
+          <MonacoEditorPane filePath={activeTab.path} />
         ) : (
           <WelcomeTab />
         )}

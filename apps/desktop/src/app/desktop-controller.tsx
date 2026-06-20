@@ -53,14 +53,14 @@ import {
 } from '../store/session'
 import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store/updates'
 
+import { EditorArea } from '@/components/workbench/EditorArea'
 import { Explorer } from '@/components/workbench/Explorer'
 import { SearchPanel } from '@/components/workbench/SearchPanel'
 import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
 import { BottomPanel } from '@/components/workbench/BottomPanel'
-import { EditorArea } from '@/components/workbench/EditorArea'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
-import { openEditorTab } from '@/store/workbench'
+import { openEditorTab, $editorTabs } from '@/store/workbench'
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
 import {
@@ -147,6 +147,7 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
+  const editorTabs = useStore($editorTabs)
 
   const routedSessionId = routeSessionId(location.pathname)
   const routeToken = `${location.pathname}:${location.search}:${location.hash}`
@@ -828,11 +829,11 @@ export function DesktopController() {
         />
       </Pane>
 
-      {/* Main area — Chat view (default) + Bottom Panel */}
+      {/* Main area — Editor (when files open) or Chat view (default) + Bottom Panel */}
       <PaneMain>
         <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
-            {chatView}
+            {editorTabs.length > 0 ? <EditorArea /> : chatView}
           </div>
           <BottomPanel onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
         </div>
