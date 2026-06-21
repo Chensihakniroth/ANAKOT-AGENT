@@ -152,6 +152,13 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
 
   return (
     <>
+      {/* Draggable titlebar background */}
+      <div
+        className="fixed left-0 right-0 top-0 z-60 h-(--titlebar-height) [-webkit-app-region:drag]"
+        style={{ pointerEvents: 'auto' }}
+      />
+
+      {/* Window controls */}
       <div
         aria-label={t.shell.windowControls}
         className="fixed left-(--titlebar-controls-left) top-(--titlebar-controls-top) z-70 flex translate-y-0.5 flex-row items-center gap-x-1 pointer-events-auto select-none [-webkit-app-region:no-drag]"

@@ -279,21 +279,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     term.unicode.activeVersion = '11'
     term.open(host)
 
-    // Initial fit after a short delay to ensure DOM has settled
-    const initialFitTimer = setTimeout(() => {
-      if (!disposed && host.isConnected && host.clientWidth > 0 && host.clientHeight > 0) {
-        try { fit.fit() } catch { /* ignore */ }
-      }
-    }, 100)
-    cleanup.push(() => clearTimeout(initialFitTimer))
 
-    // Also fit on next animation frame
-    const rafId = requestAnimationFrame(() => {
-      if (!disposed && host.isConnected && host.clientWidth > 0 && host.clientHeight > 0) {
-        try { fit.fit() } catch { /* ignore */ }
-      }
-    })
-    cleanup.push(() => cancelAnimationFrame(rafId))
 
     // WebGL renderer
     try {
@@ -334,34 +320,56 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     })
 
     // Fit and resize handler
+    let resizeEnabled = false
+    let lastRows = 0
+
     const fitAndResize = () => {
       if (disposed || !host.isConnected) return
       if (host.clientWidth <= 0 || host.clientHeight <= 0) return
 
+      const oldRows = term.rows
       try { fit.fit() } catch { return }
 
       const id = sessionIdRef.current
-      if (id && (lastSentSize?.cols !== term.cols || lastSentSize?.rows !== term.rows)) {
-        lastSentSize = { cols: term.cols, rows: term.rows }
-        void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
+      if (!id) return
+
+      const proposed = (fit as any).proposeDimensions?.()
+      // Calculate rows manually based on container height
+      const lineHeight = 11 * 1.12 // fontSize * lineHeight
+      const padding = 16 // p-2 on container
+      const availableHeight = host.clientHeight - padding
+      const calculatedRows = Math.max(8, Math.floor(availableHeight / lineHeight))
+      const calculatedCols = Math.max(80, Math.floor(host.clientWidth / 7))
+
+      console.log('[terminal] fitAndResize: container=' + host.clientWidth + 'x' + host.clientHeight + ' calculated=' + calculatedCols + 'x' + calculatedRows + ' term=' + term.cols + 'x' + term.rows)
+
+      // Only resize if rows increased
+      if (calculatedRows > lastRows && calculatedRows >= 8) {
+        lastRows = calculatedRows
+        lastSentSize = { cols: calculatedCols, rows: calculatedRows }
+        console.log('[terminal] resizing PTY to: ' + calculatedRows + ' rows')
+        void terminalApi.resize(id, { cols: calculatedCols, rows: calculatedRows })
       }
     }
 
-    let pendingFrame = 0
-    const scheduleResize = () => {
-      if (pendingFrame) return
-      pendingFrame = window.requestAnimationFrame(() => {
-        pendingFrame = 0
-        if (!disposed) fitAndResize()
-      })
-    }
+    // Resize disabled — using fixed size
 
-    const resizeObserver = new ResizeObserver(scheduleResize)
-    resizeObserver.observe(host)
-    cleanup.push(() => {
-      resizeObserver.disconnect()
-      if (pendingFrame) window.cancelAnimationFrame(pendingFrame)
+    // ResizeObserver — only respond to size increases
+    let lastHeight = 0
+    lastRows = 0  // Reset so first resize after font load always triggers
+    const resizeObserver = new ResizeObserver(() => {
+      if (disposed) return
+      const currentHeight = host.clientHeight
+      // Only resize if container grew (not shrunk)
+      if (currentHeight > lastHeight + 5) {
+        lastHeight = currentHeight
+        requestAnimationFrame(() => {
+          if (!disposed) fitAndResize()
+        })
+      }
     })
+    resizeObserver.observe(host)
+    cleanup.push(() => resizeObserver.disconnect())
 
     // Data handler
     const dataDisposable = term.onData(data => {
@@ -394,39 +402,53 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     // Start PTY session after container is ready
     const startPty = () => {
       if (disposed) return
+      console.log('[terminal] startPty check:', { clientWidth: host.clientWidth, clientHeight: host.clientHeight })
       if (host.clientWidth <= 0 || host.clientHeight <= 0) {
+        console.log('[terminal] container has 0 dimensions, retrying...')
         const t = setTimeout(startPty, 50)
         cleanup.push(() => clearTimeout(t))
         return
       }
 
-      try { fit.fit() } catch {
+      try { fit.fit() } catch (err) {
+        console.log('[terminal] fit.fit() failed:', err)
         const t = setTimeout(startPty, 50)
         cleanup.push(() => clearTimeout(t))
         return
       }
 
-      const cols = term.cols
-      const rows = term.rows
+      let cols = term.cols
+      let rows = term.rows
+      console.log('[terminal] after fit:', { cols, rows, termCols: term.cols, termRows: term.rows })
       if (cols <= 0 || rows <= 0) {
-        const t = setTimeout(startPty, 50)
-        cleanup.push(() => clearTimeout(t))
-        return
+        // Fallback: estimate from container dimensions
+        const host = hostRef.current
+        if (host && host.clientWidth > 0 && host.clientHeight > 0) {
+          cols = Math.max(80, Math.floor(host.clientWidth / 7)) // ~7px per char at fontSize 11
+          rows = Math.max(8, Math.floor(host.clientHeight / 12.32)) // ~12.32px per line (11 * 1.12)
+        } else {
+          cols = 80
+          rows = 24
+        }
       }
+      rows = Math.max(rows, 8)
+      cols = Math.max(cols, 80)
 
-      void terminalApi
-        .start({ cols, cwd, rows, shell })
-        .then(session => {
-          if (disposed) {
-            void terminalApi.dispose(session.id)
-            return
-          }
+        console.log('[terminal] starting PTY:', { cols, cwd, rows, shell })
+        void terminalApi
+          .start({ cols, cwd, rows, shell })
+          .then(session => {
+            console.log('[terminal] PTY started:', { sessionId: session.id, shell: session.shell })
+            if (disposed) {
+              void terminalApi.dispose(session.id)
+              return
+            }
 
-          sessionIdRef.current = session.id
-          lastSentSize = { cols: term.cols, rows: term.rows }
-          shellNameRef.current = session.shell || 'shell'
-          setShellName(session.shell || 'shell')
-          setStatus('open')
+            sessionIdRef.current = session.id
+            lastSentSize = { cols: term.cols, rows: term.rows }
+            shellNameRef.current = session.shell || 'shell'
+            setShellName(session.shell || 'shell')
+            setStatus('open')
 
           if (term.hasSelection()) {
             const currentSelection = term.getSelection()
@@ -459,6 +481,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
           )
         })
         .catch(error => {
+          console.error('[terminal] PTY start failed:', error)
           setStatus('closed')
           term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
         })

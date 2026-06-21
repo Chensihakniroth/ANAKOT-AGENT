@@ -2,9 +2,9 @@ import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
-import { TerminalTab } from '@/app/right-sidebar/terminal'
+import { TerminalTab, type TerminalTabHandle } from '@/app/right-sidebar/terminal'
 import { $currentCwd } from '@/store/session'
-import { useState, useCallback, useRef, type ReactNode } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 type ShellType = 'powershell' | 'git-bash' | 'cmd'
 
@@ -24,9 +24,11 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const cwd = useStore($currentCwd)
   const [selectedShell, setSelectedShell] = useState<ShellType>('powershell')
   const [showShellPicker, setShowShellPicker] = useState(false)
-  const [panelHeight, setPanelHeight] = useState(200)
+  const [panelHeight, setPanelHeight] = useState(300)
   const resizeRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
+  const terminalRef = useRef<TerminalTabHandle>(null)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -39,6 +41,8 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       const delta = startY - e.clientY
       const newHeight = Math.max(120, Math.min(600, startHeight + delta))
       setPanelHeight(newHeight)
+      // Trigger terminal resize after panel resize
+      setTimeout(() => terminalRef.current?.resize(), 50)
     }
 
     const handleMouseUp = () => {
@@ -145,7 +149,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       </div>
 
       {/* Panel content */}
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={contentRef} className="relative min-h-0 flex-1 overflow-hidden">
         {activeTab === 'terminal' && (
           <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         )}
