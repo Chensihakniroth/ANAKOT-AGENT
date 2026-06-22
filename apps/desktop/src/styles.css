@@ -1233,3 +1233,31 @@ canvas {
   background: color-mix(in srgb, var(--theme-primary) 9%, var(--ui-bg-elevated));
   box-shadow: none;
 }
+
+/* xterm.js: force all internal layers to fill their container */
+.xterm,
+.xterm-viewport {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.xterm-screen {
+  height: 100% !important;
+  /* no forced width — let xterm.js's own JS sizing (via fit()) control this,
+     so it naturally leaves room for the scrollbar gutter */
+}
+
+/* xterm.js: theme-aware background (resolves color-mix() via browser) */
+.xterm-viewport {
+  background-color: var(--ui-bg-editor) !important;
+}
+
+/* xterm.js: hide scrollbar (scrolling still works via mouse wheel) */
+.xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  display: none;
+}
+
+.xterm-viewport {
+  scrollbar-width: none;
+}

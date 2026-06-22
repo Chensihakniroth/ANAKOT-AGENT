@@ -26,82 +26,86 @@ export interface TerminalTabHandle {
 }
 
 export const TerminalTab = forwardRef<TerminalTabHandle, TerminalTabProps>(
-  function TerminalTab({ cwd, onAddSelectionToChat, shell }, ref) {
-    const { t } = useI18n()
-    const { addSelectionToChat, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
-      cwd,
-      onAddSelectionToChat,
-      shell
-    })
+function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
+  const { t } = useI18n()
+  const { addSelectionToChat, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
+    cwd,
+    onAddSelectionToChat,
+    shell
+  })
 
-    const takeover = useStore($terminalTakeover)
-    const label = takeover ? t.rightSidebar.terminalSplit : t.rightSidebar.terminalFocus
+  const takeover = useStore($terminalTakeover)
+  const label = takeover ? t.rightSidebar.terminalSplit : t.rightSidebar.terminalFocus
 
-    const toggleTakeover = () => {
-      if (takeover) {
-        setRightSidebarTab('terminal')
-      }
-      setTerminalTakeover(!takeover)
+  const toggleTakeover = () => {
+    if (takeover) {
+      setRightSidebarTab('terminal')
     }
-
-    useImperativeHandle(ref, () => ({
-      resize: () => {
-        window.dispatchEvent(new CustomEvent('terminal-resize'))
-      },
-    }))
-
-    return (
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex h-8 shrink-0 items-center gap-2 px-2.5">
-          <SidebarPanelLabel className="text-white!">{shellName}</SidebarPanelLabel>
-          <Tip label={label}>
-            <Button
-              aria-label={label}
-              className="ml-auto size-6 rounded-md text-white!"
-              onClick={toggleTakeover}
-              size="icon"
-              type="button"
-              variant="ghost"
-            >
-              <Codicon name={takeover ? 'screen-normal' : 'screen-full'} size="0.875rem" />
-            </Button>
-          </Tip>
-        </div>
-        <div className="relative h-full bg-[#002b36] p-2">
-          {status === 'starting' && (
-            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
-              <Loader
-                className="size-8 text-(--ui-text-tertiary)"
-                pathSteps={180}
-                strokeScale={0.68}
-                type="spiral-search"
-              />
-            </div>
-          )}
-          {selection.trim() && (
-            <div className="absolute z-50 flex items-center gap-1" style={selectionStyle ?? { right: 12, top: 8 }}>
-              <Button
-                className="h-6 rounded-md px-2 text-[0.68rem] shadow-md backdrop-blur-md"
-                onClick={event => event.preventDefault()}
-                onMouseDown={event => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  addSelectionToChat()
-                }}
-                type="button"
-                variant="secondary"
-              >
-                {t.rightSidebar.addToChat}
-                <span className="ml-1 text-[0.6rem] text-(--ui-text-tertiary)">{addSelectionShortcutLabel()}</span>
-              </Button>
-            </div>
-          )}
-          <div
-            className="absolute inset-0 overflow-hidden text-(--ui-text-secondary) [&_.xterm]:h-full [&_.xterm-screen]:h-full [&_.xterm-screen]:bg-[#002b36]! [&_.xterm-viewport]:h-full [&_.xterm-viewport]:bg-[#002b36]!"
-            ref={hostRef}
-          />
-        </div>
-      </div>
-    )
+    setTerminalTakeover(!takeover)
   }
+
+  // Expose resize method to parent
+  useImperativeHandle(ref, () => ({
+    resize: () => {
+      window.dispatchEvent(new CustomEvent('terminal-resize'))
+    },
+  }))
+
+  return (
+    <div className="relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col">
+      <div className="flex h-8 shrink-0 items-center gap-2 px-2.5">
+        <SidebarPanelLabel className="text-white!">{shellName}</SidebarPanelLabel>
+        <Tip label={label}>
+          <Button
+            aria-label={label}
+            className="ml-auto size-6 rounded-md text-white!"
+            onClick={toggleTakeover}
+            size="icon"
+            type="button"
+            variant="ghost"
+          >
+            <Codicon name={takeover ? 'screen-normal' : 'screen-full'} size="0.875rem" />
+          </Button>
+        </Tip>
+      </div>
+      {/* Terminal container: width: 100% + flex: 1 1 auto + min-width: 0 prevents shrink-to-content */}
+      <div className="relative flex-1 p-2" style={{ width: '100%', minWidth: 0, backgroundColor: 'var(--ui-bg-editor)' }}>
+        {status === 'starting' && (
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+            <Loader
+              className="size-8 text-(--ui-text-tertiary)"
+              pathSteps={180}
+              strokeScale={0.68}
+              type="spiral-search"
+            />
+          </div>
+        )}
+        {selection.trim() && (
+          <div className="absolute z-50 flex items-center gap-1" style={selectionStyle ?? { right: 12, top: 8 }}>
+            <Button
+              className="h-6 rounded-md px-2 text-[0.68rem] shadow-md backdrop-blur-md"
+              onClick={event => event.preventDefault()}
+              onMouseDown={event => {
+                event.preventDefault()
+                event.stopPropagation()
+                addSelectionToChat()
+              }}
+              type="button"
+              variant="secondary"
+            >
+              {t.rightSidebar.addToChat}
+              <span className="ml-1 text-[0.6rem] text-(--ui-text-tertiary)">{addSelectionShortcutLabel()}</span>
+            </Button>
+          </div>
+        )}
+        {/* Host div: width: 100% + flex: 1 1 auto + min-width: 0 prevents shrink-to-content */}
+        <div
+          className="flex-1 overflow-hidden text-(--ui-text-secondary)"
+          style={{ width: '100%', minWidth: 0, height: '100%', minHeight: 0 }}
+          ref={hostRef}
+        />
+      </div>
+    </div>
+  )
+}
 )

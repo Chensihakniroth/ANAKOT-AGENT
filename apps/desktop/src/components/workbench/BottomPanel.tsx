@@ -41,8 +41,6 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       const delta = startY - e.clientY
       const newHeight = Math.max(120, Math.min(600, startHeight + delta))
       setPanelHeight(newHeight)
-      // Trigger terminal resize after panel resize
-      setTimeout(() => terminalRef.current?.resize(), 50)
     }
 
     const handleMouseUp = () => {
@@ -55,6 +53,8 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
     document.addEventListener('mouseup', handleMouseUp)
   }, [panelHeight])
 
+  // FIX 2b: When collapsed, render a tiny bar — but keep the full panel mounted
+  // via CSS so TerminalTab stays alive. We toggle a CSS class instead of unmounting.
   if (!isOpen) {
     return (
       <div className="flex h-7 shrink-0 items-center justify-end border-t border-(--ui-stroke-secondary) bg-(--ui-statusbar-background) px-2">
@@ -72,18 +72,18 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
 
   return (
     <div
-      className="shrink-0 flex-col border-t border-(--ui-stroke-secondary)"
-      style={{ height: panelHeight }}
+      className="shrink-0 grid border-t border-(--ui-stroke-secondary)"
+      style={{ height: panelHeight + 'px', gridTemplateRows: '4px 28px 1fr' }}
     >
       {/* Resize handle */}
       <div
         ref={resizeRef}
-        className="h-1 shrink-0 cursor-ns-resize bg-transparent hover:bg-(--ui-stroke-secondary) active:bg-primary/30 transition-colors"
+        className="cursor-ns-resize bg-transparent hover:bg-(--ui-stroke-secondary) active:bg-primary/30 transition-colors"
         onMouseDown={handleMouseDown}
       />
 
       {/* Tab bar */}
-      <div className="flex h-7 shrink-0 items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
+      <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
         <div className="flex items-center gap-0.5">
           {BOTTOM_TABS.map(tab => (
             <button
@@ -148,21 +148,21 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
         </div>
       </div>
 
-      {/* Panel content */}
-      <div ref={contentRef} className="relative min-h-0 flex-1 overflow-hidden">
-        {activeTab === 'terminal' && (
+      {/* Panel content — FIX 2a: always mount all tabs, toggle visibility via CSS */}
+      <div ref={contentRef} className="relative overflow-hidden" style={{ width: '100%', minWidth: 0 }}>
+        <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, height: '100%', width: '100%' }}>
           <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
-        )}
-        {activeTab === 'output' && (
+        </div>
+        <div style={{ display: activeTab === 'output' ? 'flex' : 'none', height: '100%' }}>
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
             Output panel
           </div>
-        )}
-        {activeTab === 'problems' && (
+        </div>
+        <div style={{ display: activeTab === 'problems' ? 'flex' : 'none', height: '100%' }}>
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
             Problems panel
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
