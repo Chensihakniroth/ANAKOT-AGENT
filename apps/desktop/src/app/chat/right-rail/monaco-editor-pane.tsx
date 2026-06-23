@@ -136,6 +136,36 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
   const monacoTheme = themeCtx.resolvedMode === 'dark' ? 'anakot-dark' : 'anakot-light'
 
   const mountCountRef = useRef(0)
+  const monacoRef = useRef<any>(null)
+
+  // Re-define and re-applying Monaco themes whenever the theme changes.
+  // handleBeforeMount only runs once, so we need this effect to update
+  // the theme colors on live theme switches (like VS Code does).
+  const applyMonacoTheme = useCallback((monacoInstance: any) => {
+    // Small delay to ensure CSS custom properties have been updated
+    // by applyTheme() in the ThemeContext before we read them.
+    requestAnimationFrame(() => {
+      const bg = resolveEditorBackground()
+      monacoInstance.editor.defineTheme('anakot-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': bg,
+        },
+      })
+      monacoInstance.editor.defineTheme('anakot-light', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': bg,
+        },
+      })
+      const themeName = themeCtx.resolvedMode === 'dark' ? 'anakot-dark' : 'anakot-light'
+      monacoInstance.editor.setTheme(themeName)
+    })
+  }, [themeCtx.resolvedMode])
 
   const handleBeforeMount: BeforeMount = useCallback((monaco) => {
     // If an editor is already mounted globally, skip this mount
@@ -147,11 +177,7 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
 
     mountCountRef.current++
     const bg = resolveEditorBackground()
-    const rawVar = getComputedStyle(document.documentElement).getPropertyValue('--ui-bg-editor').trim()
-    const cardSeed = getComputedStyle(document.documentElement).getPropertyValue('--theme-card-seed').trim()
-    const mixPct = getComputedStyle(document.documentElement).getPropertyValue('--theme-mix-card').trim()
-    const neutralCard = getComputedStyle(document.documentElement).getPropertyValue('--theme-neutral-card').trim()
-    console.log('[MonacoDiag] beforeMount #' + mountCountRef.current, 'bg:', bg, 'raw:', rawVar)
+    console.log('[MonacoDiag] beforeMount #' + mountCountRef.current, 'bg:', bg)
     // Only override editor.background — let the base theme handle the gutter
     // to avoid ghost/duplicate line number rendering artifacts.
     monaco.editor.defineTheme('anakot-dark', {
@@ -174,13 +200,13 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor
+    monacoRef.current = monaco
     setReady(true)
     onMount?.()
 
     // Apply the custom theme after mount
-    const themeName = themeCtx.resolvedMode === 'dark' ? 'anakot-dark' : 'anakot-light'
-    monaco.editor.setTheme(themeName)
-    console.log('[MonacoDiag] mount #' + mountCountRef.current, 'theme:', themeName, 'layout:', JSON.stringify(editor.getLayoutInfo()))
+    applyMonacoTheme(monaco)
+    console.log('[MonacoDiag] mount #' + mountCountRef.current, 'theme:', themeCtx.resolvedMode)
 
     // After mount, the flex container may not have stable dimensions yet.
     // Use rAF + setTimeout to catch the final size after the browser paints.
@@ -190,7 +216,15 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
         console.log('[MonacoDiag] post-mount layout done')
       }, 0)
     })
-  }, [onMount, themeCtx.resolvedMode])
+  }, [onMount, themeCtx.resolvedMode, applyMonacoTheme])
+
+  // Live theme-switch: re-apply Monaco theme when theme context changes
+  // This ensures the editor background updates when the user switches skins.
+  useEffect(() => {
+    if (ready && monacoRef.current) {
+      applyMonacoTheme(monacoRef.current)
+    }
+  }, [themeCtx.resolvedMode, themeCtx.themeName, ready, applyMonacoTheme])
 
   // Clear residual DOM from previous editor instances before mount.
   // useLayoutEffect runs before the browser paints, preventing flicker.

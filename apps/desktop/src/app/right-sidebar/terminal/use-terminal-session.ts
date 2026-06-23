@@ -587,17 +587,20 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     const term = termRef.current
     if (!term || !hostRef.current?.parentElement) return
 
-    const newBg = resolveThemeBackground(hostRef.current.parentElement)
-    const newFg = themeCtx.theme.colors.foreground || '#839496'
-    console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
+    // Defer one frame so CSS custom properties are flushed before we read them.
+    requestAnimationFrame(() => {
+      const newBg = resolveThemeBackground(hostRef.current!.parentElement!)
+      const newFg = themeCtx.theme.colors.foreground || '#839496'
+      console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
 
-    term.options.theme = {
-      ...term.options.theme,
-      background: newBg,
-      foreground: newFg,
-      cursor: newFg,
-      cursorAccent: newBg
-    }
+      term.options.theme = {
+        ...term.options.theme,
+        background: newBg,
+        foreground: newFg,
+        cursor: newFg,
+        cursorAccent: newBg
+      }
+    })
   }, [themeCtx.resolvedMode, themeCtx.themeName])
 
   return {

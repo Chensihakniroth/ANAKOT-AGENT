@@ -68,28 +68,15 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
     document.addEventListener('mouseup', handleMouseUp)
   }, [panelHeight])
 
-  // FIX 2b: When collapsed, render a tiny bar — but keep the full panel mounted
-  // via CSS so TerminalTab stays alive. We toggle a CSS class instead of unmounting.
-  if (!isOpen) {
-    return (
-      <div className="flex h-7 shrink-0 items-center justify-end border-t border-(--ui-stroke-secondary) bg-(--ui-statusbar-background) px-2">
-        <button
-          className="flex items-center gap-1 text-[0.65rem] text-muted-foreground hover:text-foreground"
-          onClick={() => setBottomPanelOpen(true)}
-          type="button"
-        >
-          <Codicon name="chevron-up" size="0.75rem" />
-          Panel
-        </button>
-      </div>
-    )
-  }
-
-  return (
+  const panel = (
     <div
       ref={panelRef}
       className="shrink-0 grid border-t border-(--ui-stroke-secondary)"
-      style={{ height: panelHeight + 'px', gridTemplateRows: '4px 28px 1fr' }}
+      style={{
+        height: isOpen ? panelHeight + 'px' : '0px',
+        gridTemplateRows: isOpen ? '4px 28px 1fr' : '0px',
+        overflow: 'hidden',
+      }}
     >
       {/* Resize handle */}
       <div
@@ -164,7 +151,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
         </div>
       </div>
 
-      {/* Panel content — FIX 2a: always mount all tabs, toggle visibility via CSS */}
+      {/* Panel content — always mount all tabs so TerminalTab stays alive */}
       <div ref={contentRef} className="relative overflow-hidden" style={{ width: '100%', minWidth: 0 }}>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, height: '100%', width: '100%' }}>
           <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
@@ -181,6 +168,26 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
         </div>
       </div>
     </div>
+  )
+
+  return (
+    <>
+      {/* Always-mounted panel (0 height when collapsed, full when open) */}
+      {panel}
+      {/* Toggle bar — overlaid on top when collapsed, shown below panel when open */}
+      {!isOpen && (
+        <div className="flex h-7 shrink-0 items-center justify-end border-t border-(--ui-stroke-secondary) bg-(--ui-statusbar-background) px-2">
+          <button
+            className="flex items-center gap-1 text-[0.65rem] text-muted-foreground hover:text-foreground"
+            onClick={() => setBottomPanelOpen(true)}
+            type="button"
+          >
+            <Codicon name="chevron-up" size="0.75rem" />
+            Panel
+          </button>
+        </div>
+      )}
+    </>
   )
 }
 
