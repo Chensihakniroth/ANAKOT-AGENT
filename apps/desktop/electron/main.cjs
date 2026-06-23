@@ -5080,6 +5080,18 @@ ipcMain.handle('anakot:readFileText', async (_event, filePath) => {
 })
 
 ipcMain.handle('anakot:selectPaths', async (_event, options = {}) => {
+  // DIAGNOSTIC: allow bypassing the native dialog for automated testing
+  if (options?.__directPath) {
+    try {
+      const p = path.resolve(String(options.__directPath))
+      if (fs.existsSync(p)) {
+        return [p]
+      }
+    } catch {
+      // fall through to dialog
+    }
+  }
+
   const properties = options?.directories ? ['openDirectory'] : ['openFile']
   if (options?.multiple !== false) properties.push('multiSelections')
 

@@ -7,3 +7,13 @@
 
 /* ─── Background Image ──────────────────────────────────────────────────── */
 /* Intentionally empty — see Backdrop.tsx and @/store/background.ts */
+
+/* ─── Monaco Editor Gutter Fix ──────────────────────────────────────────── */
+/* Hide ghost ::before content on line numbers that causes duplicate digits */
+.monaco-editor .line-numbers::before,
+.monaco-editor .line-numbers::after,
+.monaco-editor .active-line-number::before,
+.monaco-editor .active-line-number::after {
+  content: none !important;
+  display: none !important;
+}

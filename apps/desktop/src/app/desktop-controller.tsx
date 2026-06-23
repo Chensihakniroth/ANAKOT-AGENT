@@ -14,13 +14,17 @@ import { formatRefValue } from '../components/assistant-ui/directive-text'
 import { getSessionMessages, listAllProfileSessions, type SessionInfo } from '../anakot'
 import { preserveLocalAssistantErrors, toChatMessages } from '../lib/chat-messages'
 import {
+  $fileBrowserOpen,
   $panesFlipped,
   $pinnedSessionIds,
+  $rightRailCollapsed,
+  $sidebarOpen,
   $sessionsLimit,
   bumpSessionsLimit,
   FILE_BROWSER_DEFAULT_WIDTH,
   FILE_BROWSER_MAX_WIDTH,
   FILE_BROWSER_MIN_WIDTH,
+  FILE_BROWSER_PANE_ID,
   pinSession,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -761,9 +765,11 @@ export function DesktopController() {
   const sidebarSide = panesFlipped ? 'right' : 'left'
   const railSide = panesFlipped ? 'left' : 'right'
 
+  const rightRailCollapsed = useStore($rightRailCollapsed)
+
   const previewPane = (
     <Pane
-      disabled={!chatOpen || (!previewTarget && !filePreviewTarget)}
+      disabled={rightRailCollapsed || !chatOpen || (!previewTarget && !filePreviewTarget)}
       id="preview"
       key="preview"
       maxWidth={PREVIEW_RAIL_MAX_WIDTH}
@@ -781,7 +787,7 @@ export function DesktopController() {
   const fileBrowserPane = (
     <Pane
       defaultOpen={false}
-      disabled={!chatOpen}
+      disabled={rightRailCollapsed || !chatOpen}
       id="file-browser"
       key="file-browser"
       maxWidth={FILE_BROWSER_MAX_WIDTH}
@@ -811,7 +817,7 @@ export function DesktopController() {
       {/* Sidebar — Explorer / Search / Chat panels */}
       <Pane
         disabled={terminalTakeoverActive}
-        id="workbench-sidebar"
+        id="chat-sidebar"
         maxWidth={SIDEBAR_MAX_WIDTH}
         minWidth={SIDEBAR_DEFAULT_WIDTH}
         resizable

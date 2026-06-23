@@ -71,7 +71,7 @@ export function AppShell({
     ? 0
     : titlebarControls.left + TITLEBAR_HEIGHT + Math.round(TITLEBAR_HEIGHT / 2)
 
-  const SYSTEM_TOOL_COUNT = 4
+  const SYSTEM_TOOL_COUNT = 6 // sidebar + flip + haptics + keybinds + settings + right-sidebar
   const paneToolCount = titlebarTools?.filter(tool => !tool.hidden).length ?? 0
   const systemToolsWidth = `calc(${SYSTEM_TOOL_COUNT} * (var(--titlebar-control-size) + 0.25rem))`
 

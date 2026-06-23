@@ -1190,6 +1190,9 @@ export interface Translations {
     binaryBody: (label: string) => string
     largeTitle: string
     largeBody: (label: string, size: string) => string
+    oversizedTitle: string
+    oversizedBody: (label: string, size: string) => string
+    largeFileWarning: (size: string, lines: string) => string
     previewAnyway: string
     truncated: string
     noInlineTitle: string

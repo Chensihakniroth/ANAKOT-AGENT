@@ -393,26 +393,20 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     // Fit and resize handler — fit.fit() is the single source of truth
     let lastCols = 0
     let lastRows = 0
+    let rafId = 0
 
     const fitAndResize = () => {
       if (disposed || !host.isConnected) return
       if (host.clientWidth <= 0 || host.clientHeight <= 0) return
 
       try {
-        const dimsBefore = { rows: term.rows, cols: term.cols }
         fit.fit()
-        const dimsAfter = { rows: term.rows, cols: term.cols }
-        console.log('[terminal] fit.fit() called, new rows/cols: ' + dimsAfter.rows + '/' + dimsAfter.cols + ' (was ' + dimsBefore.rows + '/' + dimsBefore.cols + ') container=' + host.clientWidth + 'x' + host.clientHeight)
-      } catch (err) {
-        console.log('[terminal] fit.fit() error:', err)
+      } catch {
         return
       }
 
       // Sanity floor — skip transient 0-size frames
-      if (term.rows < 2 || term.cols < 2) {
-        console.log('[terminal] skipping resize, sanity floor: term=' + term.cols + 'x' + term.rows)
-        return
-      }
+      if (term.rows < 2 || term.cols < 2) return
 
       const id = sessionIdRef.current
       if (!id) return
@@ -422,20 +416,24 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
         lastRows = term.rows
         lastCols = term.cols
         lastSentSize = { cols: term.cols, rows: term.rows }
-        console.log('[terminal] resizing PTY to: ' + term.cols + 'x' + term.rows)
         void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
       }
     }
 
-    // ResizeObserver — fires on ANY size change (grow or shrink)
+    // ResizeObserver — debounced via rAF so we only fit once per frame,
+    // not on every single ResizeObserver callback (which can fire 60+ times/sec)
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return
-      requestAnimationFrame(() => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
         if (!disposed) fitAndResize()
       })
     })
     resizeObserver.observe(host)
-    cleanup.push(() => resizeObserver.disconnect())
+    cleanup.push(() => {
+      cancelAnimationFrame(rafId)
+      resizeObserver.disconnect()
+    })
 
     // Data handler
     const dataDisposable = term.onData(data => {

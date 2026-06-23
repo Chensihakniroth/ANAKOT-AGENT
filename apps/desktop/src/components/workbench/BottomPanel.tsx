@@ -30,6 +30,10 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const isDraggingRef = useRef(false)
   const terminalRef = useRef<TerminalTabHandle>(null)
 
+  // Direct DOM resize during drag — bypasses React entirely for smooth 60fps resizing.
+  // Only commits to React state on mouseup (so the rest of the UI sees the final size).
+  const panelRef = useRef<HTMLDivElement>(null)
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     isDraggingRef.current = true
@@ -40,11 +44,22 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       if (!isDraggingRef.current) return
       const delta = startY - e.clientY
       const newHeight = Math.max(120, Math.min(600, startHeight + delta))
-      setPanelHeight(newHeight)
+      // Direct DOM update — no React re-render during drag
+      if (panelRef.current) {
+        panelRef.current.style.height = newHeight + 'px'
+      }
     }
 
     const handleMouseUp = () => {
+      if (!isDraggingRef.current) return
       isDraggingRef.current = false
+      // Commit final height to React state
+      if (panelRef.current) {
+        const finalHeight = parseInt(panelRef.current.style.height, 10)
+        if (!isNaN(finalHeight)) {
+          setPanelHeight(finalHeight)
+        }
+      }
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -72,6 +87,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
 
   return (
     <div
+      ref={panelRef}
       className="shrink-0 grid border-t border-(--ui-stroke-secondary)"
       style={{ height: panelHeight + 'px', gridTemplateRows: '4px 28px 1fr' }}
     >
