@@ -278,13 +278,53 @@ export const slateTheme: DesktopTheme = {
   }
 }
 
+/** Berserk -- Black Swordsman. Blood, iron, and defiance. */
+export const berserkDesktopTheme: DesktopTheme = {
+  name: "berserk",
+  label: "Berserk",
+  description: "Black Swordsman -- blood, iron, and defiance",
+  colors: {
+    background: "#0A0A0A",
+    foreground: "#C8B8A0",
+    card: "#141010",
+    cardForeground: "#C8B8A0",
+    muted: "#1A1414",
+    mutedForeground: "#6B5A5A",
+    popover: "#141010",
+    popoverForeground: "#C8B8A0",
+    primary: "#8B0000",
+    primaryForeground: "#C8B8A0",
+    secondary: "#2A1A1A",
+    secondaryForeground: "#A08030",
+    accent: "#3A1A1A",
+    accentForeground: "#C8B8A0",
+    border: "#2A1A1A",
+    input: "#1A1414",
+    ring: "#8B0000",
+    midground: "#8B0000",
+    composerRing: "#A08030",
+    destructive: "#CC2222",
+    destructiveForeground: "#0A0A0A",
+    sidebarBackground: "#080606",
+    sidebarBorder: "#1A1010",
+    userBubble: "#1A1414",
+    userBubbleBorder: "#2A1A1A",
+  },
+  typography: {
+    fontSans: `"Cinzel", ${SYSTEM_SANS}`,
+    fontMono: `"Fira Code", ${SYSTEM_MONO}`,
+    fontUrl: "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Fira+Code:wght@400;500&display=swap",
+  },
+}
+
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
   nous: nousTheme,
   midnight: midnightTheme,
   ember: emberTheme,
   mono: monoTheme,
   cyberpunk: cyberpunkTheme,
-  slate: slateTheme
+  slate: slateTheme,
+  berserk: berserkDesktopTheme,
 }
 
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)

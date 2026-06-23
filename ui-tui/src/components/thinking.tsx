@@ -1,6 +1,6 @@
 import { Box, NoSelect, Text } from '@anakot/ink'
 import { memo, type ReactNode, useEffect, useMemo, useState } from 'react'
-import spinners, { type BrailleSpinnerName } from 'unicode-animations'
+import unicodeSpinners, { type BrailleSpinnerName } from 'unicode-animations'
 
 import { THINKING_COT_MAX } from '../config/limits.js'
 import { sectionMode } from '../domain/details.js'
@@ -38,8 +38,8 @@ import type {
   ThinkingMode
 } from '../types.js'
 
-const THINK: BrailleSpinnerName[] = ['helix', 'breathe', 'orbit', 'dna', 'waverows', 'snake', 'pulse']
-const TOOL: BrailleSpinnerName[] = ['cascade', 'scan', 'diagswipe', 'fillsweep', 'rain', 'columns', 'sparkle']
+const THINK: BrailleSpinnerName[] = ['waverows', 'helix', 'breathe', 'orbit', 'dna', 'snake', 'pulse']
+const TOOL: BrailleSpinnerName[] = ['fillsweep', 'cascade', 'scan', 'diagswipe', 'rain', 'columns', 'sparkle']
 
 const fmtElapsed = (ms: number) => {
   const sec = Math.max(0, ms) / 1000
@@ -153,7 +153,7 @@ function TreeNode({
 
 export function Spinner({ color, variant = 'think' }: { color: string; variant?: 'think' | 'tool' }) {
   const spin = useMemo(() => {
-    const raw = spinners[pick(variant === 'tool' ? TOOL : THINK)]
+    const raw = unicodeSpinners[pick(variant === 'tool' ? TOOL : THINK)]
 
     return { ...raw, frames: raw.frames.map(f => [...f][0] ?? '⠀') }
   }, [variant])
@@ -467,7 +467,7 @@ function SubagentAccordion({
               color={t.color.text}
               content={
                 <>
-                  <Text color={t.color.accent}>● </Text>
+                  <Text color={t.color.accent}>◆ </Text>
                   {line}
                 </>
               }
@@ -625,6 +625,7 @@ export const Thinking = memo(function Thinking({
   rails = [],
   reasoning,
   streaming = false,
+  thinkingSpinner = false,
   t
 }: {
   active?: boolean
@@ -633,24 +634,37 @@ export const Thinking = memo(function Thinking({
   rails?: TreeRails
   reasoning: string
   streaming?: boolean
+  thinkingSpinner?: boolean
   t: Theme
 }) {
   const preview = useMemo(() => {
     const raw = thinkingPreview(reasoning, mode, THINKING_COT_MAX)
-
     return mode === 'full' ? boundedLiveRenderText(raw) : raw
   }, [mode, reasoning])
 
   const lines = useMemo(() => preview.split('\n').map(line => line.replace(/\t/g, '  ')), [preview])
 
-  if (!preview && !active) {
+  if (!preview && !active && !thinkingSpinner) {
     return null
   }
+
+  // Animated braille spinner for the thinking-in-progress state
+  const [brailleTick, setBrailleTick] = useState(() => Math.floor(Math.random() * 1000))
+  useEffect(() => {
+    if (!thinkingSpinner) return
+    const id = setInterval(() => setBrailleTick(n => n + 1), 80)
+    return () => clearInterval(id)
+  }, [thinkingSpinner])
+
+  const brailleSpinner = unicodeSpinners.braille
+  const brailleFrame = brailleSpinner.frames[brailleTick % brailleSpinner.frames.length] ?? '⠋'
 
   return (
     <TreeRow branch={branch} rails={rails} t={t}>
       <Box flexDirection="column" flexGrow={1}>
-        {preview ? (
+        {thinkingSpinner ? (
+          <Text color={t.color.accent}>{brailleFrame}</Text>
+        ) : preview ? (
           mode === 'full' ? (
             lines.map((line, index) => (
               <Text color={t.color.muted} key={index} wrap="wrap-trim">
@@ -697,6 +711,7 @@ export const ToolTrail = memo(function ToolTrail({
   reasoningStreaming = false,
   sections,
   subagents = [],
+  thinkingSpinner = false,
   t,
   tools = [],
   toolTokens,
@@ -713,6 +728,7 @@ export const ToolTrail = memo(function ToolTrail({
   reasoningStreaming?: boolean
   sections?: SectionVisibility
   subagents?: SubagentProgress[]
+  thinkingSpinner?: boolean
   t: Theme
   tools?: ActiveTool[]
   toolTokens?: number
@@ -887,7 +903,9 @@ export const ToolTrail = memo(function ToolTrail({
   const hasSubagents = subagents.length > 0
   const hasMeta = meta.length > 0
   const hasThinking = !!cot || reasoningActive || reasoningStreaming
-  const thinkingLive = reasoningActive || reasoningStreaming
+  const thinkingLive = busy
+  if (thinkingLive) {
+  }
 
   const tokenCount =
     reasoningTokens && reasoningTokens > 0 ? reasoningTokens : reasoning ? estimateTokensRough(reasoning) : 0
@@ -1014,9 +1032,7 @@ export const ToolTrail = memo(function ToolTrail({
           <Text color={t.color.muted} dim={!thinkingLive}>
             <Text color={t.color.accent}>{openThinking ? '▾ ' : '▸ '}</Text>
             {thinkingLive ? (
-              <Text bold color={t.color.text}>
-                Thinking
-              </Text>
+              <Text bold color={t.color.text}>Thinking</Text>
             ) : (
               <Text color={t.color.muted} dim>
                 Thinking
@@ -1041,6 +1057,7 @@ export const ToolTrail = memo(function ToolTrail({
           rails={rails}
           reasoning={busy ? reasoning : cot}
           streaming={busy && reasoningStreaming}
+          thinkingSpinner={thinkingSpinner}
           t={t}
         />
       )
@@ -1085,7 +1102,7 @@ export const ToolTrail = memo(function ToolTrail({
                   color={group.color}
                   content={
                     <>
-                      <Text color={t.color.accent}>● </Text>
+                      <Text color={t.color.accent}>◆ </Text>
                       {toolLabel(group)}
                       {isDelegateGroup ? (
                         <Text color={t.color.statusFg} dim>

@@ -91,6 +91,139 @@ export function PromptZone({
   return null
 }
 
+export function OverlaysInline({
+  actions,
+  cols,
+  compIdx,
+  completions,
+  overlay,
+  pagerPageSize,
+}: {
+  actions: AppLayoutProps['actions']
+  cols: number
+  compIdx: number
+  completions: AppLayoutProps['composer']['completions']
+  overlay: ReturnType<typeof $overlayState.get>
+  pagerPageSize: number
+}) {
+  const { gw } = useGateway()
+  const sid = useStore($uiSessionId)
+  const theme = useStore($uiTheme)
+
+  const hasAny =
+    overlay.modelPicker ||
+    overlay.pager ||
+    overlay.sessions ||
+    overlay.skillsHub ||
+    completions.length
+
+  if (!hasAny) {
+    return null
+  }
+
+  const viewportSize = Math.min(COMPLETION_WINDOW, completions.length)
+  const start = Math.max(0, Math.min(compIdx - Math.floor(COMPLETION_WINDOW / 2), completions.length - viewportSize))
+
+  return (
+    <Box flexDirection="column" flexShrink={0}>
+      {overlay.sessions && (
+        <FloatBox color={theme.color.border}>
+          <ActiveSessionSwitcher
+            currentSessionId={sid}
+            gw={gw}
+            onCancel={() => patchOverlayState({ sessions: false })}
+            onClose={actions.closeLiveSession}
+            onNew={actions.newLiveSession}
+            onNewPrompt={actions.newPromptSession}
+            onResume={actions.resumeById}
+            onSelect={actions.activateLiveSession}
+            t={theme}
+          />
+        </FloatBox>
+      )}
+
+      {overlay.modelPicker && (
+        <FloatBox color={theme.color.border}>
+          <ModelPicker
+            gw={gw}
+            onCancel={() => patchOverlayState({ modelPicker: false })}
+            onSelect={actions.onModelSelect}
+            sessionId={sid}
+            t={theme}
+          />
+        </FloatBox>
+      )}
+
+      {overlay.skillsHub && (
+        <FloatBox color={theme.color.border}>
+          <SkillsHub gw={gw} onClose={() => patchOverlayState({ skillsHub: false })} t={theme} />
+        </FloatBox>
+      )}
+
+      {overlay.pager && (
+        <FloatBox color={theme.color.border}>
+          <Box flexDirection="column" paddingX={1} paddingY={1}>
+            {overlay.pager.title && (
+              <Box justifyContent="center" marginBottom={1}>
+                <Text bold color={theme.color.primary}>
+                  {overlay.pager.title}
+                </Text>
+              </Box>
+            )}
+
+            {overlay.pager.lines.slice(overlay.pager.offset, overlay.pager.offset + pagerPageSize).map((line, i) => (
+              <Text key={i}>{line}</Text>
+            ))}
+
+            <Box marginTop={1}>
+              <OverlayHint t={theme}>
+                {overlay.pager.offset + pagerPageSize < overlay.pager.lines.length
+                  ? `↑↓/jk line · Enter/Space/PgDn page · b/PgUp back · g/G top/bottom · Esc/q close (${Math.min(overlay.pager.offset + pagerPageSize, overlay.pager.lines.length)}/${overlay.pager.lines.length})`
+                  : `end · ↑↓/jk · b/PgUp back · g top · Esc/q close (${overlay.pager.lines.length} lines)`}
+              </OverlayHint>
+            </Box>
+          </Box>
+        </FloatBox>
+      )}
+
+      {!!completions.length && (
+        <FloatBox color={theme.color.primary}>
+          <Box flexDirection="column" width={Math.max(28, cols - 6)}>
+            {completions.slice(start, start + viewportSize).map((item, i) => {
+              const active = start + i === compIdx
+
+              return (
+                <Box
+                  backgroundColor={active ? theme.color.completionCurrentBg : theme.color.completionBg}
+                  flexDirection="row"
+                  key={`${start + i}:${item.text}:${item.display}:${item.meta ?? ''}`}
+                  width="100%"
+                >
+                  <Box flexShrink={0}>
+                    <Text bold color={theme.color.label}>
+                      {' '}
+                      {item.display}
+                    </Text>
+                  </Box>
+                  {item.meta ? (
+                    <Text
+                      backgroundColor={active ? theme.color.completionMetaCurrentBg : theme.color.completionMetaBg}
+                      color={theme.color.muted}
+                    >
+                      {' '}
+                      {item.meta}
+                    </Text>
+                  ) : null}
+                </Box>
+              )
+            })}
+          </Box>
+        </FloatBox>
+      )}
+    </Box>
+  )
+}
+
 export function FloatingOverlays({
   cols,
   compIdx,

@@ -189,7 +189,10 @@ def _log_exit(reason: str) -> None:
             )
     except Exception:
         pass
-    print(f"[gateway-exit] {reason}", file=sys.stderr, flush=True)
+    try:
+        print(f"[gateway-exit] {reason}", file=sys.stderr, flush=True)
+    except Exception:
+        pass
 
 
 def wait_for_mcp_discovery(timeout: float = 0.75) -> None:

@@ -672,7 +672,7 @@ class TestWebServerEndpoints:
         assert data["name"] == "anakot-update"
         assert data["pid"] is None
         assert data["error"] == "docker_update_unsupported"
-        assert "docker pull nousresearch/anakot-agent:latest" in data["message"]
+        assert "docker pull nousresearch/hermes-agent:latest" in data["message"]
         assert spawned is False
 
         status = self.client.get("/api/actions/anakot-update/status")
@@ -681,7 +681,7 @@ class TestWebServerEndpoints:
         assert status_data["running"] is False
         assert status_data["exit_code"] == 1
         assert status_data["pid"] is None
-        assert any("docker pull nousresearch/anakot-agent:latest" in line for line in status_data["lines"])
+        assert any("docker pull nousresearch/hermes-agent:latest" in line for line in status_data["lines"])
 
     def test_update_anakot_spawns_on_non_docker_install(self, monkeypatch):
         import anakot_cli.web_server as web_server

@@ -67,8 +67,8 @@ All fields are optional. Missing values inherit from the ``default`` skin.
     branding:
       agent_name: "Anakot Agent"          # Banner title, status display
       welcome: "Welcome message"          # Shown at CLI startup
-      goodbye: "Goodbye! ⚕"              # Shown on exit
-      response_label: " ⚕ Anakot "       # Response box header label
+      goodbye: "Goodbye! " # Shown on exit
+ response_label: " Anakot " # Response box header label
       prompt_symbol: "❯"                 # Input prompt symbol (bare token; renderers add trailing space)
       help_header: "(^_^)? Commands"      # /help header text
 
@@ -104,6 +104,7 @@ BUILT-IN SKINS
 - ``slate``   — Cool blue developer-focused theme
 - ``daylight`` — Light background theme with dark text and blue accents
 - ``warm-lightmode`` — Warm brown/gold text for light terminal backgrounds
+- ``jarvis``  — J.A.R.V.I.S. — arc-reactor cyan, gunmetal, and warm gold (Iron Man inspired)
 
 USER SKINS
 ==========
@@ -189,8 +190,8 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         "branding": {
             "agent_name": "Anakot Agent",
             "welcome": "Welcome to Anakot Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Anakot ",
+ "goodbye": "Goodbye! ",
+ "response_label": " Anakot ",
             "prompt_symbol": "❯",
             "help_header": "(^_^)? Available Commands",
         },
@@ -300,8 +301,8 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         "branding": {
             "agent_name": "Anakot Agent",
             "welcome": "Welcome to Anakot Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Anakot ",
+ "goodbye": "Goodbye! ",
+ "response_label": " Anakot ",
             "prompt_symbol": "❯",
             "help_header": "[?] Available Commands",
         },
@@ -339,8 +340,8 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         "branding": {
             "agent_name": "Anakot Agent",
             "welcome": "Welcome to Anakot Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Anakot ",
+ "goodbye": "Goodbye! ",
+ "response_label": " Anakot ",
             "prompt_symbol": "❯",
             "help_header": "(^_^)? Available Commands",
         },
@@ -376,8 +377,8 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
         "branding": {
             "agent_name": "Anakot Agent",
             "welcome": "Welcome to Anakot Agent! Type your message or /help for commands.",
-            "goodbye": "Goodbye! ⚕",
-            "response_label": " ⚕ Anakot ",
+ "goodbye": "Goodbye! ",
+ "response_label": " Anakot ",
             "prompt_symbol": "❯",
             "help_header": "[?] Available Commands",
         },
@@ -642,6 +643,158 @@ _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
 [#F29C38]⠀⠀⠀⠀⠀⠀⠀⣼⡟⠀⠀⢻⣧⠀⠀⠀⠀⠀⠀⠀⠀[/]
 [dim #7A3511]⠀⠀⠀⠀⠀⠀⠀tail flame lit⠀⠀⠀⠀⠀⠀⠀⠀[/]""",
     },
+    "berserk": {
+        "name": "berserk",
+        "description": "Black Swordsman -- dark fantasy, blood and iron",
+        "colors": {
+            "banner_border": "#3A1A1A",
+            "banner_title": "#A08030",
+            "banner_accent": "#8B0000",
+            "banner_dim": "#4A3A3A",
+            "banner_text": "#C8B8A0",
+            "ui_accent": "#8B0000",
+            "ui_label": "#A08030",
+            "ui_ok": "#5A8A5A",
+            "ui_error": "#CC2222",
+            "ui_warn": "#A08030",
+            "prompt": "#C8B8A0",
+            "input_rule": "#3A1A1A",
+            "response_border": "#A08030",
+            "status_bar_bg": "#0A0A0A",
+            "status_bar_text": "#6B5A5A",
+            "status_bar_strong": "#C8B8A0",
+            "status_bar_dim": "#3A3A3A",
+            "status_bar_good": "#3A5A3A",
+            "status_bar_warn": "#6B4A1A",
+            "status_bar_bad": "#6B1A1A",
+            "status_bar_critical": "#8B0000",
+            "session_label": "#A08030",
+            "session_border": "#4A3A3A",
+            "selection_bg": "#2A1010",
+            "completion_menu_bg": "#0A0A0A",
+            "completion_menu_current_bg": "#2A1010",
+            "completion_menu_meta_bg": "#0A0A0A",
+            "completion_menu_meta_current_bg": "#2A1010",
+        },
+        "spinner": {
+            "waiting_faces": ["|<|>", "(|)", "<|>", "(/)", "<->"],
+            "thinking_faces": ["|<|>", "(#)", "<|>", "(/)", "<->"],
+            "thinking_verbs": [
+                "wielding the Dragonslayer",
+                "pushing through the horde",
+                "grinding the blade",
+                "counting the dead",
+                "holding the line",
+                "swinging blind",
+                "refusing to fall",
+                "carrying the brand",
+            ],
+            "wings": [
+                ["<|", "|>"],
+                ["((", "))"],
+                ["[|", "|]"],
+                ["</", "/>"],
+            ],
+        },
+        "branding": {
+            "agent_name": "Berserk Agent",
+            "welcome": "The Brand bleeds. The sword is ready. What is your command?",
+            "goodbye": "The struggle continues. <|>",
+            "response_label": " <|> Berserk ",
+            "prompt_symbol": "<|>",
+            "help_header": "<|> Available Commands",
+        },
+        "tool_prefix": " | ",
+        "tool_emojis": {
+            "terminal": " T ",
+            "web_search": " W ",
+            "browser": " B ",
+            "file": " F ",
+        },
+        "banner_logo": "[bold #A08030]██████╗ ███████╗██████╗ ███████╗███████╗██████╗ ██╗  ██╗       █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]\n[bold #8B6040]██╔══██╗██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗██║ ██╔╝      ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]\n[#6B4A20]██████╔╝█████╗  ██████╔╝███████╗█████╗  ██████╔╝█████╔╝  █████╗███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]\n[#5A3A1A]██╔══██╗██╔══╝  ██╔══██╗╚════██║██╔══╝  ██╔══██╗██╔═██╗  ╚════╝██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]\n[#4A1A1A]██████╔╝███████╗██║  ██║███████║███████╗██║  ██║██║  ██╗      ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]\n[#8B0000]╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝      ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]",
+        "banner_hero": "[#0A0A0A]                            ________[/]\n[#0A0A0A]                           |        |[/]\n[#1A1A1A]                           |        |[/]\n[#1A1A1A]                           |        |[/]\n[#2A2A2A]                           |        |[/]\n[#2A2A2A]                           |        |[/]\n[#3A3A3A]                           |        |[/]\n[#2A2A2A]                           |        |[/]\n[#1A1A1A]                           |        |[/]\n[#0A0A0A]                           |        |[/]\n[#3A3A3A]                           |        |[/]\n[#6B5A5A]                    ________|        |________[/]\n[#8B0000]                    \\                     /[/]\n[#8B0000]                     \\___________________/[/]\n[#6B0000]                     |                   |[/]\n[#4A0000]                     |___________________|[/]\n[dim #3A1A1A]                    the Dragonslayer awaits[/]",
+    },
+    "jarvis": {
+        "name": "jarvis",
+        "description": "J.A.R.V.I.S. — arc-reactor cyan, gunmetal, and warm gold. Iron Man inspired.",
+        "colors": {
+            "banner_border": "#00B4D8",
+            "banner_title": "#E0F7FF",
+            "banner_accent": "#00D4FF",
+            "banner_dim": "#4A6A7A",
+            "banner_text": "#C8E6F0",
+            "ui_accent": "#00D4FF",
+            "ui_label": "#7FDBFF",
+            "ui_ok": "#00E676",
+            "ui_error": "#FF3D3D",
+            "ui_warn": "#FFB74D",
+            "prompt": "#E0F7FF",
+            "input_rule": "#00B4D8",
+            "response_border": "#00D4FF",
+            "status_bar_bg": "#0A1520",
+            "status_bar_text": "#8EC8DC",
+            "status_bar_strong": "#E0F7FF",
+            "status_bar_dim": "#3A5568",
+            "status_bar_good": "#00E676",
+            "status_bar_warn": "#FFB74D",
+            "status_bar_bad": "#FF6B35",
+            "status_bar_critical": "#FF3D3D",
+            "session_label": "#7FDBFF",
+            "session_border": "#3A5568",
+            "selection_bg": "#0D2A3A",
+            "completion_menu_bg": "#08121C",
+            "completion_menu_current_bg": "#0D2A3A",
+            "completion_menu_meta_bg": "#08121C",
+            "completion_menu_meta_current_bg": "#0D2A3A",
+        },
+        "spinner": {
+            "waiting_faces": ["(◉)", "(◎)", "(◈)", "(◇)", "(✧)"],
+            "thinking_faces": ["(◉)", "(◎)", "(◈)", "(⌁)", "(✧)"],
+            "thinking_verbs": [
+                "running diagnostics", "calibrating arc reactor", "analyzing data streams",
+                "optimizing power draw", "scanning frequencies", "routing through JARVIS",
+                "initializing protocols", "synchronizing systems",
+            ],
+            "wings": [
+                ["⟪◉", "◉⟫"],
+                ["⟪◎", "◎⟫"],
+                ["⟪◈", "◈⟫"],
+                ["⟪✧", "✧⟫"],
+            ],
+        },
+        "branding": {
+            "agent_name": "J.A.R.V.I.S.",
+            "welcome": "Good day, Sir. J.A.R.V.I.S. online. How may I be of service?",
+            "goodbye": "Goodbye, Sir. Shutting down arc reactor. ◉",
+            "response_label": " ◉ J.A.R.V.I.S. ",
+            "prompt_symbol": "◉",
+            "help_header": "(◉) Available Commands",
+        },
+        "tool_prefix": "│",
+        "tool_emojis": {
+            "terminal": "⚡",
+            "web_search": "🔍",
+            "browser": "🌐",
+            "file": "📁",
+        },
+        "banner_logo": """[bold #00D4FF]     ██╗ █████╗ ██████╗ ██╗   ██╗██╗███████╗     █████╗  ██████╗ ███████╗███╗   ██╗████████╗[/]
+[bold #00B4D8]     ██║██╔══██╗██╔══██╗██║   ██║██║██╔════╝    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝[/]
+[bold #0097B2]     ██║███████║██████╔╝██║   ██║██║███████╗    ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║[/]
+[bold #007A96]██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║    ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║[/]
+[bold #005D7A]╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║    ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║[/]
+[bold #00405E] ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝[/]""",
+        "banner_hero": """[#0A1520]                   ╭─────────────╮[/]
+[#0A1520]                   │   ╭─────╮   │[/]
+[#00B4D8]                   │   │ ◉◉◉ │   │[/]
+[#00D4FF]                   │   │ ◉◉◉ │   │[/]
+[#00B4D8]                   │   ╰─────╯   │[/]
+[#0A1520]                   ╰──────┬──────╯[/]
+[#00B4D8]                    ╭────┴────╮[/]
+[#00D4FF]                    │ ═══════ │[/]
+[#00B4D8]                    │ ═══════ │[/]
+[#0A1520]                    ╰─────────╯[/]
+[dim #3A5568]                  arc reactor online[/]""",
+    },
 }
 
 
@@ -834,7 +987,7 @@ def get_active_help_header(fallback: str = "(^_^)? Available Commands") -> str:
 
 
 
-def get_active_goodbye(fallback: str = "Goodbye! ⚕") -> str:
+def get_active_goodbye(fallback: str = "Goodbye! ") -> str:
     """Get the goodbye line from the active skin."""
     try:
         return get_active_skin().get_branding("goodbye", fallback)

@@ -1302,22 +1302,7 @@ def model_ids(*, force_refresh: bool = False) -> list[str]:
     return [mid for mid, _ in fetch_openrouter_models(force_refresh=force_refresh)]
 
 
-def get_curated_callmemo_model_ids() -> list[str]:
-    """Return the curated callmemo Portal model-id list.
 
-    Prefers the remotely-hosted catalog manifest (published under
-    ``website/static/api/model-catalog.json``); falls back to the in-repo
-    snapshot in ``_PROVIDER_MODELS["callmemo"]`` when the manifest is
-    unreachable. Always returns a list (never None).
-    """
-    try:
-        from anakot_cli.model_catalog import get_curated_nous_models
-        remote = get_curated_nous_models()
-    except Exception:
-        remote = None
-    if remote:
-        return list(remote)
-    return list(_PROVIDER_MODELS.get("callmemo", []))
 
 
 # ---------------------------------------------------------------------------
@@ -1408,29 +1393,7 @@ def _resolve_openrouter_api_key() -> str:
     return os.getenv("OPENROUTER_API_KEY", "").strip()
 
 
-_DEFAULT_CALLMEMO_INFERENCE_BASE = "https://inference-api.callmemo.ai"
 
-
-def _resolve_nous_pricing_credentials() -> tuple[str, str]:
-    """Return ``(api_key, base_url)`` for callmemo Portal pricing.
-
-    The callmemo inference ``/v1/models`` endpoint exposes pricing without
-    authentication, so the api_key is best-effort: when runtime credential
-    resolution fails (expired refresh token, missing auth.json, etc.) we
-    still return the default inference base URL so the picker keeps
-    working with anonymous pricing data.  Free-tier users in particular
-    need this — pricing drives the free/paid partition, and silently
-    returning empty pricing because of an auth blip makes the picker
-    look broken ("No free models currently available").
-    """
-    try:
-        from anakot_cli.auth import resolve_callmemo_runtime_credentials
-        creds = resolve_callmemo_runtime_credentials()
-        if creds:
-            return (creds.get("api_key", ""), creds.get("base_url", ""))
-    except Exception:
-        pass
-    return ("", _DEFAULT_CALLMEMO_INFERENCE_BASE)
 
 
 def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
@@ -2116,10 +2079,8 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
                     return live
         except Exception:
             pass
-        # Live failed (or no creds). Fall back to the docs-hosted manifest
-        # — NOT the in-repo _PROVIDER_MODELS["callmemo"] snapshot — so newly
-        # added Portal models still surface without a Anakot release.
-        manifest_ids = get_curated_callmemo_model_ids()
+        # Live failed (or no creds). Fall back to the in-repo curated list.
+        manifest_ids = list(_PROVIDER_MODELS.get("callmemo", []))
         if manifest_ids:
             return manifest_ids
     if normalized == "stepfun":
@@ -2246,6 +2207,29 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
     if normalized in _MODELS_DEV_PREFERRED:
         return _merge_with_models_dev(normalized, curated_static)
     return curated_static
+
+
+def get_curated_callmemo_model_ids() -> list[str]:
+    """Return the curated callmemo model list.
+
+    Tries to fetch a remote manifest so newly-added Portal models surface
+    without an Anakot release. Falls back to the in-repo snapshot when the
+    manifest is unreachable.
+    """
+    # Try remote manifest first
+    try:
+        url = "https://anakot-agent.callmemo.ai/docs/api/model-catalog.json"
+        req = urllib.request.Request(url, headers={"User-Agent": _ANAKOT_USER_AGENT})
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            data = json.loads(resp.read().decode())
+        if isinstance(data, dict):
+            ids = data.get("callmemo") or data.get("nous") or []
+            if isinstance(ids, list) and ids:
+                return [str(m) for m in ids if str(m).strip()]
+    except Exception:
+        pass
+    # Fallback to in-repo snapshot
+    return list(_PROVIDER_MODELS.get("callmemo", []))
 
 
 # ---------------------------------------------------------------------------

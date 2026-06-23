@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
-_DOCS_BASE = "https://anakot-agent.callmemo.ai/docs"
+_DOCS_BASE = "https://hermes-agent.nousresearch.com/docs"
 
 
 def _model_config_dict(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -633,10 +633,31 @@ def _print_setup_summary(config: dict, anakot_home):
     print()
     print(color("🚀 Ready to go!", Colors.CYAN, Colors.BOLD))
     print()
-    print(f"   {color('anakot', Colors.GREEN)}              Start chatting")
+
+    # Show the right launch command based on selected interface
+    _display_cfg = config.get("display", {})
+    _interface = _display_cfg.get("interface", "cli")
+    _interface_emoji = {"tui": "🖥️", "web": "🌐", "desktop": "🪟", "cli": "⌨️"}.get(_interface, "▶️")
+    _interface_name = {"tui": "TUI", "web": "Web Dashboard", "desktop": "Desktop App", "cli": "Classic CLI"}.get(_interface, _interface)
+
+    print(f"   Interface: {_interface_emoji} {_interface_name}")
+    print()
+
+    if _interface == "tui":
+        print(f"   {color('anakot', Colors.GREEN)}              Start TUI")
+        print(f"   {color('anakot --tui', Colors.GREEN)}        Start TUI (explicit)")
+    elif _interface == "web":
+        print(f"   {color('anakot dashboard', Colors.GREEN)}   Start Web Dashboard")
+        print(f"   Then open: http://localhost:9119")
+    elif _interface == "desktop":
+        print(f"   {color('anakot desktop', Colors.GREEN)}      Start Desktop App")
+    else:
+        print(f"   {color('anakot', Colors.GREEN)}              Start chatting")
+
     print(f"   {color('anakot gateway', Colors.GREEN)}      Start messaging gateway")
     print(f"   {color('anakot doctor', Colors.GREEN)}       Check for issues")
     print()
+    print(f"   {color('anakot setup interface', Colors.GREEN)}  Change interface anytime")
 
 
 def _prompt_container_resources(config: dict):
@@ -1430,7 +1451,207 @@ def setup_terminal_backend(config: dict):
 
 
 # =============================================================================
-# Section 3: Agent Settings
+# Section 2b: Interface Selection
+# =============================================================================
+
+def _desktop_app_available() -> bool:
+    """Check if the desktop app is already installed."""
+    import platform as _plat
+    system = _plat.system()
+    if system == "Windows":
+        # Check common install locations
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        if local_app_data:
+            desktop_path = Path(local_app_data) / "Anakot" / "Anakot.exe"
+            if desktop_path.exists():
+                return True
+        # Also check if `anakot desktop` can find a build
+        desktop_dist = PROJECT_ROOT / "apps" / "desktop" / "dist"
+        if desktop_dist.exists():
+            return True
+    elif system == "Darwin":
+        mac_path = Path("/Applications/Anakot.app")
+        if mac_path.exists():
+            return True
+    else:
+        # Linux — check common paths
+        for p in [
+            Path.home() / ".local" / "share" / "Anakot" / "Anakot",
+            Path("/usr/local/bin/anakot-desktop"),
+            Path("/opt/Anakot/Anakot"),
+        ]:
+            if p.exists():
+                return True
+    return False
+
+
+def _launch_desktop_app():
+    """Attempt to launch the desktop app."""
+    import platform as _plat
+    import subprocess
+    system = _plat.system()
+    try:
+        if system == "Windows":
+            local_app_data = os.environ.get("LOCALAPPDATA", "")
+            exe = Path(local_app_data) / "Anakot" / "Anakot.exe"
+            if exe.exists():
+                subprocess.Popen([str(exe)], cwd=str(exe.parent))
+                return True
+        elif system == "Darwin":
+            mac_path = Path("/Applications/Anakot.app")
+            if mac_path.exists():
+                subprocess.Popen(["open", str(mac_path)])
+                return True
+        else:
+            for p in [
+                Path.home() / ".local" / "share" / "Anakot" / "Anakot",
+                Path("/usr/local/bin/anakot-desktop"),
+            ]:
+                if p.exists():
+                    subprocess.Popen([str(p)], cwd=str(p.parent))
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def setup_interface(config: dict):
+    """Configure the user interface: Web Dashboard, TUI, or Desktop App."""
+    display_cfg = config.setdefault("display", {})
+    current = display_cfg.get("interface", "cli")
+
+    interface_labels = {
+        "cli": "Classic CLI (terminal REPL)",
+        "tui": "TUI — Terminal UI (Ink/React, modern terminal interface)",
+        "web": "Web Dashboard (browser-based, includes embedded TUI)",
+        "desktop": "Desktop App (native Electron app, no terminal needed)",
+    }
+    current_label = interface_labels.get(current, current)
+
+    print()
+    print_header("Interface Selection")
+    print_info("Choose how you want to interact with Anakot.")
+    print_info(f"Current: {current_label}")
+    print()
+
+    choices = [
+        "TUI — modern terminal interface (recommended for terminal users)",
+        "Web Dashboard — browser-based with embedded TUI at http://localhost:9119",
+        "Desktop App — native GUI app (Electron, no terminal needed)",
+        "Classic CLI — traditional terminal REPL (prompt_toolkit)",
+    ]
+    providers = ["tui", "web", "desktop", "cli"]
+
+    # Determine default index based on current setting
+    default_idx = 0
+    if current in providers:
+        default_idx = providers.index(current)
+
+    idx = prompt_choice("Select your preferred interface:", choices, default_idx)
+    selected = providers[idx]
+
+    if selected == current:
+        print_info(f"Keeping current interface: {interface_labels[selected]}")
+        return
+
+    if selected == "tui":
+        display_cfg["interface"] = "tui"
+        save_config(config)
+        print()
+        print_success("Interface set to: TUI (Terminal UI)")
+        print()
+        print_info("Launch with:  anakot --tui")
+        print_info("Or just:      anakot  (if display.interface is set to 'tui')")
+        print()
+        print_info("The TUI is a modern React/Ink terminal interface with:")
+        print_info("  • Streaming responses, tool activity, and thinking display")
+        print_info("  • Slash commands (/help, /status, /compact, etc.)")
+        print_info("  • Mouse support, copy/paste, and more")
+        print_info(f"  Docs: {_DOCS_BASE}/user-guide/tui")
+
+    elif selected == "web":
+        display_cfg["interface"] = "web"
+        # Also set dashboard to auto-start or show how to start it
+        save_config(config)
+        print()
+        print_success("Interface set to: Web Dashboard")
+        print()
+        print_info("Launch with:  anakot dashboard")
+        print_info("Then open:    http://localhost:9119")
+        print()
+        print_info("The Web Dashboard includes:")
+        print_info("  • Embedded TUI terminal in your browser (xterm.js)")
+        print_info("  • Session management, config editor, model picker")
+        print_info("  • Tool event sidebar, analytics, cron management")
+        print_info(f"  Docs: {_DOCS_BASE}/user-guide/dashboard")
+
+    elif selected == "desktop":
+        display_cfg["interface"] = "desktop"
+        save_config(config)
+        print()
+        print_success("Interface set to: Desktop App")
+        print()
+
+        if _desktop_app_available():
+            print_info("Desktop app is already installed!")
+            if prompt_yes_no("Launch the desktop app now?", True):
+                if _launch_desktop_app():
+                    print_success("Desktop app launched!")
+                else:
+                    print_warning("Could not launch automatically.")
+                    print_info("Launch with:  anakot desktop")
+        else:
+            print_info("The desktop app is not installed yet.")
+            print_info("It's a native Electron app — same agent, same skills,")
+            print_info("same memory, in a polished native window.")
+            print()
+            if prompt_yes_no("Install and launch the desktop app now?", True):
+                print()
+                print_info("Building and launching the desktop app...")
+                print_info("(This may take a few minutes on first run)")
+                print()
+                import subprocess
+                import sys
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-m", "anakot_cli.main", "desktop"],
+                        cwd=str(PROJECT_ROOT),
+                        timeout=600,
+                    )
+                    if result.returncode == 0:
+                        print_success("Desktop app launched!")
+                    else:
+                        print_warning("Desktop app build/launch exited with an error.")
+                        print_info("Try manually:  anakot desktop")
+                except subprocess.TimeoutExpired:
+                    print_warning("Build timed out. Try manually:  anakot desktop")
+                except FileNotFoundError:
+                    print_warning("Could not find the desktop app entry point.")
+                    print_info("Try manually:  anakot desktop")
+            else:
+                print_info("You can install it later with:  anakot desktop")
+
+        print()
+        print_info("The Desktop App includes:")
+        print_info("  • Native chat with streaming tool output")
+        print_info("  • Side-by-side previews (web, files, tool outputs)")
+        print_info("  • File browser, voice input/output, settings UI")
+        print_info("  • Built-in updates")
+        print_info(f"  Docs: {_DOCS_BASE}/user-guide/desktop")
+
+    elif selected == "cli":
+        display_cfg["interface"] = "cli"
+        save_config(config)
+        print()
+        print_success("Interface set to: Classic CLI")
+        print()
+        print_info("Launch with:  anakot")
+        print()
+        print_info("The Classic CLI is the traditional terminal REPL:")
+        print_info("  • Rich formatting with prompt_toolkit")
+        print_info("  • Autocomplete, command history, skill commands")
+        print_info("  • Kawaii spinner and tool activity feed")
+        print_info(f"  Docs: {_DOCS_BASE}/user-guide/cli")
 # =============================================================================
 
 
@@ -2801,6 +3022,7 @@ SETUP_SECTIONS = [
     ("model", "Model & Provider", setup_model_provider),
     ("tts", "Text-to-Speech", setup_tts),
     ("terminal", "Terminal Backend", setup_terminal_backend),
+    ("interface", "Interface Selection", setup_interface),
     ("gateway", "Messaging Platforms (Gateway)", setup_gateway),
     ("tools", "Tools", setup_tools),
     ("agent", "Agent Settings", setup_agent_settings),
@@ -2899,6 +3121,7 @@ def run_setup_wizard(args):
       anakot setup model     — just model/provider
       anakot setup tts       — just text-to-speech
       anakot setup terminal  — just terminal backend
+      anakot setup interface — just interface selection (TUI/Web/Desktop/CLI)
       anakot setup gateway   — just messaging platforms
       anakot setup tools     — just tool configuration
       anakot setup agent     — just agent settings
@@ -2999,7 +3222,7 @@ def run_setup_wizard(args):
     )
     print(
         color(
-            "│             ⚕ Anakot Agent Setup Wizard                │", Colors.MAGENTA
+            "│ Anakot Agent Setup Wizard │", Colors.MAGENTA
         )
     )
     print(
@@ -3098,6 +3321,10 @@ def run_setup_wizard(args):
     # Section 2: Terminal Backend
     if not (migration_ran and _skip_configured_section(config, "terminal", "Terminal Backend")):
         setup_terminal_backend(config)
+
+    # Section 2b: Interface Selection
+    if not (migration_ran and _skip_configured_section(config, "display", "Interface Selection")):
+        setup_interface(config)
 
     # Section 3: Agent Settings — no longer prompted. First installs get the
     # recommended defaults silently; existing installs keep whatever they have.
@@ -3198,6 +3425,9 @@ def _run_first_time_quick_setup(config: dict, anakot_home, is_existing: bool):
 
     # Step 2: Terminal Backend — where commands run is a core decision
     setup_terminal_backend(config)
+
+    # Step 2b: Interface Selection
+    setup_interface(config)
 
     # Step 3: Apply defaults for everything else
     _apply_default_agent_settings(config)

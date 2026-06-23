@@ -87,7 +87,19 @@ except ImportError:
             f"Install with: {sys.executable} -m pip install 'fastapi' 'uvicorn[standard]'"
         )
 
-WEB_DIST = Path(os.environ["ANAKOT_WEB_DIST"]) if "ANAKOT_WEB_DIST" in os.environ else Path(__file__).parent / "web_dist"
+_env_dist = os.environ.get("ANAKOT_WEB_DIST", "")
+if _env_dist and Path(_env_dist).exists():
+    WEB_DIST = Path(_env_dist)
+else:
+    # 1. Same directory as this file (editable/dev install)
+    _dist = Path(__file__).parent / "web_dist"
+    if not _dist.exists():
+        # 2. Project root / anakot_cli / web_dist
+        _dist = Path(__file__).parent.parent / "anakot_cli" / "web_dist"
+    if not _dist.exists():
+        # 3. Fallback: assume CWD is the project root
+        _dist = Path.cwd() / "anakot_cli" / "web_dist"
+    WEB_DIST = _dist
 _log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -293,7 +305,10 @@ async def host_header_middleware(request: Request, call_next):
     # Store the bound host on app.state so this middleware can read it —
     # set by start_server() at listen time.
     bound_host = getattr(app.state, "bound_host", None)
-    if bound_host:
+    # When allow_public is True (--insecure), the operator has explicitly
+    # opted into non-loopback access. Skip host validation entirely — it
+    # blocks reverse proxies like ngrok that forward with their own Host.
+    if bound_host and not getattr(app.state, "allow_public", False):
         host_header = request.headers.get("host", "")
         if not _is_accepted_host(host_header, bound_host):
             return JSONResponse(
@@ -387,12 +402,12 @@ _SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
     "display.skin": {
         "type": "select",
         "description": "CLI visual theme",
-        "options": ["default", "ares", "mono", "slate"],
+        "options": ["default", "ares", "mono", "slate", "berserk"],
     },
     "dashboard.theme": {
         "type": "select",
         "description": "Web dashboard visual theme",
-        "options": ["default", "midnight", "ember", "mono", "cyberpunk", "rose"],
+        "options": ["default", "midnight", "ember", "mono", "cyberpunk", "berserk", "rose"],
     },
     "display.resume_display": {
         "type": "select",
@@ -988,52 +1003,6 @@ def _safe_call(mod, fn_name: str, default):
         return fn() if callable(fn) else default
     except Exception:
         return default
-
-
-# ---------------------------------------------------------------------------
-# Portal endpoint — callmemo Portal auth + Tool Gateway routing status (read-only).
-# ---------------------------------------------------------------------------
-
-
-@app.get("/api/portal")
-async def get_portal_status():
-    cfg = load_config() or {}
-    auth: Dict[str, Any] = {}
-    try:
-        from anakot_cli.auth import get_nous_auth_status
-
-        auth = get_nous_auth_status() or {}
-    except Exception:
-        auth = {}
-
-    features = []
-    try:
-        from anakot_cli.callmemo_subscription import get_callmemo_subscription_features
-
-        feats = get_callmemo_subscription_features(cfg)
-        if feats is not None:
-            for feat in feats.items():
-                if getattr(feat, "managed_by_nous", False):
-                    state = "via callmemo Portal"
-                elif getattr(feat, "active", False) and getattr(feat, "current_provider", None):
-                    state = feat.current_provider
-                elif getattr(feat, "active", False):
-                    state = "active"
-                else:
-                    state = "not configured"
-                features.append({"label": getattr(feat, "label", ""), "state": state})
-    except Exception:
-        _log.exception("portal features failed")
-
-    model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
-    return {
-        "logged_in": bool(auth.get("logged_in")),
-        "portal_url": auth.get("portal_base_url"),
-        "inference_url": auth.get("inference_base_url"),
-        "provider": str((model_cfg or {}).get("provider") or ""),
-        "subscription_url": "https://portal.callmemo.ai/manage-subscription",
-        "features": features,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -8009,14 +7978,14 @@ async def get_models_analytics(days: int = 30):
 # though uvicorn binds to 127.0.0.1.
 # ---------------------------------------------------------------------------
 
-# PTY bridge is POSIX-only (depends on fcntl/termios/ptyprocess).  On native
-# Windows the import raises; catch and leave PtyBridge=None so the rest of
-# the dashboard (sessions, jobs, metrics, config editor) still loads and the
-# /api/pty endpoint cleanly refuses with a WSL-suggested message.
+# PTY bridge — cross-platform.  On POSIX we use ptyprocess; on Windows we
+# use pywinpty (ConPTY).  The import can still fail if neither backend's
+# dependency is installed; catch and leave PtyBridge=None so the rest of the
+# dashboard still loads and the /api/pty endpoint cleanly refuses.
 try:
     from anakot_cli.pty_bridge import PtyBridge, PtyUnavailableError
     _PTY_BRIDGE_AVAILABLE = True
-except ImportError as _pty_import_err:  # pragma: no cover - Windows-only path
+except ImportError as _pty_import_err:  # pragma: no cover - missing dep
     PtyBridge = None  # type: ignore[assignment]
     _PTY_BRIDGE_AVAILABLE = False
 
@@ -8291,6 +8260,10 @@ def _resolve_chat_argv(
     # the dashboard PTY path.
     env.setdefault("ANAKOT_TUI_DISABLE_MOUSE", "1")
     env.setdefault("ANAKOT_TUI_INLINE", "1")
+    # Force UTF-8 I/O encoding for Python subprocesses spawned by the TUI
+    # (gateway, agent, tools).  On Windows the default is cp1252 which
+    # crashes on UTF-8 bytes that the Node.js TUI writes to the PTY.
+    env.setdefault("PYTHONIOENCODING", "utf-8")
 
     if resume:
         latest_resume, _latest_path = _session_latest_descendant(resume)
@@ -8451,14 +8424,13 @@ async def pty_ws(ws: WebSocket) -> None:
     await ws.accept()
     _log.info("pty accepted peer=%s mode=%s cred=%s", peer, mode, cred)
 
-    # On native Windows, the POSIX PTY bridge can't be imported.  Tell the
-    # client and close cleanly rather than pretending the feature works.
     if not _PTY_BRIDGE_AVAILABLE:
         await ws.send_text(
-            "\r\n\x1b[31mChat unavailable: the embedded terminal requires a "
-            "POSIX PTY, which native Windows Python doesn't provide.\x1b[0m\r\n"
-            "\x1b[33mInstall Anakot inside WSL2 to use the dashboard's /chat "
-            "tab — the rest of the dashboard works here.\x1b[0m\r\n"
+            "\r\n\x1b[31mChat unavailable: pseudo-terminal support is not "
+            "available.\x1b[0m\r\n"
+            "\x1b[33mInstall the platform PTY package: "
+            "pip install pywinpty (Windows) or pip install ptyprocess "
+            "(Linux/macOS).\x1b[0m\r\n"
         )
         await ws.close(code=1011)
         return
@@ -8502,6 +8474,18 @@ async def pty_ws(ws: WebSocket) -> None:
                 await asyncio.sleep(0)
                 continue
             try:
+                # Log a short preview for debugging PTY → WebSocket forwarding.
+                try:
+                    preview = chunk[:256]
+                    # Prefer a UTF-8 preview when printable, otherwise hex.
+                    try:
+                        s = preview.decode("utf-8")
+                        _log.info("pty->ws chunk len=%d preview=%r", len(chunk), s)
+                    except Exception:
+                        _log.info("pty->ws chunk len=%d preview_hex=%s", len(chunk), binascii.hexlify(preview))
+                except Exception:
+                    _log.info("pty->ws chunk len=%d (preview unavailable)", len(chunk))
+
                 await ws.send_bytes(chunk)
             except Exception:
                 return
@@ -8804,8 +8788,9 @@ _BUILTIN_DASHBOARD_THEMES = [
     {"name": "midnight",      "label": "Midnight",            "description": "Deep blue-violet with cool accents"},
     {"name": "ember",     "label": "Ember",          "description": "Warm crimson and bronze — forge vibes"},
     {"name": "mono",      "label": "Mono",           "description": "Clean grayscale — minimal and focused"},
-    {"name": "cyberpunk", "label": "Cyberpunk",      "description": "Neon green on black — matrix terminal"},
-    {"name": "rose",      "label": "Rosé",           "description": "Soft pink and warm ivory — easy on the eyes"},
+    {"name": "cyberpunk", "label": "Cyberpunk",      "description": "Neon green on black -- matrix terminal"},
+    {"name": "berserk",   "label": "Berserk",        "description": "Black Swordsman -- blood, iron, and defiance"},
+    {"name": "rose",      "label": "Rosé",           "description": "Soft pink and warm ivory -- easy on the eyes"},
 ]
 
 
@@ -9704,6 +9689,7 @@ def start_server(
     # uses this to decide whether to refuse the bind, log the gate-on
     # banner, and enable uvicorn proxy_headers.
     app.state.auth_required = should_require_auth(host, allow_public)
+    app.state.allow_public = allow_public
 
     if app.state.auth_required:
         # Phase 3.5: the gate engages on non-loopback binds.  The legacy

@@ -14,6 +14,27 @@ import { openExternalUrl } from './lib/openExternalUrl.js'
 import { recordParentLifecycle } from './lib/parentLog.js'
 import { resetTerminalModes } from './lib/terminalModes.js'
 
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+const _tuiCrashLog = join(tmpdir(), 'anakot-tui-crash.log')
+process.on('uncaughtException', (err) => {
+  try {
+    const msg = `${new Date().toISOString()} uncaughtException: ${err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err)}\n`
+    writeFileSync(_tuiCrashLog, msg, { encoding: 'utf-8' })
+  } catch {}
+  process.stderr.write(`FATAL: ${err}\nCrash log: ${_tuiCrashLog}\n`)
+  process.exit(1)
+})
+process.on('unhandledRejection', (err) => {
+  try {
+    const msg = `${new Date().toISOString()} unhandledRejection: ${err instanceof Error ? `${err.name}: ${err.message}\n${err.stack}` : String(err)}\n`
+    writeFileSync(_tuiCrashLog, msg, { encoding: 'utf-8' })
+  } catch {}
+  process.stderr.write(`FATAL (rejection): ${err}\nCrash log: ${_tuiCrashLog}\n`)
+  process.exit(1)
+})
+
 if (!process.stdin.isTTY) {
   console.log('anakot-tui: no TTY')
   process.exit(0)
@@ -43,8 +64,6 @@ setupGracefulExit({
   cleanups: [
     () => {
       resetTerminalModes()
-
-      return gw.kill('graceful-exit-cleanup')
     }
   ],
   onError: (scope, err) => {

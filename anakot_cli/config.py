@@ -359,7 +359,7 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     container detection here:
       - the curl installer (scripts/install.sh, the README/website install
         command) git-clones the repo and stamps ``git``;
-      - the published ``nousresearch/anakot-agent`` image stamps ``docker``
+      - the published ``nousresearch/hermes-agent`` image stamps ``docker``
         at boot via ``docker/stage2-hook.sh``.
     An unsupported manual install dropped into a container (no stamp) was
     wrongly classified as the published image by bare container detection,
@@ -429,7 +429,7 @@ def recommended_update_command_for_method(method: str) -> str:
     if method == "homebrew":
         return "brew upgrade anakot-agent"
     if method == "docker":
-        return "docker pull nousresearch/anakot-agent:latest"
+        return "docker pull nousresearch/hermes-agent:latest"
     if method == "pip":
         if is_uv_tool_install():
             return "uv tool upgrade anakot-agent"
@@ -467,23 +467,23 @@ def recommended_update_command() -> str:
 _DOCKER_UPDATE_MESSAGE = """\
 ✗ ``anakot update`` doesn't apply inside the Docker container.
 
-Anakot Agent runs as a published image (nousresearch/anakot-agent), not a
+Anakot Agent runs as a published image (nousresearch/hermes-agent), not a
 git checkout — the container has no working tree to pull into.  Update by
 pulling a fresh image and restarting your container instead:
 
-  docker pull nousresearch/anakot-agent:latest
+  docker pull nousresearch/hermes-agent:latest
   # then restart whatever started the container, e.g.:
   docker compose up -d --force-recreate anakot-agent
   # or, for ad-hoc runs, exit the current container and `docker run` again
 
 Verify the new version after restart:
-  docker run --rm nousresearch/anakot-agent:latest --version
+  docker run --rm nousresearch/hermes-agent:latest --version
 
 Notes:
   • If you pinned a specific tag (e.g. ``:v0.14.0``) the ``:latest`` tag
     won't move your container — pull the newer tag you actually want, or
     switch to ``:latest`` / ``:main`` for rolling updates.  See available
-    tags at https://hub.docker.com/r/nousresearch/anakot-agent/tags
+    tags at https://hub.docker.com/r/nousresearch/hermes-agent/tags
   • Your config and session history live under ``$ANAKOT_HOME`` (``/opt/data``
     in the container, typically bind-mounted from the host) and persist
     across image upgrades — re-pulling doesn't lose any state.
@@ -1352,7 +1352,7 @@ DEFAULT_CONFIG = {
         #   "tui" — the modern Ink TUI (same as passing `--tui`)
         # Explicit flags always win over this setting: `--cli` forces the classic
         # REPL and `--tui` (or ANAKOT_TUI=1) forces the TUI regardless of config.
-        "interface": "cli",
+        "interface": "tui",
         # When true, `anakot --tui` auto-resumes the most recent human-
         # facing session on launch instead of forging a fresh one.
         # Mirrors `anakot -c` muscle memory.  Default off so existing
@@ -1868,7 +1868,7 @@ DEFAULT_CONFIG = {
     # WhatsApp platform settings (gateway mode)
     "whatsapp": {
         # Reply prefix prepended to every outgoing WhatsApp message.
-        # Default (None) uses the built-in "⚕ *Anakot Agent*" header.
+ # Default (None) uses the built-in " *Anakot Agent*" header.
         # Set to "" (empty string) to disable the header entirely.
         # Supports \n for newlines, e.g. "🤖 *My Bot*\n──────\n"
     },
@@ -5747,7 +5747,7 @@ def show_config():
     
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.CYAN))
-    print(color("│              ⚕ Anakot Configuration                    │", Colors.CYAN))
+    print(color("│ Anakot Configuration │", Colors.CYAN))
     print(color("└─────────────────────────────────────────────────────────┘", Colors.CYAN))
     
     # Paths

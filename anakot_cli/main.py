@@ -1581,6 +1581,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             env={**os.environ, "CI": "1"},
         )
         if result.returncode != 0:
@@ -1605,6 +1607,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
             cwd=str(ink_dir),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             combined = f"{result.stdout or ''}{result.stderr or ''}".strip()
@@ -1622,7 +1626,12 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
     # Desktop/dev launches retain the historical "always rebuild" behaviour.
     # Termux cold starts use the freshness check because esbuild startup is
     # expensive on old mobile CPUs.
-    should_build = True
+    # Pre-built TUI: skip rebuild when dist/entry.js exists without node_modules.
+    dist_entry = tui_dir / "dist" / "entry.js"
+    if dist_entry.is_file() and not (tui_dir / "node_modules").is_dir():
+        should_build = False
+    else:
+        should_build = True
     if termux_startup:
         should_build = did_install or termux_need_rebuild
 
@@ -1764,6 +1773,10 @@ def _launch_tui(
     import tempfile
 
     env = os.environ.copy()
+    # Force UTF-8 I/O encoding for Python subprocesses spawned inside the TUI
+    # (gateway, agent, tools).  On Windows the default is cp1252 which crashes
+    # on UTF-8 bytes that the Node.js TUI writes to the PTY.
+    env.setdefault("PYTHONIOENCODING", "utf-8")
     active_session_fd, active_session_file = tempfile.mkstemp(
         prefix="anakot-tui-active-session-", suffix=".json"
     )
@@ -1894,7 +1907,7 @@ def _launch_tui(
         from anakot_cli.relaunch import relaunch
 
         print()
-        print("⚕ Launching update...")
+        print(" Launching update...")
         print()
         relaunch(["update"], preserve_inherited=False)
 
@@ -1949,7 +1962,7 @@ def _resolve_use_tui(args) -> bool:
       1. ``--cli`` flag         → always classic REPL
       2. ``--tui`` flag / ``ANAKOT_TUI=1`` → always TUI
       3. ``display.interface`` config value ("cli" | "tui")
-      4. default → classic REPL
+      4. default → TUI
 
     Explicit flags always win over config so muscle memory and scripts keep
     working regardless of the configured default.
@@ -1961,10 +1974,10 @@ def _resolve_use_tui(args) -> bool:
     try:
         from anakot_cli.config import load_config
 
-        iface = (load_config().get("display", {}) or {}).get("interface", "cli")
+        iface = (load_config().get("display", {}) or {}).get("interface", "tui")
         return isinstance(iface, str) and iface.strip().lower() == "tui"
     except Exception:
-        return False
+        return True
 
 
 def cmd_chat(args):
@@ -2178,7 +2191,7 @@ def cmd_whatsapp(args):
     from anakot_cli.config import get_env_value, save_env_value
 
     print()
-    print("⚕ WhatsApp Setup")
+    print(" WhatsApp Setup")
     print("=" * 50)
 
     # ── Step 1: Choose mode ──────────────────────────────────────────────
@@ -2379,14 +2392,14 @@ def cmd_whatsapp(args):
             print("    2. Send a message to the bot's WhatsApp number")
             print("    3. The agent will reply automatically")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ Anakot Agent'")
+            print(" Tip: Agent responses are prefixed with ' Anakot Agent'")
         else:
             print("  Next steps:")
             print("    1. Start the gateway:  anakot gateway")
             print("    2. Open WhatsApp → Message Yourself")
             print("    3. Type a message — the agent will reply")
             print()
-            print("  Tip: Agent responses are prefixed with '⚕ Anakot Agent'")
+            print(" Tip: Agent responses are prefixed with ' Anakot Agent'")
             print("  so you can tell them apart from your own messages.")
         print()
         print("  Or install as a service: anakot gateway install")
@@ -2407,8 +2420,7 @@ def cmd_postinstall(args):
     from anakot_cli.dep_ensure import ensure_dependency
 
     stamp_install_method("pip")
-
-    print("⚕ Anakot post-install bootstrap")
+    print(" Anakot post-install bootstrap")
     print()
 
     for dep in ("node", "browser", "ripgrep", "ffmpeg"):
@@ -6905,6 +6917,14 @@ def _web_ui_build_needed(web_dir: Path) -> bool:
         sentinel = dist_dir / "index.html"
     if not sentinel.exists():
         return True
+    # A real Vite build always produces hashed assets under assets/.
+    # When the manifest is missing and we fall back to index.html as the
+    # sentinel, verify assets/ is present and non-empty — otherwise the
+    # dist is incomplete (partial/failed build) and must be rebuilt.
+    if sentinel.name == "index.html":
+        assets_dir = dist_dir / "assets"
+        if not assets_dir.is_dir() or not any(assets_dir.iterdir()):
+            return True
     dist_mtime = sentinel.stat().st_mtime
     skip = frozenset({"node_modules", "dist"})
     for dirpath, dirnames, filenames in os.walk(web_dir, topdown=True):
@@ -8074,7 +8094,7 @@ def _update_via_zip(args):
         )
         sys.exit(1)
     zip_url = (
-        f"https://github.com/callmemo/anakot-agent/archive/refs/heads/{branch}.zip"
+        f"https://github.com/Chensihakniroth/ANAKOT-AGENT/archive/refs/heads/{branch}.zip"
     )
 
     print("→ Downloading latest version...")
@@ -8472,8 +8492,12 @@ OFFICIAL_REPO_URLS = {
     "git@github.com:callmemo/anakot-agent.git",
     "https://github.com/callmemo/anakot-agent",
     "git@github.com:callmemo/anakot-agent",
+    "https://github.com/Chensihakniroth/ANAKOT-AGENT.git",
+    "git@github.com:Chensihakniroth/ANAKOT-AGENT.git",
+    "https://github.com/Chensihakniroth/ANAKOT-AGENT",
+    "git@github.com:Chensihakniroth/ANAKOT-AGENT",
 }
-OFFICIAL_REPO_URL = "https://github.com/callmemo/anakot-agent.git"
+OFFICIAL_REPO_URL = "https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
 SKIP_UPSTREAM_PROMPT_FILE = ".skip_upstream_prompt"
 
 
@@ -8607,7 +8631,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
         # Ask user if they want to add upstream
         print()
         print("ℹ Your fork is not tracking the official Anakot repository.")
-        print("  This means you may miss updates from callmemo/anakot-agent.")
+        print("  This means you may miss updates from Chensihakniroth/ANAKOT-AGENT.")
         print()
         try:
             response = (
@@ -8621,7 +8645,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
             print("→ Adding upstream remote...")
             if _add_upstream_remote(git_cmd, cwd):
                 print(
-                    "  ✓ Added upstream: https://github.com/callmemo/anakot-agent.git"
+                    "  ✓ Added upstream: https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
                 )
                 has_upstream = True
             else:
@@ -8629,7 +8653,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
                 return
         else:
             print(
-                "  Skipped. Run 'git remote add upstream https://github.com/callmemo/anakot-agent.git' to add later."
+                "  Skipped. Run 'git remote add upstream https://github.com/Chenshakniroth/ANAKOT-AGENT.git' to add later."
             )
             _mark_skip_upstream_prompt()
             return
@@ -9857,7 +9881,7 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
         elif result == 0:
             print("✓ Already up to date.")
         else:
-            print("⚕ Update available on PyPI.")
+            print(" Update available on PyPI.")
             print(f"  Run '{recommended_update_command()}' to install.")
         return
 
@@ -9947,7 +9971,7 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
         print("✓ Already up to date.")
     else:
         commits_word = "commit" if behind == 1 else "commits"
-        print(f"⚕ Update available: {behind} {commits_word} behind {compare_branch}.")
+        print(f" Update available: {behind} {commits_word} behind {compare_branch}.")
         from anakot_cli.config import recommended_update_command
 
         print(f"  Run '{recommended_update_command()}' to install.")
@@ -10321,7 +10345,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("Could not read updates.non_interactive_local_changes: %s", exc)
             discard_local_changes = False
 
-    print("⚕ Updating Anakot Agent...")
+    print(" Updating Anakot Agent...")
     print()
 
     # On Windows, abort early if another anakot.exe is holding the venv shim
@@ -10354,9 +10378,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if method == "pip":
                 _cmd_update_pip(args)
                 return
-            print("✗ Not a git repository. Please reinstall:")
+            print("✗ Not a git repository. Please reinstall from:")
             print(
-                "  curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash"
+                "  https://github.com/Chensihakniroth/ANAKOT-AGENT"
             )
             sys.exit(1)
 
@@ -12430,9 +12454,23 @@ def cmd_dashboard(args):
     # backend is the desktop's primary entrypoint and needs the same.
     _sync_bundled_skills_quietly()
 
+    # Build the web UI if needed. In a dev checkout the source is at
+    # PROJECT_ROOT/web and we run npm. In a system-wide install the dist
+    # should already be pre-built; skip the npm step and just verify.
     if "ANAKOT_WEB_DIST" not in os.environ and not getattr(args, "skip_build", False):
-        if not _build_web_ui(PROJECT_ROOT / "web", fatal=True):
-            sys.exit(1)
+        _web_src = PROJECT_ROOT / "web"
+        if _web_src.exists():
+            if not _build_web_ui(_web_src, fatal=True):
+                sys.exit(1)
+        else:
+            # System-wide install: no source tree, dist should be pre-built.
+            _dist_root = PROJECT_ROOT / "anakot_cli" / "web_dist"
+            if not (_dist_root / "index.html").exists():
+                print("✗ Web UI dist not found and no web source to build from.")
+                print(f"  Expected dist at: {_dist_root}")
+                print("  Reinstall with web_dist included, or run from a dev checkout.")
+                sys.exit(1)
+            print(f"→ Using pre-built web dist at {_dist_root}")
     elif getattr(args, "skip_build", False):
         # --build-mode skip trusts the caller to have pre-built the web UI.
         # Verify the dist actually exists; otherwise the server will start
@@ -13827,12 +13865,6 @@ def main():
     )
 
     webhook_parser.set_defaults(func=cmd_webhook)
-
-    # =========================================================================
-    # portal command — callmemo Portal status + Tool Gateway routing
-    # =========================================================================
-    from anakot_cli.portal_cli import add_parser as _add_portal_parser
-    _add_portal_parser(subparsers)
 
     # =========================================================================
     # kanban command — multi-profile collaboration board

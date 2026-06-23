@@ -33,7 +33,8 @@
   "homepage": "https://github.com/callmemo/Anakot-Agent#readme",
   "dependencies": {
     "@streamdown/math": "^1.0.2",
-    "agent-browser": "^0.26.0"
+    "agent-browser": "^0.26.0",
+    "ws": "^8.21.0"
   },
   "overrides": {
     "lodash": "4.18.1"

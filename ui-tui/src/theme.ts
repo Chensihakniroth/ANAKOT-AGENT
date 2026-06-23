@@ -32,6 +32,35 @@ export interface ThemeColors {
   diffRemovedWord: string
 
   shellDollar: string
+
+  // ── Design tokens (v2) ───────────────────────────────────────────────
+
+  // Brand accent — warm gold (replaces primary/accent in new components)
+  accentDim: string
+
+  // Semantic info blue
+  info: string
+
+  // Text hierarchy extensions
+  textDim: string
+  textMuted: string
+  textInverse: string
+
+  // Background extensions
+  bgElevated: string
+  bgHover: string
+
+  // Border extensions
+  borderAccent: string
+  borderWarn: string
+
+  // Context bar (usage indicator) — progressive colors
+  ctxHealthy: string
+  ctxWarn: string
+  ctxCritical: string
+
+  // User message bubble background
+  userMsgBg: string
 }
 
 export interface ThemeBrand {
@@ -238,10 +267,10 @@ function normalizeAnsiForeground(color: string): string {
 
 const BRAND: ThemeBrand = {
   name: 'Anakot Agent',
-  icon: '⚕',
+ icon: '',
   prompt: '❯',
   welcome: 'Type your message or /help for commands.',
-  goodbye: 'Goodbye! ⚕',
+ goodbye: 'Goodbye! ',
   tool: '┊',
   helpHeader: '(^_^)? Commands'
 }
@@ -295,7 +324,22 @@ export const DARK_THEME: Theme = {
     diffRemoved: 'rgb(255,220,220)',
     diffAddedWord: 'rgb(36,138,61)',
     diffRemovedWord: 'rgb(207,34,46)',
-    shellDollar: '#4dabf7'
+    shellDollar: '#4dabf7',
+
+    // ── Design tokens (v2) ─────────────────────────────────────────────
+    accentDim: '#C5AF00',
+    info: '#64b5f6',
+    textDim: '#888888',
+    textMuted: '#969696',
+    textInverse: '#141414',
+    bgElevated: '#191928',
+    bgHover: '#232337',
+    borderAccent: '#FFD700',
+    borderWarn: '#ffa726',
+    ctxHealthy: '#4caf50',
+    ctxWarn: '#ffa726',
+    ctxCritical: '#FF6B6B',
+    userMsgBg: '#1e1e32'
   },
 
   brand: BRAND,
@@ -340,7 +384,22 @@ export const LIGHT_THEME: Theme = {
     diffRemoved: 'rgb(240,200,200)',
     diffAddedWord: 'rgb(27,94,32)',
     diffRemovedWord: 'rgb(183,28,28)',
-    shellDollar: '#1565C0'
+    shellDollar: '#1565C0',
+
+    // ── Design tokens (v2) ─────────────────────────────────────────────
+    accentDim: '#8B7D00',
+    info: '#1976D2',
+    textDim: '#555555',
+    textMuted: '#7A7A7A',
+    textInverse: '#FFFFFF',
+    bgElevated: '#F0F0F0',
+    bgHover: '#E8E8E8',
+    borderAccent: '#A0651C',
+    borderWarn: '#E65100',
+    ctxHealthy: '#2E7D32',
+    ctxWarn: '#E65100',
+    ctxCritical: '#C62828',
+    userMsgBg: '#F0F0F8'
   },
 
   brand: BRAND,
@@ -570,7 +629,22 @@ export function fromSkin(
       diffRemoved: d.color.diffRemoved,
       diffAddedWord: d.color.diffAddedWord,
       diffRemovedWord: d.color.diffRemovedWord,
-      shellDollar: c('shell_dollar') ?? d.color.shellDollar
+      shellDollar: c('shell_dollar') ?? d.color.shellDollar,
+
+      // ── Design tokens (v2) — fall back to computed/defaults ──────────
+      accentDim: d.color.accentDim,
+      info: d.color.info,
+      textDim: d.color.textDim,
+      textMuted: d.color.textMuted,
+      textInverse: d.color.textInverse,
+      bgElevated: d.color.bgElevated,
+      bgHover: d.color.bgHover,
+      borderAccent: d.color.borderAccent,
+      borderWarn: d.color.borderWarn,
+      ctxHealthy: c('ui_ok') ?? d.color.ctxHealthy,
+      ctxWarn: c('ui_warn') ?? d.color.ctxWarn,
+      ctxCritical: d.color.statusCritical,
+      userMsgBg: d.color.userMsgBg
     },
 
     brand: {

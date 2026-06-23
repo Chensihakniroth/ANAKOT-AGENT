@@ -211,3 +211,18 @@ export interface SlashCategory {
   name: string
   pairs: [string, string][]
 }
+
+// ── Spinner / Animation types (v2) ────────────────────────────────────
+
+export type SpinnerStyle = 'kaomoji' | 'emoji' | 'ascii' | 'unicode' | 'diamond'
+
+export interface SpinnerConfig {
+  frames: string[]
+  interval: number
+}
+
+export const DIAMOND_FRAMES: string[] = ['◇', '◈', '◆', '◈']
+
+export const BRAILLE_WAVE: string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+export const BRAILLE_FILL: string[] = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']

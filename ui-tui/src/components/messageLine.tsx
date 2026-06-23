@@ -28,6 +28,7 @@ import { TodoPanel } from './todoPanel.js'
 const SYSTEM_COLLAPSE_CHARS = 400
 
 export const MessageLine = memo(function MessageLine({
+  busy = false,
   cols,
   compact,
   detailsMode = 'collapsed',
@@ -35,7 +36,10 @@ export const MessageLine = memo(function MessageLine({
   isStreaming = false,
   msg,
   prev,
+  reasoningActive = false,
+  reasoningStreaming = false,
   sections,
+  thinkingSpinner = false,
   t,
   tools = []
 }: MessageLineProps) {
@@ -78,11 +82,15 @@ export const MessageLine = memo(function MessageLine({
     return thinkingMode !== 'hidden' || toolsMode !== 'hidden' || activityMode !== 'hidden' ? (
       <Box flexDirection="column" marginTop={leadGap ? 1 : 0}>
         <ToolTrail
+          busy={busy}
           commandOverride={detailsModeCommandOverride}
           detailsMode={detailsMode}
           reasoning={thinking}
+          reasoningActive={reasoningActive}
+          reasoningStreaming={reasoningStreaming}
           reasoningTokens={msg.thinkingTokens}
           sections={sections}
+          thinkingSpinner={thinkingSpinner}
           t={t}
           tools={tools}
           toolTokens={msg.toolTokens}
@@ -203,11 +211,15 @@ export const MessageLine = memo(function MessageLine({
       {showDetails && (
         <Box flexDirection="column" marginBottom={1}>
           <ToolTrail
+            busy={busy}
             commandOverride={detailsModeCommandOverride}
             detailsMode={detailsMode}
             reasoning={thinking}
+            reasoningActive={reasoningActive}
+            reasoningStreaming={reasoningStreaming}
             reasoningTokens={msg.thinkingTokens}
             sections={sections}
+            thinkingSpinner={thinkingSpinner}
             t={t}
             toolTokens={msg.toolTokens}
             trail={msg.tools}
@@ -233,7 +245,13 @@ export const MessageLine = memo(function MessageLine({
           </Text>
         </NoSelect>
 
-        <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+        {msg.role === 'user' ? (
+          <Box backgroundColor={t.color.userMsgBg} paddingX={1} width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>
+            {content}
+          </Box>
+        ) : (
+          <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+        )}
       </Box>
     </Box>
   )
@@ -243,17 +261,18 @@ export const shouldShowResponseSeparator = (msg: Msg, showDetails: boolean): boo
   msg.role === 'assistant' && showDetails && /\S/.test(msg.text)
 
 interface MessageLineProps {
+  busy?: boolean
   cols: number
   compact?: boolean
   detailsMode?: DetailsMode
   detailsModeCommandOverride?: boolean
   isStreaming?: boolean
   msg: Msg
-  // The block rendered directly above this one. Drives the group-boundary
-  // lead gap (see domain/blockLayout.ts::hasLeadGap). Undefined at the top of
-  // the transcript or when spacing is irrelevant.
   prev?: Msg
+  reasoningActive?: boolean
+  reasoningStreaming?: boolean
   sections?: SectionVisibility
+  thinkingSpinner?: boolean
   t: Theme
   tools?: ActiveTool[]
 }

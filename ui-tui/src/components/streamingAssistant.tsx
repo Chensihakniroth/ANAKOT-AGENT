@@ -31,10 +31,14 @@ export const StreamingAssistant = memo(function StreamingAssistant({
   sections
 }: StreamingAssistantProps) {
   const ui = useStore($uiState)
+  const busy = ui.busy
   const streamSegments = useTurnSelector(state => state.streamSegments)
   const streamPendingTools = useTurnSelector(state => state.streamPendingTools)
   const streaming = useTurnSelector(state => state.streaming)
   const activeTools = useTurnSelector(state => state.tools)
+  const reasoningActive = useTurnSelector(state => state.reasoningActive)
+  const reasoningStreaming = useTurnSelector(state => state.reasoningStreaming)
+  const thinkingSpinner = useTurnSelector(state => state.thinkingSpinner)
   const showStreamingArea = Boolean(streaming)
 
   if (!progress.showProgressArea && !showStreamingArea && !activeTools.length) {
@@ -62,14 +66,27 @@ export const StreamingAssistant = memo(function StreamingAssistant({
     blocks.push({ key: 'pending-tools', msg: { kind: 'trail', role: 'system', text: '', tools: streamPendingTools } })
   }
 
+  // Find the last trail block — only that block should show the live spinner.
+  const lastTrailIdx = blocks.reduce<number>((acc, b, i) => {
+    if (b.msg.kind === 'trail') return i
+    return acc
+  }, -1)
+
+  if (busy) {
+  }
+
   const detailsCtx = { commandOverride: detailsModeCommandOverride, detailsMode, sections }
   let prev = prevMsg
 
   return (
     <>
-      {blocks.map(block => {
+      {blocks.map((block, index) => {
+        const isLastTrail = busy && index === lastTrailIdx
+        if (busy) {
+        }
         const node = (
           <MessageLine
+            busy={isLastTrail}
             cols={cols}
             compact={compact}
             detailsMode={detailsMode}
@@ -78,7 +95,10 @@ export const StreamingAssistant = memo(function StreamingAssistant({
             key={block.key}
             msg={block.msg}
             prev={prev}
+            reasoningActive={reasoningActive}
+            reasoningStreaming={reasoningStreaming}
             sections={sections}
+            thinkingSpinner={isLastTrail && thinkingSpinner}
             t={ui.theme}
             {...(block.tools ? { tools: block.tools } : {})}
           />

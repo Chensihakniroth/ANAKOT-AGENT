@@ -227,15 +227,22 @@ class _SlashWorker:
         if model:
             argv += ["--model", model]
 
+        _env = os.environ.copy()
+        # Force UTF-8 for the child's stdout/stderr so Python's internal
+        # _readerthread (which decodes raw bytes) doesn't crash on Windows
+        # where the system encoding is cp1252.
+        _env["PYTHONIOENCODING"] = "utf-8"
         self.proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
             cwd=os.getcwd(),
-            env=os.environ.copy(),
+            env=_env,
         )
         threading.Thread(target=self._drain_stdout, daemon=True).start()
         threading.Thread(target=self._drain_stderr, daemon=True).start()
@@ -843,6 +850,8 @@ def _git_branch_for_cwd(cwd: str) -> str:
             ["git", "-C", cwd, "branch", "--show-current"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=1.5,
             check=False,
         )
@@ -854,6 +863,8 @@ def _git_branch_for_cwd(cwd: str) -> str:
             ["git", "-C", cwd, "rev-parse", "--short", "HEAD"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=1.5,
             check=False,
         )
@@ -5728,9 +5739,22 @@ def _(rid, params: dict) -> dict:
                 _write_config_key("display.personality", pname)
                 _write_config_key("agent.system_prompt", new_prompt)
                 nv = str(value or "none")
-                history_reset, info = _apply_personality_to_session(
-                    sid_key, session, new_prompt, pname
-                )
+                # Apply to the specified session, or to all active sessions if no session_id
+                if sid_key:
+                    history_reset, info = _apply_personality_to_session(
+                        sid_key, session, new_prompt, pname
+                    )
+                else:
+                    # No session specified — apply to all active sessions so that
+                    # changing personality from the settings UI takes effect immediately
+                    # without requiring a /new or /personality slash command.
+                    history_reset = False
+                    info = None
+                    with _sessions_lock:
+                        all_sessions = list(_sessions.items())
+                    for skey, sdata in all_sessions:
+                        if sdata.get("agent"):
+                            _apply_personality_to_session(skey, sdata, new_prompt, pname)
             else:
                 _write_config_key(f"display.{key}", value)
                 nv = value
@@ -6256,6 +6280,8 @@ def _(rid, params: dict) -> dict:
             [sys.executable, "-m", "anakot_cli.main", *argv],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=min(int(params.get("timeout", 240)), 600),
             cwd=os.getcwd(),
             env=os.environ.copy(),
@@ -6318,6 +6344,8 @@ def _(rid, params: dict) -> dict:
                 shell=True,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=30,
             )
             output = (
@@ -8454,7 +8482,8 @@ def _(rid, params: dict) -> dict:
         pass
     try:
         r = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=os.getcwd()
+            cmd, shell=True, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30, cwd=os.getcwd(),
         )
         return _ok(
             rid,

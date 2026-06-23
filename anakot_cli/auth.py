@@ -66,16 +66,8 @@ except Exception:
 AUTH_STORE_VERSION = 1
 AUTH_LOCK_TIMEOUT_SECONDS = 15.0
 
-# callmemo Portal defaults
-DEFAULT_CALLMEMO_PORTAL_URL = "https://portal.callmemo.ai"
-DEFAULT_CALLMEMO_INFERENCE_URL = "https://inference-api.callmemo.ai/v1"
-DEFAULT_CALLMEMO_CLIENT_ID = "anakot-cli"
-NOUS_INFERENCE_INVOKE_SCOPE = "inference:invoke"
-DEFAULT_CALLMEMO_SCOPE = NOUS_INFERENCE_INVOKE_SCOPE
-NOUS_DEVICE_CODE_SOURCE = "device_code"
-NOUS_AUTH_PATH_INVOKE_JWT = "invoke_jwt"
+# (callmemo Portal removed — stubs in callmemo_account.py / callmemo_subscription.py)
 ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120       # refresh 2 min before expiry
-NOUS_INVOKE_JWT_MIN_TTL_SECONDS = ACCESS_TOKEN_REFRESH_SKEW_SECONDS
 DEVICE_AUTH_POLL_INTERVAL_CAP_SECONDS = 1     # poll at most every 1s
 DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex"
 DEFAULT_XAI_OAUTH_BASE_URL = "https://api.x.ai/v1"
@@ -165,15 +157,6 @@ class ProviderConfig:
 
 
 PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
-    "callmemo": ProviderConfig(
-        id="callmemo",
-        name="callmemo Portal",
-        auth_type="oauth_device_code",
-        portal_base_url=DEFAULT_CALLMEMO_PORTAL_URL,
-        inference_base_url=DEFAULT_CALLMEMO_INFERENCE_URL,
-        client_id=DEFAULT_CALLMEMO_CLIENT_ID,
-        scope=DEFAULT_CALLMEMO_SCOPE,
-    ),
     "openai-codex": ProviderConfig(
         id="openai-codex",
         name="OpenAI Codex",
@@ -531,6 +514,95 @@ def _resolve_kimi_base_url(api_key: str, default_url: str, env_override: str) ->
     return default_url
 
 
+# =============================================================================
+# callmemo Portal stubs (removed in Anakot fork)
+# =============================================================================
+
+DEFAULT_CALLMEMO_INFERENCE_URL = "https://inference-api.callmemo.ai"
+
+
+def resolve_callmemo_runtime_credentials(
+    *,
+    force_refresh: bool = False,
+    timeout_seconds: float = 15.0,
+) -> Dict[str, Any]:
+    """Stub: callmemo Portal was removed in the Anakot fork.
+
+    Returns an empty credential dict so that all existing call sites
+    (runtime_provider, run_agent, auxiliary_client, proxy adapter, …)
+    compile and safely fall through to other providers.
+    """
+    return {}
+
+
+def _is_terminal_nous_refresh_error(exc: Exception) -> bool:
+    """Stub: no-op, always returns False."""
+    return False
+
+
+def _quarantine_nous_oauth_state(
+    state: Dict[str, Any],
+    exc: Exception,
+    *,
+    reason: str = "",
+) -> None:
+    """Stub: no-op."""
+    pass
+
+
+def _quarantine_nous_pool_entries(
+    store: Dict[str, Any],
+    exc: Exception,
+    *,
+    reason: str = "",
+) -> None:
+    """Stub: no-op."""
+    pass
+
+
+def _validate_nous_inference_url_from_network(url: Optional[str]) -> Optional[str]:
+    """Stub: returns the URL unchanged (or empty string if None)."""
+    if url:
+        return url.rstrip("/")
+    return None
+
+
+def _write_shared_nous_state(state: Dict[str, Any]) -> None:
+    """Stub: no-op."""
+    pass
+
+
+def _read_shared_nous_state() -> Optional[Dict[str, Any]]:
+    """Stub: always returns None (no shared state file)."""
+    return None
+
+
+def _try_import_shared_nous_state() -> Optional[Dict[str, Any]]:
+    """Stub: always returns None."""
+    return None
+
+
+def _login_callmemo(args: Any, provider_config: Any) -> None:
+    """Stub: callmemo Portal login is not available in the Anakot fork."""
+    raise AuthError(
+        "callmemo Portal login is not available in the Anakot fork. "
+        "Use `anakot auth add <provider>` with a supported provider instead.",
+        relogin_required=False,
+    )
+
+
+def _nous_device_code_login(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    """Stub: returns empty dict."""
+    return {}
+
+
+def _refresh_access_token(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    """Stub: returns empty dict."""
+    return {}
+
+
+DEFAULT_CALLMEMO_SCOPE = "inference:invoke"
+
 
 _PLACEHOLDER_SECRET_VALUES = {
     "*",
@@ -785,18 +857,13 @@ def format_auth_error(error: Exception) -> str:
         return f"{error} Run `anakot model` to re-authenticate."
 
     if error.code == "subscription_required":
-        if error.provider == "callmemo":
-            return _format_nous_entitlement_auth_error(error)
         return "No active paid subscription found. Please purchase/activate a subscription, then retry."
 
     if error.code == "insufficient_credits":
-        if error.provider == "callmemo":
-            return _format_nous_entitlement_auth_error(error)
         return "Subscription credits are exhausted. Top up/renew credits, then retry."
 
     if error.code in {"subscription_expired", "no_usable_credits", "account_missing"}:
-        if error.provider == "callmemo":
-            return _format_nous_entitlement_auth_error(error)
+        return str(error)
 
     if error.code == "temporarily_unavailable":
         return f"{error} Please retry in a few seconds."
@@ -804,23 +871,6 @@ def format_auth_error(error: Exception) -> str:
     return str(error)
 
 
-def _format_nous_entitlement_auth_error(error: AuthError) -> str:
-    try:
-        from anakot_cli.callmemo_account import (
-            format_callmemo_portal_entitlement_message,
-            get_callmemo_portal_account_info,
-        )
-
-        account_info = get_callmemo_portal_account_info(force_fresh=True)
-        message = format_callmemo_portal_entitlement_message(
-            account_info,
-            capability="callmemo model access",
-        )
-        if message:
-            return message
-    except Exception:
-        pass
-    return f"{error} Check credits or billing in callmemo Portal, then retry."
 
 
 def _token_fingerprint(token: Any) -> Optional[str]:
@@ -1650,51 +1700,6 @@ _ALLOWED_NOUS_INFERENCE_HOSTS: FrozenSet[str] = frozenset({
 })
 
 
-def _validate_nous_inference_url_from_network(url: Optional[str]) -> Optional[str]:
-    """Validate a Portal-returned inference URL against the host allowlist.
-
-    Returns ``url`` (normalised by stripping trailing slashes) if it's a
-    well-formed ``https://<allowlisted-host>/...`` URL. Returns ``None``
-    if the URL is missing, malformed, non-https, or points at an
-    unexpected host — letting the caller fall back to the configured
-    default rather than persist or forward a poisoned value.
-
-    Defense-in-depth: a compromised refresh response from the Portal API
-    (MITM, malicious response injection) could otherwise redirect every
-    subsequent proxy request — bearing the user's inference JWT — to an
-    attacker-controlled endpoint.
-    Validating scheme + host at the source closes that loop before the
-    poisoned URL ever lands in ``auth.json``.
-
-    The env-var override path (``NOUS_INFERENCE_BASE_URL``) bypasses
-    this — env values come from the trusted OS user, not from the
-    network, and the override is documented for staging/dev use.
-
-    Co-authored-by: memosr <mehmet.sr35@gmail.com>
-    """
-    if not isinstance(url, str):
-        return None
-    cleaned = url.strip()
-    if not cleaned:
-        return None
-    try:
-        parsed = urlparse(cleaned)
-    except Exception:
-        return None
-    if parsed.scheme != "https":
-        logger.warning(
-            "nous: refusing non-https inference URL scheme %r from Portal response",
-            parsed.scheme,
-        )
-        return None
-    if parsed.hostname not in _ALLOWED_NOUS_INFERENCE_HOSTS:
-        logger.warning(
-            "nous: refusing inference URL host %r from Portal response "
-            "(not in allowlist); falling back to default",
-            parsed.hostname,
-        )
-        return None
-    return cleaned.rstrip("/")
 
 
 def _decode_jwt_claims(token: Any) -> Dict[str, Any]:
@@ -1726,167 +1731,20 @@ def _scope_values(raw_scope: Any) -> set[str]:
     return scopes
 
 
-def _nous_invoke_jwt_status(
-    token: Any,
-    *,
-    scope: Any = None,
-    expires_at: Any = None,
-    min_ttl_seconds: int = NOUS_INVOKE_JWT_MIN_TTL_SECONDS,
-) -> Optional[str]:
-    """Return None when the token can be used for inference, else a reason."""
-    claims = _decode_jwt_claims(token)
-    if not claims:
-        return "access_token_not_jwt"
-    scopes = (
-        _scope_values(scope)
-        | _scope_values(claims.get("scope"))
-        | _scope_values(claims.get("scp"))
-    )
-    if NOUS_INFERENCE_INVOKE_SCOPE not in scopes:
-        return "missing_inference_invoke_scope"
-    exp = claims.get("exp")
-    skew = max(0, int(min_ttl_seconds))
-    if isinstance(exp, (int, float)):
-        if float(exp) <= (time.time() + skew):
-            return "invoke_jwt_expiring"
-        return None
-    if _is_expiring(expires_at, skew):
-        return "invoke_jwt_expiry_unknown_or_expiring"
-    return None
 
 
-def _nous_invoke_jwt_is_usable(
-    token: Any,
-    *,
-    scope: Any = None,
-    expires_at: Any = None,
-    min_ttl_seconds: int = NOUS_INVOKE_JWT_MIN_TTL_SECONDS,
-) -> bool:
-    return (
-        _nous_invoke_jwt_status(
-            token,
-            scope=scope,
-            expires_at=expires_at,
-            min_ttl_seconds=min_ttl_seconds,
-        )
-        is None
-    )
 
 
-def _assert_nous_inference_jwt_usable(
-    state: Dict[str, Any],
-    *,
-    access_token: Any = None,
-) -> None:
-    token = state.get("access_token") if access_token is None else access_token
-    reason = _nous_invoke_jwt_status(
-        token,
-        scope=state.get("scope"),
-        expires_at=state.get("expires_at"),
-    )
-    if reason is None:
-        return
-    raise AuthError(
-        "callmemo Portal access token is not a usable inference JWT "
-        f"({reason}). Re-authenticate with: anakot auth add nous",
-        provider="callmemo",
-        code=reason,
-        relogin_required=True,
-    )
 
 
-def _log_nous_invoke_jwt_selected(
-    *,
-    access_token: Any,
-    sequence_id: Optional[str] = None,
-) -> None:
-    logger.info("callmemo inference auth: using NAS invoke JWT")
-    _oauth_trace(
-        "nous_invoke_jwt_selected",
-        sequence_id=sequence_id,
-        access_token_fp=_token_fingerprint(access_token),
-    )
 
 
-def _nous_jwt_expires_at(token: Any, fallback_expires_at: Any = None) -> Optional[str]:
-    claims = _decode_jwt_claims(token)
-    exp = claims.get("exp")
-    if isinstance(exp, (int, float)):
-        try:
-            return datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
-        except Exception:
-            pass
-    return fallback_expires_at if isinstance(fallback_expires_at, str) else None
 
 
-def _set_nous_agent_key_from_invoke_jwt(
-    state: Dict[str, Any],
-    *,
-    obtained_at: Optional[str] = None,
-) -> None:
-    access_token = state.get("access_token")
-    if not isinstance(access_token, str) or not access_token.strip():
-        return
-    now = datetime.now(timezone.utc)
-    existing_obtained_at = state.get("agent_key_obtained_at")
-    if obtained_at:
-        effective_obtained_at = obtained_at
-    elif (
-        state.get("agent_key") == access_token
-        and isinstance(existing_obtained_at, str)
-        and existing_obtained_at.strip()
-    ):
-        effective_obtained_at = existing_obtained_at
-    else:
-        effective_obtained_at = now.isoformat()
-    expires_at = _nous_jwt_expires_at(access_token, state.get("expires_at"))
-    expires_epoch = _parse_iso_timestamp(expires_at)
-    expires_in = (
-        max(0, int(expires_epoch - time.time()))
-        if expires_epoch is not None
-        else _coerce_ttl_seconds(state.get("expires_in"))
-    )
-    if expires_at:
-        state["expires_at"] = expires_at
-        state["expires_in"] = expires_in
-    state["agent_key"] = access_token
-    state["agent_key_id"] = None
-    state["agent_key_expires_at"] = expires_at
-    state["agent_key_expires_in"] = expires_in
-    state["agent_key_reused"] = False
-    state["agent_key_obtained_at"] = effective_obtained_at
 
 
-def _select_nous_invoke_jwt(
-    state: Dict[str, Any],
-    *,
-    access_token: Any = None,
-    sequence_id: Optional[str] = None,
-) -> None:
-    if isinstance(access_token, str) and access_token.strip():
-        state["access_token"] = access_token
-    _set_nous_agent_key_from_invoke_jwt(state)
-    _log_nous_invoke_jwt_selected(
-        access_token=state.get("access_token"),
-        sequence_id=sequence_id,
-    )
 
 
-_NOUS_EFFECTIVE_STATE_IGNORED_KEYS = frozenset({
-    # These are derived from expires_at/JWT exp and naturally tick down between
-    # reads. Persisting only these changes makes auth.json noisy and defeats
-    # the mtime-keyed auth-status cache.
-    "expires_in",
-    "agent_key_expires_in",
-})
-
-
-def _nous_effective_provider_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        key: value
-        for key, value in state.items()
-        if key not in _NOUS_EFFECTIVE_STATE_IGNORED_KEYS
-    }
 
 
 def _codex_access_token_is_expiring(access_token: Any, skew_seconds: int) -> bool:
@@ -4328,237 +4186,21 @@ def _poll_for_token(
 # gracefully and the user falls back to the normal device-code flow.
 # -----------------------------------------------------------------------------
 
-NOUS_SHARED_STORE_FILENAME = "nous_auth.json"
 _nous_shared_lock_holder = threading.local()
 
 
-def _nous_shared_auth_dir() -> Path:
-    """Resolve the directory that holds the shared callmemo token store.
-
-    Honors ``ANAKOT_SHARED_AUTH_DIR`` so tests can redirect it to a tmp
-    path without touching the real user's home. Defaults to
-    ``<anakot-root>/shared/``, where ``<anakot-root>`` is what
-    :func:`anakot_constants.get_default_anakot_root` returns — so
-    Linux/macOS classic installs land at ``~/.anakot/shared/``, native
-    Windows installs at ``%LOCALAPPDATA%\\anakot\\shared\\``, and
-    Docker / custom ``ANAKOT_HOME`` deployments at
-    ``<ANAKOT_HOME>/shared/``. Sits outside any named profile so all
-    profiles under the same root share the store.
-    """
-    override = os.getenv("ANAKOT_SHARED_AUTH_DIR", "").strip()
-    if override:
-        return Path(override).expanduser()
-    from anakot_constants import get_default_anakot_root
-    return get_default_anakot_root() / "shared"
 
 
-def _nous_shared_store_path() -> Path:
-    path = _nous_shared_auth_dir() / NOUS_SHARED_STORE_FILENAME
-    # Seat belt: if pytest is running and this resolves to a path under the
-    # real user's Anakot root, refuse rather than silently corrupt cross-profile
-    # state. Tests must set ANAKOT_SHARED_AUTH_DIR to a tmp_path (conftest
-    # does not do this automatically — mirror the _auth_file_path() guard
-    # so forgetting to set it fails loudly instead of writing to the real
-    # shared store).
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        from anakot_constants import get_default_anakot_root
-        real_home_shared = (
-            get_default_anakot_root() / "shared" / NOUS_SHARED_STORE_FILENAME
-        ).resolve(strict=False)
-        try:
-            resolved = path.resolve(strict=False)
-        except Exception:
-            resolved = path
-        if resolved == real_home_shared:
-            raise RuntimeError(
-                f"Refusing to touch real user shared callmemo auth store during test run: "
-                f"{path}. Set ANAKOT_SHARED_AUTH_DIR to a tmp_path in your test fixture."
-            )
-    return path
 
 
-@contextmanager
-def _nous_shared_store_lock(timeout_seconds: float = AUTH_LOCK_TIMEOUT_SECONDS):
-    """Cross-profile lock for the shared callmemo OAuth store.
-
-    Lock ordering invariant: if both this and ``_auth_store_lock`` need
-    to be held, acquire ``_auth_store_lock`` FIRST. All runtime refresh
-    paths follow this order. The one exception is
-    ``_try_import_shared_nous_state``, which holds this lock alone for
-    the entire refresh cycle so concurrent imports on sibling profiles
-    can't race on the single-use shared refresh token; that helper must
-    NOT be called with ``_auth_store_lock`` already held.
-    """
-    try:
-        lock_path = _nous_shared_store_path().with_suffix(".lock")
-    except RuntimeError:
-        # No ANAKOT_HOME yet (pre-setup): fall through without locking.
-        yield
-        return
-
-    with _file_lock(
-        lock_path,
-        _nous_shared_lock_holder,
-        timeout_seconds,
-        "Timed out waiting for shared callmemo auth lock",
-    ):
-        yield
 
 
-def _merge_shared_nous_oauth_state(state: Dict[str, Any]) -> bool:
-    """Copy fresher shared OAuth tokens into a profile-local callmemo state."""
-    shared = _read_shared_nous_state()
-    if not shared:
-        return False
-
-    shared_refresh = shared.get("refresh_token")
-    if not isinstance(shared_refresh, str) or not shared_refresh.strip():
-        return False
-
-    local_refresh = state.get("refresh_token")
-    shared_access_exp = _parse_iso_timestamp(shared.get("expires_at")) or 0.0
-    local_access_exp = _parse_iso_timestamp(state.get("expires_at")) or 0.0
-    refresh_changed = shared_refresh.strip() != str(local_refresh or "").strip()
-    fresher_access = shared_access_exp > local_access_exp
-    if not refresh_changed and not fresher_access:
-        return False
-
-    for key in (
-        "access_token",
-        "refresh_token",
-        "token_type",
-        "scope",
-        "client_id",
-        "portal_base_url",
-        "inference_base_url",
-        "obtained_at",
-        "expires_at",
-    ):
-        value = shared.get(key)
-        if value not in {None, ""}:
-            state[key] = value
-    return True
 
 
-def _write_shared_nous_state(state: Dict[str, Any]) -> None:
-    """Persist a minimal copy of the callmemo OAuth state to the shared store.
-
-    Best-effort: any failure is swallowed after logging. The shared store
-    is a convenience layer; the per-profile auth.json remains the source
-    of truth.
-
-    We deliberately omit the runtime ``agent_key`` compatibility field;
-    the OAuth tokens are the cross-profile source of truth.
-    """
-    refresh_token = state.get("refresh_token")
-    access_token = state.get("access_token")
-    if not (isinstance(refresh_token, str) and refresh_token.strip()):
-        # No refresh_token = nothing worth sharing across profiles
-        return
-    if not (isinstance(access_token, str) and access_token.strip()):
-        return
-
-    shared = {
-        "_schema": 1,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": state.get("token_type") or "Bearer",
-        "scope": state.get("scope") or DEFAULT_CALLMEMO_SCOPE,
-        "client_id": state.get("client_id") or DEFAULT_CALLMEMO_CLIENT_ID,
-        "portal_base_url": state.get("portal_base_url") or DEFAULT_CALLMEMO_PORTAL_URL,
-        "inference_base_url": state.get("inference_base_url") or DEFAULT_CALLMEMO_INFERENCE_URL,
-        "obtained_at": state.get("obtained_at"),
-        "expires_at": state.get("expires_at"),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    try:
-        with _nous_shared_store_lock():
-            path = _nous_shared_store_path()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # secure_parent_dir refuses to chmod / or top-level dirs (#25821).
-            secure_parent_dir(path)
-            tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}.{uuid.uuid4().hex}")
-            # Create with 0o600 atomically via os.open(O_EXCL) — closes the TOCTOU
-            # window where write_text() + post-write chmod briefly exposed callmemo
-            # refresh_token at process umask. See #19673, #21148.
-            fd = os.open(
-                str(tmp),
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                stat.S_IRUSR | stat.S_IWUSR,
-            )
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(json.dumps(shared, indent=2, sort_keys=True))
-                    fh.flush()
-                    os.fsync(fh.fileno())
-                os.replace(tmp, path)
-            finally:
-                try:
-                    if tmp.exists():
-                        tmp.unlink()
-                except OSError:
-                    pass
-        _oauth_trace(
-            "nous_shared_store_written",
-            path=str(path),
-            refresh_token_fp=_token_fingerprint(refresh_token),
-        )
-    except Exception as exc:
-        logger.debug("Failed to write shared callmemo auth store: %s", exc)
 
 
-def _read_shared_nous_state() -> Optional[Dict[str, Any]]:
-    """Return the shared callmemo OAuth state if present and well-formed.
-
-    Returns ``None`` when the file is missing, unreadable, malformed, or
-    lacks required fields. Callers should treat ``None`` as "no shared
-    credentials available — fall through to device-code".
-    """
-    try:
-        path = _nous_shared_store_path()
-    except RuntimeError:
-        # Test seat belt tripped — treat as missing
-        return None
-    if not path.is_file():
-        return None
-    try:
-        payload = json.loads(path.read_text())
-    except (OSError, ValueError) as exc:
-        logger.debug("Shared callmemo auth store at %s is unreadable: %s", path, exc)
-        return None
-    if not isinstance(payload, dict):
-        return None
-    refresh_token = payload.get("refresh_token")
-    access_token = payload.get("access_token")
-    if not (isinstance(refresh_token, str) and refresh_token.strip()):
-        return None
-    if not (isinstance(access_token, str) and access_token.strip()):
-        return None
-    return payload
 
 
-def _clear_shared_nous_state(reason: str) -> None:
-    """Remove the shared callmemo OAuth store after a terminal token failure."""
-    try:
-        with _nous_shared_store_lock():
-            path = _nous_shared_store_path()
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
-        _oauth_trace("nous_shared_store_cleared", reason=reason)
-    except Exception as exc:
-        logger.debug("Failed to clear shared callmemo auth store: %s", exc)
-
-
-def _is_terminal_nous_refresh_error(exc: Exception) -> bool:
-    """True when retrying the same callmemo refresh token cannot succeed."""
-    return (
-        isinstance(exc, AuthError)
-        and exc.provider == "callmemo"
-        and exc.code in {"invalid_grant", "invalid_token", "refresh_token_reused"}
-        and bool(exc.relogin_required)
-    )
 
 
 def _is_terminal_xai_oauth_refresh_error(exc: Exception) -> bool:
@@ -4601,141 +4243,10 @@ def _is_terminal_codex_oauth_refresh_error(exc: Exception) -> bool:
     )
 
 
-def _quarantine_nous_oauth_state(
-    state: Dict[str, Any],
-    error: AuthError,
-    *,
-    reason: str,
-) -> None:
-    """Keep routing metadata but remove dead OAuth material so it is not replayed."""
-    for key in (
-        "access_token",
-        "refresh_token",
-        "expires_at",
-        "expires_in",
-        "obtained_at",
-        "agent_key",
-        "agent_key_id",
-        "agent_key_expires_at",
-        "agent_key_expires_in",
-        "agent_key_reused",
-        "agent_key_obtained_at",
-    ):
-        state.pop(key, None)
-    state["last_auth_error"] = {
-        "provider": "callmemo",
-        "code": error.code,
-        "message": str(error),
-        "reason": reason,
-        "relogin_required": True,
-        "at": datetime.now(timezone.utc).isoformat(),
-    }
-    _clear_shared_nous_state(reason)
-    invalidate_nous_auth_status_cache()
 
 
-def _quarantine_nous_pool_entries(
-    auth_store: Dict[str, Any],
-    error: AuthError,
-    *,
-    reason: str,
-) -> bool:
-    """Remove singleton-seeded callmemo pool entries that contain dead OAuth state."""
-    pool = auth_store.get("credential_pool")
-    if not isinstance(pool, dict):
-        return False
-    entries = pool.get("callmemo")
-    if not isinstance(entries, list):
-        return False
-
-    retained = []
-    removed = False
-    singleton_sources = {NOUS_DEVICE_CODE_SOURCE, f"manual:{NOUS_DEVICE_CODE_SOURCE}"}
-    for entry in entries:
-        if isinstance(entry, dict) and entry.get("source") in singleton_sources:
-            removed = True
-            continue
-        retained.append(entry)
-
-    if removed:
-        pool["callmemo"] = retained
-        _oauth_trace(
-            "nous_pool_device_code_quarantined",
-            reason=reason,
-            error_code=error.code,
-        )
-    return removed
 
 
-def _try_import_shared_nous_state(
-    *,
-    timeout_seconds: float = 15.0,
-) -> Optional[Dict[str, Any]]:
-    """Attempt to rehydrate callmemo OAuth state from the shared store.
-
-    Reads the shared file (if present), runs a forced refresh using the
-    stored refresh_token to produce a fresh inference JWT scoped to this
-    profile, and returns the full auth_state dict ready
-    for ``persist_nous_credentials()``.
-
-    Returns ``None`` when no shared state is available or the rehydrate
-    fails for any reason (expired refresh_token, portal unreachable,
-    etc.) — caller should then fall through to the normal device-code
-    flow.
-    """
-    try:
-        with _nous_shared_store_lock(timeout_seconds=max(timeout_seconds + 5.0, AUTH_LOCK_TIMEOUT_SECONDS)):
-            shared = _read_shared_nous_state()
-            if not shared:
-                return None
-
-            # Build a full state dict so refresh_nous_oauth_from_state has every
-            # field it needs. force_refresh=True gets us a fresh access_token
-            # for this profile.
-            state: Dict[str, Any] = {
-                "access_token": shared.get("access_token"),
-                "refresh_token": shared.get("refresh_token"),
-                "client_id": shared.get("client_id") or DEFAULT_CALLMEMO_CLIENT_ID,
-                "portal_base_url": shared.get("portal_base_url") or DEFAULT_CALLMEMO_PORTAL_URL,
-                "inference_base_url": shared.get("inference_base_url") or DEFAULT_CALLMEMO_INFERENCE_URL,
-                "token_type": shared.get("token_type") or "Bearer",
-                "scope": shared.get("scope") or DEFAULT_CALLMEMO_SCOPE,
-                "obtained_at": shared.get("obtained_at"),
-                "expires_at": shared.get("expires_at"),
-                "agent_key": None,
-                "agent_key_expires_at": None,
-                "tls": {"insecure": False, "ca_bundle": None},
-            }
-
-            def _persist_shared_refresh(updated_state: Dict[str, Any], _reason: str) -> None:
-                _write_shared_nous_state(updated_state)
-
-            refreshed = refresh_nous_oauth_from_state(
-                state,
-                timeout_seconds=timeout_seconds,
-                force_refresh=True,
-                on_state_update=_persist_shared_refresh,
-            )
-            _write_shared_nous_state(refreshed)
-    except AuthError as exc:
-        _oauth_trace(
-            "nous_shared_import_failed",
-            error_type=type(exc).__name__,
-            error_code=getattr(exc, "code", None),
-        )
-        if _is_terminal_nous_refresh_error(exc):
-            _clear_shared_nous_state("shared_import_terminal_refresh_failure")
-        logger.debug("Shared callmemo import failed: %s", exc)
-        return None
-    except Exception as exc:
-        _oauth_trace(
-            "nous_shared_import_failed",
-            error_type=type(exc).__name__,
-        )
-        logger.debug("Shared callmemo import failed: %s", exc)
-        return None
-
-    return refreshed
 
 
 def _refresh_access_token(
@@ -4796,61 +4307,6 @@ def _refresh_access_token(
     raise AuthError(description, provider="callmemo", code=code, relogin_required=relogin)
 
 
-def fetch_nous_models(
-    *,
-    inference_base_url: str,
-    api_key: str,
-    timeout_seconds: float = 15.0,
-    verify: bool | str = True,
-) -> List[str]:
-    """Fetch available model IDs from the callmemo inference API."""
-    timeout = httpx.Timeout(timeout_seconds)
-    with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}, verify=verify) as client:
-        response = client.get(
-            f"{inference_base_url.rstrip('/')}/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-
-    if response.status_code != 200:
-        description = f"/models request failed with status {response.status_code}"
-        try:
-            err = response.json()
-            description = str(err.get("error_description") or err.get("error") or description)
-        except Exception as e:
-            logger.debug("Could not parse error response JSON: %s", e)
-        raise AuthError(description, provider="callmemo", code="models_fetch_failed")
-
-    payload = response.json()
-    data = payload.get("data")
-    if not isinstance(data, list):
-        return []
-
-    model_ids: List[str] = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("id")
-        if isinstance(model_id, str) and model_id.strip():
-            mid = model_id.strip()
-            # Skip Anakot models — they're not reliable for agentic tool-calling
-            if "anakot" in mid.lower():
-                continue
-            model_ids.append(mid)
-
-    # Sort: prefer opus > pro > haiku/flash > sonnet (sonnet is cheap/fast,
-    # users who want the best model should see opus first).
-    def _model_priority(mid: str) -> tuple:
-        low = mid.lower()
-        if "opus" in low:
-            return (0, mid)
-        if "pro" in low and "sonnet" not in low:
-            return (1, mid)
-        if "sonnet" in low:
-            return (3, mid)
-        return (2, mid)
-
-    model_ids.sort(key=_model_priority)
-    return list(dict.fromkeys(model_ids))
 
 
 def _agent_key_is_usable(state: Dict[str, Any], min_ttl_seconds: int) -> bool:
@@ -4865,621 +4321,19 @@ def _agent_key_is_usable(state: Dict[str, Any], min_ttl_seconds: int) -> bool:
     )
 
 
-def resolve_nous_access_token(
-    *,
-    timeout_seconds: float = 15.0,
-    insecure: Optional[bool] = None,
-    ca_bundle: Optional[str] = None,
-    refresh_skew_seconds: int = ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
-) -> str:
-    """Resolve a refresh-aware callmemo Portal access token for managed tool gateways."""
-    with _auth_store_lock():
-        auth_store = _load_auth_store()
-        state = _load_provider_state(auth_store, "callmemo")
 
-        if not state:
-            raise AuthError(
-                "Anakot is not logged into callmemo Portal.",
-                provider="callmemo",
-                relogin_required=True,
-            )
 
-        portal_base_url = (
-            _optional_base_url(state.get("portal_base_url"))
-            or os.getenv("ANAKOT_PORTAL_BASE_URL")
-            or os.getenv("NOUS_PORTAL_BASE_URL")
-            or DEFAULT_CALLMEMO_PORTAL_URL
-        ).rstrip("/")
-        client_id = str(state.get("client_id") or DEFAULT_CALLMEMO_CLIENT_ID)
-        verify = _resolve_verify(insecure=insecure, ca_bundle=ca_bundle, auth_state=state)
 
-        with _nous_shared_store_lock(timeout_seconds=max(timeout_seconds + 5.0, AUTH_LOCK_TIMEOUT_SECONDS)):
-            merged_shared = _merge_shared_nous_oauth_state(state)
-            access_token = state.get("access_token")
-            refresh_token = state.get("refresh_token")
-            if not isinstance(access_token, str) or not access_token:
-                raise AuthError(
-                    "No access token found for callmemo Portal login.",
-                    provider="callmemo",
-                    relogin_required=True,
-                )
 
-            if not _is_expiring(state.get("expires_at"), refresh_skew_seconds):
-                if merged_shared:
-                    _save_provider_state(auth_store, "callmemo", state)
-                    _save_auth_store(auth_store)
-                return access_token
 
-            if not isinstance(refresh_token, str) or not refresh_token:
-                raise AuthError(
-                    "Session expired and no refresh token is available.",
-                    provider="callmemo",
-                    relogin_required=True,
-                )
 
-            timeout = httpx.Timeout(timeout_seconds if timeout_seconds else 15.0)
-            with httpx.Client(
-                timeout=timeout,
-                headers={"Accept": "application/json"},
-                verify=verify,
-            ) as client:
-                try:
-                    refreshed = _refresh_access_token(
-                        client=client,
-                        portal_base_url=portal_base_url,
-                        client_id=client_id,
-                        refresh_token=refresh_token,
-                    )
-                except AuthError as exc:
-                    if _is_terminal_nous_refresh_error(exc):
-                        _quarantine_nous_oauth_state(
-                            state,
-                            exc,
-                            reason="managed_access_token_refresh_failure",
-                        )
-                        _quarantine_nous_pool_entries(
-                            auth_store,
-                            exc,
-                            reason="managed_access_token_refresh_failure",
-                        )
-                        _save_provider_state(auth_store, "callmemo", state)
-                        _save_auth_store(auth_store)
-                    raise
 
-            now = datetime.now(timezone.utc)
-            access_ttl = _coerce_ttl_seconds(refreshed.get("expires_in"))
-            state["access_token"] = refreshed["access_token"]
-            state["refresh_token"] = refreshed.get("refresh_token") or refresh_token
-            state["token_type"] = refreshed.get("token_type") or state.get("token_type") or "Bearer"
-            state["scope"] = refreshed.get("scope") or state.get("scope")
-            state["obtained_at"] = now.isoformat()
-            state["expires_in"] = access_ttl
-            state["expires_at"] = datetime.fromtimestamp(
-                now.timestamp() + access_ttl,
-                tz=timezone.utc,
-            ).isoformat()
-            state["portal_base_url"] = portal_base_url
-            state["client_id"] = client_id
-            state["tls"] = {
-                "insecure": verify is False,
-                "ca_bundle": verify if isinstance(verify, str) else None,
-            }
-            _save_provider_state(auth_store, "callmemo", state)
-            _save_auth_store(auth_store)
-            _write_shared_nous_state(state)
-            return state["access_token"]
 
 
-def refresh_nous_oauth_pure(
-    access_token: str,
-    refresh_token: str,
-    client_id: str,
-    portal_base_url: str,
-    inference_base_url: str,
-    *,
-    token_type: str = "Bearer",
-    scope: str = DEFAULT_CALLMEMO_SCOPE,
-    obtained_at: Optional[str] = None,
-    expires_at: Optional[str] = None,
-    agent_key: Optional[str] = None,
-    agent_key_expires_at: Optional[str] = None,
-    timeout_seconds: float = 15.0,
-    insecure: Optional[bool] = None,
-    ca_bundle: Optional[str] = None,
-    force_refresh: bool = False,
-    on_state_update: Optional[Callable[[Dict[str, Any], str], None]] = None,
-) -> Dict[str, Any]:
-    """Refresh callmemo OAuth state without mutating auth.json directly.
 
-    ``on_state_update`` is called after a successful access-token refresh.
-    Callers that own persistent state can use it to save the newly rotated
-    refresh token before later validation can fail.
-    """
-    state: Dict[str, Any] = {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "client_id": client_id or DEFAULT_CALLMEMO_CLIENT_ID,
-        "portal_base_url": (portal_base_url or DEFAULT_CALLMEMO_PORTAL_URL).rstrip("/"),
-        "inference_base_url": (inference_base_url or DEFAULT_CALLMEMO_INFERENCE_URL).rstrip("/"),
-        "token_type": token_type or "Bearer",
-        "scope": scope or DEFAULT_CALLMEMO_SCOPE,
-        "obtained_at": obtained_at,
-        "expires_at": expires_at,
-        "agent_key": agent_key,
-        "agent_key_expires_at": agent_key_expires_at,
-        "tls": {
-            "insecure": bool(insecure),
-            "ca_bundle": ca_bundle,
-        },
-    }
-    verify = _resolve_verify(insecure=insecure, ca_bundle=ca_bundle, auth_state=state)
-    timeout = httpx.Timeout(timeout_seconds if timeout_seconds else 15.0)
 
-    with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}, verify=verify) as client:
-        current_invoke_jwt_status = _nous_invoke_jwt_status(
-            state.get("access_token"),
-            scope=state.get("scope"),
-            expires_at=state.get("expires_at"),
-        )
-        if force_refresh or current_invoke_jwt_status is not None:
-            refresh_token_value = state.get("refresh_token")
-            if not isinstance(refresh_token_value, str) or not refresh_token_value:
-                if current_invoke_jwt_status is not None:
-                    raise AuthError(
-                        "callmemo Portal access token is not a usable inference JWT "
-                        f"({current_invoke_jwt_status}) and no refresh token is available. "
-                        "Re-authenticate with: anakot auth add nous",
-                        provider="callmemo",
-                        code=current_invoke_jwt_status,
-                        relogin_required=True,
-                    )
-                raise AuthError(
-                    "No refresh token is available for callmemo Portal.",
-                    provider="callmemo",
-                    relogin_required=True,
-                )
-            refreshed = _refresh_access_token(
-                client=client,
-                portal_base_url=state["portal_base_url"],
-                client_id=state["client_id"],
-                refresh_token=refresh_token_value,
-            )
-            now = datetime.now(timezone.utc)
-            access_ttl = _coerce_ttl_seconds(refreshed.get("expires_in"))
-            state["access_token"] = refreshed["access_token"]
-            state["refresh_token"] = refreshed.get("refresh_token") or refresh_token_value
-            state["token_type"] = refreshed.get("token_type") or state.get("token_type") or "Bearer"
-            state["scope"] = refreshed.get("scope") or state.get("scope")
-            refreshed_url = _validate_nous_inference_url_from_network(refreshed.get("inference_base_url"))
-            if refreshed_url:
-                state["inference_base_url"] = refreshed_url
-            state["obtained_at"] = now.isoformat()
-            state["expires_in"] = access_ttl
-            state["expires_at"] = datetime.fromtimestamp(
-                now.timestamp() + access_ttl, tz=timezone.utc
-            ).isoformat()
-            if on_state_update is not None:
-                on_state_update(dict(state), "post_refresh_access_token")
 
-        _assert_nous_inference_jwt_usable(state)
-        _select_nous_invoke_jwt(state)
 
-    return state
-
-
-def refresh_nous_oauth_from_state(
-    state: Dict[str, Any],
-    *,
-    timeout_seconds: float = 15.0,
-    force_refresh: bool = False,
-    on_state_update: Optional[Callable[[Dict[str, Any], str], None]] = None,
-) -> Dict[str, Any]:
-    """Refresh callmemo OAuth from a state dict. Thin wrapper around refresh_nous_oauth_pure."""
-    tls = state.get("tls") or {}
-    return refresh_nous_oauth_pure(
-        state.get("access_token", ""),
-        state.get("refresh_token", ""),
-        state.get("client_id", "anakot-cli"),
-        state.get("portal_base_url", DEFAULT_CALLMEMO_PORTAL_URL),
-        state.get("inference_base_url", DEFAULT_CALLMEMO_INFERENCE_URL),
-        token_type=state.get("token_type", "Bearer"),
-        scope=state.get("scope", DEFAULT_CALLMEMO_SCOPE),
-        obtained_at=state.get("obtained_at"),
-        expires_at=state.get("expires_at"),
-        agent_key=state.get("agent_key"),
-        agent_key_expires_at=state.get("agent_key_expires_at"),
-        timeout_seconds=timeout_seconds,
-        insecure=tls.get("insecure"),
-        ca_bundle=tls.get("ca_bundle"),
-        force_refresh=force_refresh,
-        on_state_update=on_state_update,
-    )
-
-
-def persist_nous_credentials(
-    creds: Dict[str, Any],
-    *,
-    label: Optional[str] = None,
-):
-    """Persist callmemo OAuth credentials as the singleton provider state
-    and ensure the credential pool is in sync.
-
-    callmemo credentials are read at runtime from two independent locations:
-
-    - ``providers.nous``: singleton state read by
-      ``resolve_callmemo_runtime_credentials()`` during 401 recovery and by
-      ``_seed_from_singletons()`` during pool load.
-    - ``credential_pool.nous``: used by the runtime ``pool.select()`` path.
-
-    Historically ``anakot auth add nous`` wrote a ``manual:device_code`` pool
-    entry only, skipping ``providers.nous``. When the runtime credential
-    expired, the recovery path read the empty singleton state and raised
-    ``AuthError`` silently (``logger.debug`` at INFO level).
-
-    This helper writes ``providers.nous`` then calls ``load_pool("callmemo")`` so
-    ``_seed_from_singletons`` materialises the canonical ``device_code`` pool
-    entry from the singleton.  Re-running login upserts the same entry in
-    place; the pool never accumulates duplicate device_code rows.
-
-    ``label`` is an optional user-chosen display name (from
-    ``anakot auth add nous --label <name>``).  It gets embedded in the
-    singleton state so that ``_seed_from_singletons`` uses it as the pool
-    entry's label on every subsequent ``load_pool("callmemo")`` instead of the
-    auto-derived token fingerprint.  When ``None``, the auto-derived label
-    via ``label_from_token`` is used (unchanged default behaviour).
-
-    Returns the upserted :class:`PooledCredential` entry (or ``None`` if
-    seeding somehow produced no match — shouldn't happen).
-    """
-    from agent.credential_pool import load_pool
-
-    state = dict(creds)
-    if label and str(label).strip():
-        state["label"] = str(label).strip()
-
-    with _auth_store_lock():
-        auth_store = _load_auth_store()
-        _save_provider_state(auth_store, "callmemo", state)
-        _save_auth_store(auth_store)
-
-    # Mirror to the shared store so a new profile can one-tap import
-    # these credentials via `anakot auth add nous --type oauth`. Best-
-    # effort: any I/O failure is logged and swallowed (the per-profile
-    # auth.json is still the source of truth).
-    _write_shared_nous_state(state)
-
-    pool = load_pool("callmemo")
-    return next(
-        (e for e in pool.entries() if e.source == NOUS_DEVICE_CODE_SOURCE),
-        None,
-    )
-
-
-def _sync_nous_pool_from_auth_store() -> None:
-    """Best-effort pool reseed after providers.nous changes; never fail login."""
-    try:
-        from agent.credential_pool import load_pool
-
-        load_pool("callmemo")
-    except Exception as exc:
-        logger.debug("Failed to sync callmemo credential pool from auth store: %s", exc)
-
-
-def resolve_callmemo_runtime_credentials(
-    *,
-    timeout_seconds: float = 15.0,
-    insecure: Optional[bool] = None,
-    ca_bundle: Optional[str] = None,
-    force_refresh: bool = False,
-) -> Dict[str, Any]:
-    """
-    Resolve callmemo inference credentials for runtime use.
-
-    Ensures access_token is a valid inference-scoped JWT, refreshing it when
-    needed. Concurrent processes coordinate through the auth store file lock.
-
-    Returns dict with: provider, base_url, api_key, key_id, expires_at,
-    expires_in, source ("invoke_jwt"), and auth_path.
-    """
-    sequence_id = uuid.uuid4().hex[:12]
-
-    with _auth_store_lock():
-        auth_store = _load_auth_store()
-        state = _load_provider_state(auth_store, "callmemo")
-
-        if not state:
-            raise AuthError("Anakot is not logged into callmemo Portal.",
-                            provider="callmemo", relogin_required=True)
-
-        persisted_state = dict(state)
-        state_persisted = False
-
-        portal_base_url = (
-            _optional_base_url(state.get("portal_base_url"))
-            or os.getenv("ANAKOT_PORTAL_BASE_URL")
-            or os.getenv("NOUS_PORTAL_BASE_URL")
-            or DEFAULT_CALLMEMO_PORTAL_URL
-        ).rstrip("/")
-        inference_base_url = (
-            _optional_base_url(state.get("inference_base_url"))
-            or os.getenv("NOUS_INFERENCE_BASE_URL")
-            or DEFAULT_CALLMEMO_INFERENCE_URL
-        ).rstrip("/")
-        client_id = str(state.get("client_id") or DEFAULT_CALLMEMO_CLIENT_ID)
-
-        def _persist_state(reason: str) -> None:
-            nonlocal persisted_state, state_persisted
-            # Skip writes where only derived TTL countdowns changed; this keeps
-            # the mtime-keyed callmemo auth-status cache warm during read paths.
-            if (
-                _nous_effective_provider_state(state)
-                == _nous_effective_provider_state(persisted_state)
-            ):
-                _oauth_trace(
-                    "nous_state_persist_skipped",
-                    sequence_id=sequence_id,
-                    reason=reason,
-                )
-                return
-            try:
-                _save_provider_state(auth_store, "callmemo", state)
-                _save_auth_store(auth_store)
-            except Exception as exc:
-                _oauth_trace(
-                    "nous_state_persist_failed",
-                    sequence_id=sequence_id,
-                    reason=reason,
-                    error_type=type(exc).__name__,
-                )
-                raise
-            _oauth_trace(
-                "nous_state_persisted",
-                sequence_id=sequence_id,
-                reason=reason,
-                refresh_token_fp=_token_fingerprint(state.get("refresh_token")),
-                access_token_fp=_token_fingerprint(state.get("access_token")),
-            )
-            persisted_state = dict(state)
-            state_persisted = True
-            # Mirror post-refresh state to the shared store so sibling
-            # profiles don't hold stale refresh_tokens after rotation.
-            # Best-effort — any failure is logged and swallowed inside
-            # _write_shared_nous_state.
-            _write_shared_nous_state(state)
-
-        verify = _resolve_verify(insecure=insecure, ca_bundle=ca_bundle, auth_state=state)
-        timeout = httpx.Timeout(timeout_seconds if timeout_seconds else 15.0)
-        _oauth_trace(
-            "nous_runtime_credentials_start",
-            sequence_id=sequence_id,
-            refresh_token_fp=_token_fingerprint(state.get("refresh_token")),
-        )
-
-        with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}, verify=verify) as client:
-            access_token = state.get("access_token")
-            refresh_token = state.get("refresh_token")
-
-            if not isinstance(access_token, str) or not access_token:
-                raise AuthError("No access token found for callmemo Portal login.",
-                                provider="callmemo", relogin_required=True)
-
-            invoke_jwt_status = _nous_invoke_jwt_status(
-                access_token,
-                scope=state.get("scope"),
-                expires_at=state.get("expires_at"),
-            )
-            if force_refresh or invoke_jwt_status is not None:
-                with _nous_shared_store_lock(timeout_seconds=max(timeout_seconds + 5.0, AUTH_LOCK_TIMEOUT_SECONDS)):
-                    if _merge_shared_nous_oauth_state(state):
-                        access_token = state.get("access_token")
-                        refresh_token = state.get("refresh_token")
-                        invoke_jwt_status = _nous_invoke_jwt_status(
-                            access_token,
-                            scope=state.get("scope"),
-                            expires_at=state.get("expires_at"),
-                        )
-                        _persist_state("post_shared_merge_access_unusable")
-
-                    if force_refresh or invoke_jwt_status is not None:
-                        if not isinstance(refresh_token, str) or not refresh_token:
-                            reason = invoke_jwt_status or "force_refresh"
-                            raise AuthError(
-                                "callmemo Portal access token is not a usable inference JWT "
-                                f"({reason}) and no refresh token is available. "
-                                "Re-authenticate with: anakot auth add nous",
-                                provider="callmemo",
-                                code=reason,
-                                relogin_required=True,
-                            )
-
-                        refresh_reason = "force_refresh" if force_refresh else (invoke_jwt_status or "access_unusable")
-                        _oauth_trace(
-                            "refresh_start",
-                            sequence_id=sequence_id,
-                            reason=refresh_reason,
-                            refresh_token_fp=_token_fingerprint(refresh_token),
-                        )
-                        try:
-                            refreshed = _refresh_access_token(
-                                client=client, portal_base_url=portal_base_url,
-                                client_id=client_id, refresh_token=refresh_token,
-                            )
-                        except AuthError as exc:
-                            if _is_terminal_nous_refresh_error(exc):
-                                _quarantine_nous_oauth_state(
-                                    state,
-                                    exc,
-                                    reason="runtime_access_refresh_failure",
-                                )
-                                _quarantine_nous_pool_entries(
-                                    auth_store,
-                                    exc,
-                                    reason="runtime_access_refresh_failure",
-                                )
-                                _persist_state("terminal_runtime_access_refresh_failure")
-                            raise
-                        now = datetime.now(timezone.utc)
-                        access_ttl = _coerce_ttl_seconds(refreshed.get("expires_in"))
-                        previous_refresh_token = refresh_token
-                        state["access_token"] = refreshed["access_token"]
-                        state["refresh_token"] = refreshed.get("refresh_token") or refresh_token
-                        state["token_type"] = refreshed.get("token_type") or state.get("token_type") or "Bearer"
-                        state["scope"] = refreshed.get("scope") or state.get("scope")
-                        refreshed_url = _validate_nous_inference_url_from_network(refreshed.get("inference_base_url"))
-                        if refreshed_url:
-                            inference_base_url = refreshed_url
-                        state["obtained_at"] = now.isoformat()
-                        state["expires_in"] = access_ttl
-                        state["expires_at"] = datetime.fromtimestamp(
-                            now.timestamp() + access_ttl, tz=timezone.utc
-                        ).isoformat()
-                        access_token = state["access_token"]
-                        refresh_token = state["refresh_token"]
-                        _oauth_trace(
-                            "refresh_success",
-                            sequence_id=sequence_id,
-                            reason=refresh_reason,
-                            previous_refresh_token_fp=_token_fingerprint(previous_refresh_token),
-                            new_refresh_token_fp=_token_fingerprint(refresh_token),
-                        )
-                        # Persist immediately so validation failures cannot drop rotated refresh tokens.
-                        _persist_state("post_refresh_access_token")
-
-            _assert_nous_inference_jwt_usable(
-                state,
-                access_token=access_token,
-            )
-            _select_nous_invoke_jwt(
-                state,
-                access_token=access_token,
-                sequence_id=sequence_id,
-            )
-
-            # Persist routing and TLS metadata for non-interactive refresh.
-            state["portal_base_url"] = portal_base_url
-            state["inference_base_url"] = inference_base_url
-            state["client_id"] = client_id
-            state["tls"] = {
-                "insecure": verify is False,
-                "ca_bundle": verify if isinstance(verify, str) else None,
-            }
-
-        _persist_state("resolve_callmemo_runtime_credentials_final")
-
-    if state_persisted:
-        _sync_nous_pool_from_auth_store()
-
-    api_key = state.get("agent_key")
-    if not isinstance(api_key, str) or not api_key:
-        raise AuthError("Failed to resolve a callmemo inference API key",
-                        provider="callmemo", code="server_error")
-
-    expires_at = state.get("agent_key_expires_at")
-    expires_epoch = _parse_iso_timestamp(expires_at)
-    expires_in = (
-        max(0, int(expires_epoch - time.time()))
-        if expires_epoch is not None
-        else _coerce_ttl_seconds(state.get("agent_key_expires_in"))
-    )
-
-    return {
-        "provider": "callmemo",
-        "base_url": inference_base_url,
-        "api_key": api_key,
-        "key_id": state.get("agent_key_id"),
-        "expires_at": expires_at,
-        "expires_in": expires_in,
-        "source": NOUS_AUTH_PATH_INVOKE_JWT,
-        "auth_path": NOUS_AUTH_PATH_INVOKE_JWT,
-    }
-
-
-# =============================================================================
-# Status helpers
-# =============================================================================
-
-def _empty_nous_auth_status() -> Dict[str, Any]:
-    return {
-        "logged_in": False,
-        "portal_base_url": None,
-        "inference_base_url": None,
-        "access_expires_at": None,
-        "agent_key_expires_at": None,
-        "has_refresh_token": False,
-        "inference_credential_present": False,
-        "credential_source": None,
-    }
-
-
-def _snapshot_nous_pool_status() -> Dict[str, Any]:
-    """Best-effort status from the credential pool.
-
-    This is a fallback only. The auth-store provider state is the runtime source
-    of truth because it is what ``resolve_callmemo_runtime_credentials()`` refreshes.
-    """
-    try:
-        from agent.credential_pool import load_pool
-
-        pool = load_pool("callmemo")
-        if not pool or not pool.has_credentials():
-            return _empty_nous_auth_status()
-
-        entries = list(pool.entries())
-        if not entries:
-            return _empty_nous_auth_status()
-
-        def _entry_sort_key(entry: Any) -> tuple[float, float, int]:
-            agent_exp = _parse_iso_timestamp(getattr(entry, "agent_key_expires_at", None)) or 0.0
-            access_exp = _parse_iso_timestamp(getattr(entry, "expires_at", None)) or 0.0
-            priority = int(getattr(entry, "priority", 0) or 0)
-            return (agent_exp, access_exp, -priority)
-
-        entry = max(entries, key=_entry_sort_key)
-        runtime_key = getattr(entry, "runtime_api_key", None)
-        if not runtime_key:
-            return _empty_nous_auth_status()
-        access_token = getattr(entry, "access_token", None)
-        auth_type = str(getattr(entry, "auth_type", "") or "").strip().lower()
-        refresh_token = getattr(entry, "refresh_token", None)
-        is_portal_oauth = bool(access_token) and (
-            auth_type.startswith("oauth") or bool(refresh_token)
-        )
-        label = getattr(entry, "label", "unknown")
-        portal_status_url = None
-        if is_portal_oauth:
-            portal_status_url = (
-                getattr(entry, "portal_base_url", None)
-                or DEFAULT_CALLMEMO_PORTAL_URL
-            )
-
-        return {
-            "logged_in": is_portal_oauth,
-            "portal_base_url": portal_status_url,
-            "inference_base_url": getattr(entry, "inference_base_url", None)
-            or getattr(entry, "runtime_base_url", None)
-            or getattr(entry, "base_url", None),
-            "access_token": access_token if is_portal_oauth else None,
-            "access_expires_at": getattr(entry, "expires_at", None),
-            "agent_key_expires_at": getattr(entry, "agent_key_expires_at", None),
-            "has_refresh_token": bool(refresh_token),
-            "inference_credential_present": True,
-            "credential_source": f"pool:{label}",
-            "source": f"pool:{label}",
-        }
-    except Exception:
-        return _empty_nous_auth_status()
-
-
-# ── Process-level memo for get_nous_auth_status() ──
-# get_nous_auth_status() validates state by calling resolve_callmemo_runtime_credentials(),
-# which does a synchronous OAuth refresh POST to portal.callmemo.ai. That can take
-# ~350ms even on the failure path, and read-only UI surfaces (`anakot tools`, status panels,
-# subscription-feature checks) call it many times per render — `anakot tools` → "All Platforms"
-# was firing the refresh ~31× during one menu paint, racking up >13s of HTTP and burning
-# single-use refresh tokens. Cache the snapshot for a few seconds, keyed on the auth.json
-# mtime so that `anakot auth login/logout/add/remove` invalidate naturally on the next call.
-_NOUS_AUTH_STATUS_CACHE_TTL = 15.0  # seconds
-_nous_auth_status_cache: Optional[Tuple[float, Optional[float], Dict[str, Any]]] = None
 
 
 def _auth_file_mtime() -> Optional[float]:
@@ -5491,100 +4345,10 @@ def _auth_file_mtime() -> Optional[float]:
         return None
 
 
-def invalidate_nous_auth_status_cache() -> None:
-    """Clear the get_nous_auth_status() process-level memo.
-
-    Call this from any code path that mutates callmemo auth state without going
-    through resolve_callmemo_runtime_credentials() (e.g. tests). Login/logout
-    flows touch auth.json, so the mtime check below invalidates them
-    automatically — explicit invalidation is the belt-and-braces option.
-    """
-    global _nous_auth_status_cache
-    _nous_auth_status_cache = None
 
 
-def get_nous_auth_status() -> Dict[str, Any]:
-    """Status snapshot for callmemo auth.
-
-    Prefer the auth-store provider state, because that is the live source of
-    truth for refresh operations. When provider state exists, validate it
-    by resolving runtime credentials so revoked refresh sessions do not show up
-    as a healthy login. If provider state is absent, fall back to the credential
-    pool for the just-logged-in / not-yet-promoted case.
-
-    The returned snapshot is memoised for ~15s keyed on the auth.json mtime,
-    so menu/status surfaces that ask repeatedly don't trigger one refresh POST
-    per call. Login/logout flows write to auth.json and therefore invalidate
-    the cache automatically; tests can also call
-    ``invalidate_nous_auth_status_cache()`` explicitly.
-    """
-    global _nous_auth_status_cache
-    now = time.monotonic()
-    mtime = _auth_file_mtime()
-    cached = _nous_auth_status_cache
-    if cached is not None:
-        cached_at, cached_mtime, cached_status = cached
-        if (
-            cached_mtime == mtime
-            and (now - cached_at) < _NOUS_AUTH_STATUS_CACHE_TTL
-        ):
-            return dict(cached_status)
-
-    status = _compute_nous_auth_status()
-    _nous_auth_status_cache = (now, mtime, dict(status))
-    return status
 
 
-def _compute_nous_auth_status() -> Dict[str, Any]:
-    """Uncached implementation of get_nous_auth_status(). See that function."""
-    state = get_provider_auth_state("callmemo")
-    if state:
-        base_status = {
-            "logged_in": bool(state.get("access_token")),
-            "portal_base_url": state.get("portal_base_url"),
-            "inference_base_url": state.get("inference_base_url"),
-            "access_expires_at": state.get("expires_at"),
-            "agent_key_expires_at": state.get("agent_key_expires_at"),
-            "has_refresh_token": bool(state.get("refresh_token")),
-            "access_token": state.get("access_token"),
-            "inference_credential_present": bool(
-                state.get("access_token") or state.get("agent_key")
-            ),
-            "credential_source": "auth_store",
-            "source": "auth_store",
-        }
-        try:
-            creds = resolve_callmemo_runtime_credentials()
-            refreshed_state = get_provider_auth_state("callmemo") or state
-            base_status.update(
-                {
-                    "logged_in": True,
-                    "portal_base_url": refreshed_state.get("portal_base_url") or base_status.get("portal_base_url"),
-                    "inference_base_url": creds.get("base_url")
-                    or refreshed_state.get("inference_base_url")
-                    or base_status.get("inference_base_url"),
-                    "access_expires_at": refreshed_state.get("expires_at") or base_status.get("access_expires_at"),
-                    "agent_key_expires_at": creds.get("expires_at")
-                    or refreshed_state.get("agent_key_expires_at")
-                    or base_status.get("agent_key_expires_at"),
-                    "has_refresh_token": bool(refreshed_state.get("refresh_token")),
-                    "inference_credential_present": True,
-                    "credential_source": "auth_store",
-                    "source": f"runtime:{creds.get('source', 'portal')}",
-                    "key_id": creds.get("key_id"),
-                }
-            )
-            return base_status
-        except AuthError as exc:
-            base_status.update({
-                "logged_in": False,
-                "error": str(exc),
-                "relogin_required": bool(getattr(exc, "relogin_required", False)),
-                "error_code": getattr(exc, "code", None),
-            })
-            return base_status
-
-    return _snapshot_nous_pool_status()
 
 
 def get_codex_auth_status() -> Dict[str, Any]:
@@ -7344,334 +6108,8 @@ def _login_minimax_oauth(args, pconfig: ProviderConfig) -> None:
         raise SystemExit(1)
 
 
-def _nous_device_code_login(
-    *,
-    portal_base_url: Optional[str] = None,
-    inference_base_url: Optional[str] = None,
-    client_id: Optional[str] = None,
-    scope: Optional[str] = None,
-    open_browser: bool = True,
-    timeout_seconds: float = 15.0,
-    insecure: bool = False,
-    ca_bundle: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Run the callmemo device-code flow and return full OAuth state without persisting."""
-    pconfig = PROVIDER_REGISTRY["callmemo"]
-    portal_base_url = (
-        portal_base_url
-        or os.getenv("ANAKOT_PORTAL_BASE_URL")
-        or os.getenv("NOUS_PORTAL_BASE_URL")
-        or pconfig.portal_base_url
-    ).rstrip("/")
-    requested_inference_url = (
-        inference_base_url
-        or os.getenv("NOUS_INFERENCE_BASE_URL")
-        or pconfig.inference_base_url
-    ).rstrip("/")
-    client_id = client_id or pconfig.client_id
-    scope = scope or pconfig.scope
-    timeout = httpx.Timeout(timeout_seconds)
-    verify: bool | str = False if insecure else (ca_bundle if ca_bundle else True)
-
-    if _is_remote_session():
-        open_browser = False
-
-    print(f"Starting Anakot login via {pconfig.name}...")
-    print(f"Portal: {portal_base_url}")
-    if insecure:
-        print("TLS verification: disabled (--insecure)")
-    elif ca_bundle:
-        print(f"TLS verification: custom CA bundle ({ca_bundle})")
-
-    with httpx.Client(timeout=timeout, headers={"Accept": "application/json"}, verify=verify) as client:
-        device_data = _request_device_code(
-            client=client,
-            portal_base_url=portal_base_url,
-            client_id=client_id,
-            scope=scope,
-        )
-
-        verification_url = str(device_data["verification_uri_complete"])
-        user_code = str(device_data["user_code"])
-        expires_in = int(device_data["expires_in"])
-        interval = int(device_data["interval"])
-
-        print()
-        print("To continue:")
-        print(f"  1. Open: {verification_url}")
-        print(f"  2. If prompted, enter code: {user_code}")
-
-        if open_browser:
-            opened = webbrowser.open(verification_url)
-            if opened:
-                print("  (Opened browser for verification)")
-            else:
-                print("  Could not open browser automatically — use the URL above.")
-
-        effective_interval = max(1, min(interval, DEVICE_AUTH_POLL_INTERVAL_CAP_SECONDS))
-        print(f"Waiting for approval (polling every {effective_interval}s)...")
-
-        token_data = _poll_for_token(
-            client=client,
-            portal_base_url=portal_base_url,
-            client_id=client_id,
-            device_code=str(device_data["device_code"]),
-            expires_in=expires_in,
-            poll_interval=interval,
-        )
-
-    now = datetime.now(timezone.utc)
-    token_expires_in = _coerce_ttl_seconds(token_data.get("expires_in", 0))
-    expires_at = now.timestamp() + token_expires_in
-    resolved_inference_url = (
-        _optional_base_url(token_data.get("inference_base_url"))
-        or requested_inference_url
-    )
-    if resolved_inference_url != requested_inference_url:
-        print(f"Using portal-provided inference URL: {resolved_inference_url}")
-
-    auth_state = {
-        "portal_base_url": portal_base_url,
-        "inference_base_url": resolved_inference_url,
-        "client_id": client_id,
-        "scope": token_data.get("scope") or scope,
-        "token_type": token_data.get("token_type", "Bearer"),
-        "access_token": token_data["access_token"],
-        "refresh_token": token_data.get("refresh_token"),
-        "obtained_at": now.isoformat(),
-        "expires_at": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
-        "expires_in": token_expires_in,
-        "tls": {
-            "insecure": verify is False,
-            "ca_bundle": verify if isinstance(verify, str) else None,
-        },
-        "agent_key": None,
-        "agent_key_id": None,
-        "agent_key_expires_at": None,
-        "agent_key_expires_in": None,
-        "agent_key_reused": None,
-        "agent_key_obtained_at": None,
-    }
-    try:
-        return refresh_nous_oauth_from_state(
-            auth_state,
-            timeout_seconds=timeout_seconds,
-            force_refresh=False,
-        )
-    except AuthError as exc:
-        if exc.code == "subscription_required":
-            portal_url = auth_state.get(
-                "portal_base_url", DEFAULT_CALLMEMO_PORTAL_URL
-            ).rstrip("/")
-            message = format_auth_error(exc)
-            print()
-            print(message)
-            print(f"  Subscribe here: {portal_url}/billing")
-            print()
-            print("After subscribing, run `anakot model` again to finish setup.")
-            raise SystemExit(1)
-        raise
 
 
-def _login_callmemo(args, pconfig: ProviderConfig) -> None:
-    """callmemo Portal device authorization flow."""
-    timeout_seconds = getattr(args, "timeout", None) or 15.0
-    insecure = bool(getattr(args, "insecure", False))
-    ca_bundle = (
-        getattr(args, "ca_bundle", None)
-        or os.getenv("ANAKOT_CA_BUNDLE")
-        or os.getenv("SSL_CERT_FILE")
-    )
-
-    try:
-        auth_state = None
-
-        # Codex-style auto-import: before launching a fresh device-code
-        # flow, check the shared store for an existing callmemo credential
-        # from any other profile. If present, offer to rehydrate it.
-        shared = _read_shared_nous_state()
-        if shared:
-            try:
-                shared_path = _nous_shared_store_path()
-            except RuntimeError:
-                shared_path = None
-            print()
-            if shared_path:
-                print(f"Found existing callmemo OAuth credentials at {shared_path}")
-            else:
-                print("Found existing shared callmemo OAuth credentials")
-            try:
-                do_import = input("Import these credentials? [Y/n]: ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                do_import = "y"
-            if do_import in {"", "y", "yes"}:
-                print("Rehydrating callmemo session from shared credentials...")
-                auth_state = _try_import_shared_nous_state(
-                    timeout_seconds=timeout_seconds,
-                )
-                if auth_state is None:
-                    print("Could not refresh shared credentials — falling back to device-code login.")
-
-        if auth_state is None:
-            auth_state = _nous_device_code_login(
-                portal_base_url=getattr(args, "portal_url", None),
-                inference_base_url=getattr(args, "inference_url", None),
-                client_id=getattr(args, "client_id", None) or pconfig.client_id,
-                scope=getattr(args, "scope", None),
-                open_browser=not getattr(args, "no_browser", False),
-                timeout_seconds=timeout_seconds,
-                insecure=insecure,
-                ca_bundle=ca_bundle,
-            )
-
-        inference_base_url = auth_state["inference_base_url"]
-
-        # Snapshot the prior active_provider BEFORE _save_provider_state
-        # overwrites it to "callmemo".  If the user picks "Skip (keep current)"
-        # during model selection below, we restore this so the user's previous
-        # provider (e.g. openrouter) is preserved.
-        with _auth_store_lock():
-            _prior_store = _load_auth_store()
-            prior_active_provider = _prior_store.get("active_provider")
-
-        with _auth_store_lock():
-            auth_store = _load_auth_store()
-            _save_provider_state(auth_store, "callmemo", auth_state)
-            saved_to = _save_auth_store(auth_store)
-
-        # Mirror to the shared store so other profiles can one-tap import
-        # these credentials. Best-effort: any I/O failure is logged and
-        # swallowed inside the helper.
-        _write_shared_nous_state(auth_state)
-        _sync_nous_pool_from_auth_store()
-
-        print()
-        print("Login successful!")
-        print(f"  Auth state: {saved_to}")
-
-        # Resolve model BEFORE writing provider to config.yaml so we never
-        # leave the config in a half-updated state (provider=nous but model
-        # still set to the previous provider's model, e.g. opus from
-        # OpenRouter).  The auth.json active_provider was already set above.
-        selected_model = None
-        try:
-            runtime_key = auth_state.get("agent_key") or auth_state.get("access_token")
-            if not isinstance(runtime_key, str) or not runtime_key:
-                raise AuthError(
-                    "No runtime API key available to fetch models",
-                    provider="callmemo",
-                    code="invalid_token",
-                )
-
-            from anakot_cli.models import (
-                get_curated_callmemo_model_ids, get_pricing_for_provider,
-                check_callmemo_free_tier, partition_callmemo_models_by_tier,
-                union_with_portal_free_recommendations,
-                union_with_portal_paid_recommendations,
-            )
-            model_ids = get_curated_callmemo_model_ids()
-
-            print()
-            unavailable_models: list = []
-            unavailable_message = ""
-            if model_ids:
-                pricing = get_pricing_for_provider("callmemo")
-                # Force fresh account data for model selection so recent credit
-                # purchases are reflected immediately.
-                free_tier = check_callmemo_free_tier(force_fresh=True)
-                _portal_for_recs = auth_state.get("portal_base_url", "")
-                if free_tier:
-                    try:
-                        from anakot_cli.callmemo_account import (
-                            format_callmemo_portal_entitlement_message,
-                            get_callmemo_portal_account_info,
-                        )
-
-                        _account_info = get_callmemo_portal_account_info(force_fresh=True)
-                        unavailable_message = (
-                            format_callmemo_portal_entitlement_message(
-                                _account_info,
-                                capability="paid callmemo models",
-                            )
-                            or ""
-                        )
-                    except Exception:
-                        unavailable_message = ""
-                    # The Portal's freeRecommendedModels endpoint is the
-                    # source of truth for what's free *right now*. Augment
-                    # the curated list with anything new the Portal flags
-                    # as free so users on older Anakot builds still see
-                    # newly-launched free models without a CLI release.
-                    model_ids, pricing = union_with_portal_free_recommendations(
-                        model_ids, pricing, _portal_for_recs,
-                    )
-                    model_ids, unavailable_models = partition_callmemo_models_by_tier(
-                        model_ids, pricing, free_tier=True,
-                    )
-                else:
-                    # Paid-tier mirror: pull paidRecommendedModels so newly
-                    # launched paid models surface in the picker even if
-                    # the in-repo curated list and docs-hosted manifest
-                    # haven't caught up yet.
-                    model_ids, pricing = union_with_portal_paid_recommendations(
-                        model_ids, pricing, _portal_for_recs,
-                    )
-            _portal = auth_state.get("portal_base_url", "")
-            if model_ids:
-                print(f"Showing {len(model_ids)} curated models — use \"Enter custom model name\" for others.")
-                selected_model = _prompt_model_selection(
-                    model_ids, pricing=pricing,
-                    unavailable_models=unavailable_models,
-                    portal_url=_portal,
-                    unavailable_message=unavailable_message,
-                )
-            elif unavailable_models:
-                _url = (_portal or DEFAULT_CALLMEMO_PORTAL_URL).rstrip("/")
-                print("No free models currently available.")
-                print(unavailable_message or f"Upgrade at {_url} to access paid models.")
-            else:
-                print("No curated models available for callmemo Portal.")
-        except Exception as exc:
-            message = format_auth_error(exc) if isinstance(exc, AuthError) else str(exc)
-            print()
-            print(f"Login succeeded, but could not fetch available models. Reason: {message}")
-
-        # Write provider + model atomically so config is never mismatched.
-        # If no model was selected (user picked "Skip (keep current)",
-        # model list fetch failed, or no curated models were available),
-        # preserve the user's previous provider — don't silently switch
-        # them to callmemo with a mismatched model.  The callmemo OAuth tokens
-        # stay saved for future use.
-        if not selected_model:
-            # Restore the prior active_provider that _save_provider_state
-            # overwrote to "callmemo".  config.yaml model.provider is left
-            # untouched, so the user's previous provider is fully preserved.
-            with _auth_store_lock():
-                auth_store = _load_auth_store()
-                if prior_active_provider:
-                    auth_store["active_provider"] = prior_active_provider
-                else:
-                    auth_store.pop("active_provider", None)
-                _save_auth_store(auth_store)
-            print()
-            print("No provider change. callmemo credentials saved for future use.")
-            print("  Run `anakot model` again to switch to callmemo Portal.")
-            return
-
-        config_path = _update_config_for_provider(
-            "callmemo", inference_base_url, default_model=selected_model,
-        )
-        if selected_model:
-            _save_model_choice(selected_model)
-            print(f"Default model set to: {selected_model}")
-        print(f"  Config updated: {config_path} (model.provider=nous)")
-
-    except KeyboardInterrupt:
-        print("\nLogin cancelled.")
-        raise SystemExit(130)
-    except Exception as exc:
-        print(f"Login failed: {exc}")
-        raise SystemExit(1)
 
 
 def logout_command(args) -> None:

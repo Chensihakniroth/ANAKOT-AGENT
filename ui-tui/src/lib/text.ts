@@ -364,3 +364,27 @@ export const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)]!
 
 export const isPasteBackedText = (text: string) =>
   /\[\[paste:\d+(?:[^\n]*?)\]\]|\[paste #\d+ (?:attached|excerpt)(?:[^\n]*?)\]/.test(text)
+
+// ── Shimmer effect ─────────────────────────────────────────────────────
+
+const SHIMMER_GOLD_PALETTE = [
+  '#FFD700',
+  '#FFE44D',
+  '#FFF099',
+  '#FFE44D',
+  '#FFD700',
+  '#C5AF00',
+  '#FFD700',
+] as const
+
+/**
+ * Return a gold shimmer color for the given tick.
+ * Cycles through bright gold shades to create a subtle shimmer effect
+ * on agent labels, status text, etc.
+ *
+ * Usage:
+ *   const color = shimmerColor(tick) // call each render frame
+ *   <Text color={color}>Thinking…</Text>
+ */
+export const shimmerColor = (tick: number): string =>
+  SHIMMER_GOLD_PALETTE[tick % SHIMMER_GOLD_PALETTE.length]!

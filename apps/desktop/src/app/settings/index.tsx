@@ -215,6 +215,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
           ) : activeView.startsWith('config:') ? (
             <ConfigSettings
               activeSectionId={activeView.slice('config:'.length)}
+              gateway={gateway}
               importInputRef={importInputRef}
               onConfigSaved={onConfigSaved}
               onMainModelChanged={onMainModelChanged}

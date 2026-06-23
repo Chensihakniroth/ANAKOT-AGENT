@@ -334,6 +334,11 @@ export class GatewayClient extends EventEmitter {
     const pyPath = env.PYTHONPATH?.trim()
 
     env.PYTHONPATH = pyPath ? `${root}${delimiter}${pyPath}` : root
+    // Unbuffered stdout so JSON-RPC frames flow to the TUI immediately
+    // instead of accumulating in Python's text-mode buffer until a flush
+    // (newline or buffer full). Without this the TUI's readline can stall
+    // waiting for a frame that is stuck in the child's buffer.
+    env.PYTHONUNBUFFERED = '1'
     this.startReadyTimer(python, cwd)
     this.proc = spawn(python, ['-m', 'tui_gateway.entry'], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] })
     this.lifecycle(`[lifecycle] spawned gateway child ${describeChild(this.proc)} python=${python} cwd=${cwd}`)

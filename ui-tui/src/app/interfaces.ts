@@ -50,7 +50,7 @@ export interface Notice {
 // derived from this tuple so adding/removing a style only touches one
 // line — `useConfigSync` (validation) and `session.ts` (slash arg
 // validation + usage hint) both import it.
-export const INDICATOR_STYLES = ['ascii', 'emoji', 'kaomoji', 'unicode'] as const
+export const INDICATOR_STYLES = ['ascii', 'diamond', 'emoji', 'kaomoji', 'unicode'] as const
 export type IndicatorStyle = (typeof INDICATOR_STYLES)[number]
 export const DEFAULT_INDICATOR_STYLE: IndicatorStyle = 'kaomoji'
 
@@ -134,6 +134,7 @@ export interface UiState {
   status: string
   statusBar: StatusBarMode
   streaming: boolean
+  shuttingDown: boolean
   theme: Theme
   usage: Usage
 }

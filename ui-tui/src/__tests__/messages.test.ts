@@ -67,7 +67,7 @@ describe('MessageLine', () => {
       .split('\n')
       .find(line => line.includes('Okay'))
 
-    expect(renderedLine).toContain('Ψ > Okay')
+    expect(renderedLine).toContain('▸    Okay')
   })
 })
 

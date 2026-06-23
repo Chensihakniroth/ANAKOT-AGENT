@@ -15,7 +15,7 @@ import { buildSubagentTree, treeTotals, widthByDepth } from '../lib/subagentTree
 import { fmtK } from '../lib/text.js'
 import { useScrollbarSnapshot, useViewportSnapshot } from '../lib/viewportStore.js'
 import type { Theme } from '../theme.js'
-import type { Msg, Usage } from '../types.js'
+import type { Msg, Usage, SpinnerStyle } from '../types.js'
 
 const FACE_TICK_MS = 2500
 const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
@@ -27,8 +27,9 @@ export const padVerb = (verb: string) => `${verb}…`.padEnd(VERB_PAD_LEN, ' ')
 
 // Compact alternates for the `emoji` and `ascii` indicator styles.
 // Each entry is a fixed-width (display-width) glyph.
-const EMOJI_FRAMES = ['⚕ ', '🌀', '🤔', '✨', '🍵', '🔮']
-const ASCII_FRAMES = ['|', '/', '-', '\\']
+const EMOJI_FRAMES = [' ', '🌀', '🤔', '✨', '🍵', '🔮']
+const ASCII_FRAMES = ['|', '/', '-', '\\\\']
+const DIAMOND_FRAMES = ['◇', '◈', '◆', '◈']
 
 // Faster tick for spinner-style indicators — they read as motion only
 // at frame rates closer to their authored interval.
@@ -51,7 +52,7 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
 
   if (style === 'emoji') {
     return {
-      frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? '⚕ ',
+ frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? ' ',
       intervalMs: SPINNER_TICK_MS * 6,
       showVerb: true
     }
@@ -62,6 +63,14 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
       frame: ASCII_FRAMES[tick % ASCII_FRAMES.length] ?? '|',
       intervalMs: SPINNER_TICK_MS,
       showVerb: true
+    }
+  }
+
+  if (style === 'diamond') {
+    return {
+      frame: DIAMOND_FRAMES[tick % DIAMOND_FRAMES.length] ?? '◇',
+      intervalMs: SPINNER_TICK_MS * 3,
+      showVerb: false
     }
   }
 
@@ -89,7 +98,7 @@ const indicatorFrameWidth = (style: IndicatorStyle): number => {
     return EMOJI_FRAME_WIDTH
   }
 
-  // 'ascii' and 'unicode' are single-column glyphs.
+  // 'ascii', 'unicode', and 'diamond' are single-column glyphs.
   return 1
 }
 
@@ -118,35 +127,27 @@ export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean):
 
 function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: null | number; style: IndicatorStyle }) {
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
-  const [verbTick, setVerbTick] = useState(() => Math.floor(Math.random() * VERBS.length))
+  const [brailleTick, setBrailleTick] = useState(() => Math.floor(Math.random() * 1000))
   const [now, setNow] = useState(() => Date.now())
 
-  // Pre-compute cadence + verb-visibility for the active style so an
-  // `/indicator` switch re-arms the interval (and skips the verb timer
-  // for verb-less styles like `unicode`) without leaving the previous
-  // timer dangling.
   const { intervalMs, showVerb } = renderIndicator(style, 0)
+  const brailleSpinner = unicodeSpinners.braille
 
   useEffect(() => {
     const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
     const clock = setInterval(() => setNow(Date.now()), 1000)
-    // Verb timer is gated on `showVerb` — `unicode` style hides the verb
-    // entirely, so cycling `verbTick` would be an avoidable re-render.
-    const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
+    const braille = setInterval(() => setBrailleTick(n => n + 1), brailleSpinner.interval)
 
     return () => {
       clearInterval(glyph)
       clearInterval(clock)
-
-      if (verb !== null) {
-        clearInterval(verb)
-      }
+      clearInterval(braille)
     }
-  }, [intervalMs, showVerb])
+  }, [intervalMs, brailleSpinner.interval])
 
   const { frame } = renderIndicator(style, tick)
-  const verb = VERBS[verbTick % VERBS.length] ?? ''
-  const verbSegment = showVerb ? ` ${padVerb(verb)}` : ''
+  const brailleFrame = brailleSpinner.frames[brailleTick % brailleSpinner.frames.length] ?? '⠋'
+  const verbSegment = showVerb ? ` ${brailleFrame}` : ''
   // Leading space keeps a gap between the frame and the duration when the
   // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
   // IS shown, its trailing padding already provides the gap, so the extra
@@ -164,22 +165,18 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
 
 function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {
-    return t.color.muted
+    return t.color.textMuted
   }
 
-  if (pct >= 95) {
-    return t.color.statusCritical
+  if (pct >= 90) {
+    return t.color.ctxCritical
   }
 
-  if (pct > 80) {
-    return t.color.statusBad
+  if (pct > 70) {
+    return t.color.ctxWarn
   }
 
-  if (pct >= 50) {
-    return t.color.statusWarn
-  }
-
-  return t.color.statusGood
+  return t.color.ctxHealthy
 }
 
 function statusSessionCountLabel(count: number) {
@@ -630,7 +627,7 @@ export function FloatBox({ children, color }: { children: ReactNode; color: stri
     <Box
       alignSelf="flex-start"
       borderColor={color}
-      borderStyle="double"
+      borderStyle="round"
       flexDirection="column"
       marginTop={1}
       opaque
