@@ -317,6 +317,72 @@ export const berserkDesktopTheme: DesktopTheme = {
   },
 }
 
+/** Custom desktop theme — your starting point for heavy modifications. */
+export const customDesktopTheme: DesktopTheme = {
+  name: 'custom',
+  label: 'Custom',
+  description: 'Your custom theme — edit freely',
+  colors: {
+    background: '#F8FAFF',
+    foreground: '#17171A',
+    card: '#FFFFFF',
+    cardForeground: '#17171A',
+    muted: '#F0F2F8',
+    mutedForeground: '#666678',
+    popover: '#FFFFFF',
+    popoverForeground: '#17171A',
+    primary: '#0053FD',
+    primaryForeground: '#FCFCFC',
+    secondary: '#E8EDF8',
+    secondaryForeground: '#242432',
+    accent: '#E0E5F2',
+    accentForeground: '#202030',
+    border: '#D0D5E0',
+    input: '#E2E6F0',
+    ring: '#0053FD',
+    midground: '#0053FD',
+    composerRing: '#0053FD',
+    destructive: '#C72E4D',
+    destructiveForeground: '#FFFFFF',
+    sidebarBackground: '#F3F7FF',
+    sidebarBorder: '#D8DDE8',
+    userBubble: '#EEF2FF',
+    userBubbleBorder: '#C8D0E8'
+  },
+  darkColors: {
+    background: '#0D2F86',
+    foreground: '#FFE6CB',
+    card: '#12378F',
+    cardForeground: '#FFE6CB',
+    muted: '#183F9A',
+    mutedForeground: '#B5C7F3',
+    popover: '#123A96',
+    popoverForeground: '#FFE6CB',
+    primary: '#FFE6CB',
+    primaryForeground: '#0D2F86',
+    secondary: '#1B45A4',
+    secondaryForeground: '#E0E8FF',
+    accent: '#1540B1',
+    accentForeground: '#F0F4FF',
+    border: '#3158AD',
+    input: '#0B2566',
+    ring: '#FFE6CB',
+    midground: '#0053FD',
+    composerRing: '#FFE6CB',
+    destructive: '#C0473A',
+    destructiveForeground: '#FEF2F2',
+    sidebarBackground: '#09286F',
+    sidebarBorder: '#234A9C',
+    userBubble: '#143B91',
+    userBubbleBorder: '#3A63BD'
+  },
+  typography: {
+    fontSans: SYSTEM_SANS,
+    fontMono: `Courier Prime, ${SYSTEM_MONO}`,
+    fontUrl: 'https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap'
+  }
+}
+
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
   nous: nousTheme,
   midnight: midnightTheme,
@@ -325,9 +391,10 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
   cyberpunk: cyberpunkTheme,
   slate: slateTheme,
   berserk: berserkDesktopTheme,
+  custom: customDesktopTheme,
 }
 
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'nous'
+export const DEFAULT_SKIN_NAME = 'custom'

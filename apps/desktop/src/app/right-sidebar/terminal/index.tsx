@@ -1,6 +1,7 @@
 import '@xterm/xterm/css/xterm.css'
 
 import { useStore } from '@nanostores/react'
+import { forwardRef, useImperativeHandle } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -17,29 +18,41 @@ import { useTerminalSession } from './use-terminal-session'
 interface TerminalTabProps {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
+  shell?: 'powershell' | 'git-bash' | 'cmd'
 }
 
-export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
+export interface TerminalTabHandle {
+  resize: () => void
+}
+
+export const TerminalTab = forwardRef<TerminalTabHandle, TerminalTabProps>(
+function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
   const { t } = useI18n()
   const { addSelectionToChat, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
     cwd,
-    onAddSelectionToChat
+    onAddSelectionToChat,
+    shell
   })
 
   const takeover = useStore($terminalTakeover)
   const label = takeover ? t.rightSidebar.terminalSplit : t.rightSidebar.terminalFocus
 
   const toggleTakeover = () => {
-    // Pre-select the Terminal tab so the slot is ready to host us on return.
     if (takeover) {
       setRightSidebarTab('terminal')
     }
-
     setTerminalTakeover(!takeover)
   }
 
+  // Expose resize method to parent
+  useImperativeHandle(ref, () => ({
+    resize: () => {
+      window.dispatchEvent(new CustomEvent('terminal-resize'))
+    },
+  }))
+
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col">
       <div className="flex h-8 shrink-0 items-center gap-2 px-2.5">
         <SidebarPanelLabel className="text-white!">{shellName}</SidebarPanelLabel>
         <Tip label={label}>
@@ -55,7 +68,8 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
           </Button>
         </Tip>
       </div>
-      <div className="relative min-h-0 flex-1 bg-[#002b36] p-2">
+      {/* Terminal container: width: 100% + flex: 1 1 auto + min-width: 0 prevents shrink-to-content */}
+      <div className="relative flex-1 p-2" style={{ width: '100%', minWidth: 0, backgroundColor: 'var(--ui-bg-editor)' }}>
         {status === 'starting' && (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
             <Loader
@@ -84,15 +98,14 @@ export function TerminalTab({ cwd, onAddSelectionToChat }: TerminalTabProps) {
             </Button>
           </div>
         )}
-        {/* Outer div paints the dark inset; inner div is the xterm host so the
-            canvas sizes to the *content* area and p-2 shows as terminal padding.
-            Forcing screen/viewport bg avoids xterm's default black peeking
-            through the unused pixels below the last full row. */}
+        {/* Host div: width: 100% + flex: 1 1 auto + min-width: 0 prevents shrink-to-content */}
         <div
-          className="h-full min-h-0 overflow-hidden text-(--ui-text-secondary) [&_.xterm]:h-full [&_.xterm-screen]:bg-[#002b36]! [&_.xterm-viewport]:bg-[#002b36]!"
+          className="flex-1 overflow-hidden text-(--ui-text-secondary)"
+          style={{ width: '100%', minWidth: 0, height: '100%', minHeight: 0 }}
           ref={hostRef}
         />
       </div>
     </div>
   )
 }
+)

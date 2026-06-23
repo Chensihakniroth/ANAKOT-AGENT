@@ -2,22 +2,27 @@ import type * as React from 'react'
 import type {
   ComponentProps,
   CSSProperties,
-  DragEvent as ReactDragEvent,
-  MouseEvent as ReactMouseEvent,
   ReactNode
 } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ShikiHighlighter from 'react-shiki'
+import { MonacoEditorPane } from './monaco-editor-pane'
 import { Streamdown } from 'streamdown'
 
-import { ANAKOT_PATHS_MIME } from '@/app/chat/hooks/use-composer-actions'
+import { Codicon } from '@/components/ui/codicon'
 import { PageLoader } from '@/components/page-loader'
 import { translateNow, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PreviewTarget } from '@/store/preview'
 
 const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
-const TEXT_PREVIEW_MAX_BYTES = 512 * 1024
+
+// Tiered file size limits — mirrors how VS Code handles large files:
+//   • Soft limit (2 MB):  files above this get a warning banner but still render
+//   • Hard limit (10 MB): files above this are blocked — too large for the editor
+const TEXT_PREVIEW_SOFT_LIMIT = 2 * 1024 * 1024   // 2 MB — warning threshold
+const TEXT_PREVIEW_HARD_LIMIT = 10 * 1024 * 1024  // 10 MB — absolute max (like VS Code)
+const TEXT_PREVIEW_MAX_BYTES = TEXT_PREVIEW_SOFT_LIMIT  // legacy compat
 
 type EmptyStateTone = 'neutral' | 'warning'
 
@@ -126,6 +131,8 @@ interface LocalPreviewState {
   loading: boolean
   text?: string
   truncated?: boolean
+  /** set when file is above soft limit (2 MB) but below hard limit (10 MB) */
+  largeWarning?: { estimatedLines: number; size: number }
 }
 
 function filePathForTarget(target: PreviewTarget) {
@@ -315,116 +322,54 @@ function PreviewToggle({ asSource, onToggle }: { asSource: boolean; onToggle: ()
 // Gutter and Shiki output share `font-mono text-xs leading-relaxed py-3` so
 // each line aligns vertically. The selection overlay relies on the same
 // `text-xs * leading-relaxed = 1.21875rem` line-height to position itself.
-const SOURCE_LINE_HEIGHT_REM = 1.21875
-const SOURCE_PAD_Y_REM = 0.75
 
-interface LineSelection {
-  end: number
-  start: number
-}
 
-function startLineDrag(event: ReactDragEvent<HTMLElement>, filePath: string, { end, start }: LineSelection) {
-  const lineEnd = end > start ? end : undefined
-  const label = lineEnd ? `${filePath}:${start}-${end}` : `${filePath}:${start}`
-
-  event.dataTransfer.setData(ANAKOT_PATHS_MIME, JSON.stringify([{ line: start, lineEnd, path: filePath }]))
-  event.dataTransfer.setData('text/plain', label)
-  event.dataTransfer.effectAllowed = 'copy'
-}
-
-function SourceView({ filePath, language, text }: { filePath: string; language: string; text: string }) {
-  const { t } = useI18n()
-  const lineCount = useMemo(() => Math.max(1, text.split('\n').length), [text])
-  const [selection, setSelection] = useState<LineSelection | null>(null)
-  const inSelection = (line: number) => selection != null && line >= selection.start && line <= selection.end
-
-  const handleLineClick = (event: ReactMouseEvent, line: number) => {
-    if (event.shiftKey && selection) {
-      setSelection({ end: Math.max(selection.end, line), start: Math.min(selection.start, line) })
-
-      return
-    }
-
-    if (selection?.start === line && selection.end === line) {
-      setSelection(null)
-
-      return
-    }
-
-    setSelection({ end: line, start: line })
-  }
-
-  const handleDragStart = (event: ReactDragEvent<HTMLElement>, line: number) => {
-    startLineDrag(event, filePath, inSelection(line) && selection ? selection : { end: line, start: line })
-  }
-
-  return (
-    <div className="grid min-w-max grid-cols-[auto_minmax(0,1fr)] font-mono text-xs leading-relaxed">
-      <div className="select-none py-3 text-right text-muted-foreground/55">
-        {Array.from({ length: lineCount }, (_, index) => {
-          const line = index + 1
-          const selected = inSelection(line)
-
-          return (
-            <div
-              className={cn(
-                'cursor-pointer px-3 tabular-nums transition-colors',
-                selected
-                  ? 'bg-amber-200/45 text-amber-900 dark:bg-amber-300/20 dark:text-amber-100'
-                  : 'hover:text-foreground'
-              )}
-              draggable
-              key={line}
-              onClick={event => handleLineClick(event, line)}
-              onDragStart={event => handleDragStart(event, line)}
-              title={t.preview.sourceLineTitle}
-            >
-              {line}
-            </div>
-          )
-        })}
-      </div>
-      <div className="relative [&_pre]:m-0 [&_pre]:px-3 [&_pre]:py-3 [&_pre]:bg-transparent!">
-        {selection && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bg-amber-200/35 dark:bg-amber-300/10"
-            style={{
-              top: `calc(${SOURCE_PAD_Y_REM}rem + ${selection.start - 1} * ${SOURCE_LINE_HEIGHT_REM}rem)`,
-              height: `calc(${selection.end - selection.start + 1} * ${SOURCE_LINE_HEIGHT_REM}rem)`
-            }}
-          />
-        )}
-        <ShikiHighlighter
-          addDefaultStyles={false}
-          as="div"
-          defaultColor="light-dark()"
-          delay={80}
-          language={language || 'text'}
-          showLanguage={false}
-          theme={SHIKI_THEME}
-        >
-          {text}
-        </ShikiHighlighter>
-      </div>
-    </div>
-  )
-}
-
-export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; target: PreviewTarget }) {
+export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reloadKey: number; target: PreviewTarget; onOpenInEditor?: (path: string) => void }) {
   const { t } = useI18n()
   const [state, setState] = useState<LocalPreviewState>({ loading: true })
   const [forcePreview, setForcePreview] = useState(false)
   const [renderMarkdownAsSource, setRenderMarkdownAsSource] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const filePath = filePathForTarget(target)
   const isImage = target.previewKind === 'image'
 
+  // Edit-mode hooks — must be at component top level (never inside conditionals)
+  const editContentRef = useRef(state.text || '')
+  const handleMonacoChange = useCallback((newValue: string | undefined) => {
+    if (newValue !== undefined) editContentRef.current = newValue
+  }, [])
+  const handleSave = useCallback(() => {
+    setState(prev => ({ ...prev, text: editContentRef.current }))
+    setIsEditing(false)
+  }, [])
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false)
+    editContentRef.current = state.text || ''
+  }, [state.text])
+  // Global key handler for edit mode — Ctrl+S to save, Escape to cancel
+  useEffect(() => {
+    if (!isEditing) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      if (e.key === 'Escape') handleCancelEdit()
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [isEditing, handleSave, handleCancelEdit])
+
+  // Sync editContentRef when state.text changes (e.g. file reload)
+  useEffect(() => {
+    if (!isEditing) {
+      editContentRef.current = state.text || ''
+    }
+  }, [state.text, isEditing])
   // HTML files are rendered as source code, not in a webview - so they take
   // the same path as plain text files. `previewKind === 'binary'` arrives
   // when the file is forcibly previewed past the binary refusal screen.
   const isText = target.previewKind === 'text' || target.previewKind === 'binary' || target.previewKind === 'html'
 
-  const blockedByTarget = !isImage && !forcePreview && (target.binary || target.large)
+  const isOversized = (target.byteSize ?? 0) > TEXT_PREVIEW_HARD_LIMIT
+  const blockedByTarget = !isImage && !forcePreview && (target.binary || isOversized)
 
   useEffect(() => {
     let active = true
@@ -458,14 +403,23 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
         const result = await readTextPreview(filePath)
 
         if (active) {
-          const shouldBlock = !forcePreview && (result.binary || (result.byteSize ?? 0) > TEXT_PREVIEW_MAX_BYTES)
+          const size = result.byteSize ?? 0
+          const isBinary = result.binary === true
+          // Hard limit: block only binary files or files above 10 MB
+          const blockedByHardLimit = !forcePreview && (isBinary || size > TEXT_PREVIEW_HARD_LIMIT)
+          // Soft limit: warn but still render files between 2-10 MB
+          const hasLargeWarning = !forcePreview && size > TEXT_PREVIEW_SOFT_LIMIT && size <= TEXT_PREVIEW_HARD_LIMIT
+
+          // Estimate line count for the warning message
+          const estimatedLines = result.text ? result.text.split('\n').length : Math.floor(size / 40)
 
           setState({
             binary: result.binary,
             byteSize: result.byteSize,
             language: result.language || target.language || 'text',
+            largeWarning: hasLargeWarning ? { estimatedLines, size } : undefined,
             loading: false,
-            text: shouldBlock ? undefined : result.text,
+            text: blockedByHardLimit ? undefined : result.text,
             truncated: result.truncated
           })
         }
@@ -486,6 +440,7 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
     }
   }, [blockedByTarget, filePath, forcePreview, isImage, isText, reloadKey, target.language])
 
+
   if (state.loading) {
     return <PageLoader label={t.preview.loading} />
   }
@@ -497,7 +452,7 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
   if (
     !isImage &&
     !forcePreview &&
-    (target.binary || target.large || state.binary || (state.byteSize ?? 0) > TEXT_PREVIEW_MAX_BYTES)
+    (target.binary || state.binary || (state.byteSize ?? 0) > TEXT_PREVIEW_HARD_LIMIT)
   ) {
     const binary = target.binary || state.binary
     const size = target.byteSize || state.byteSize
@@ -507,10 +462,10 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
         body={
           binary
             ? t.preview.binaryBody(target.label)
-            : t.preview.largeBody(target.label, formatBytes(size))
+            : t.preview.oversizedBody(target.label, formatBytes(size))
         }
         primaryAction={{ label: t.preview.previewAnyway, onClick: () => setForcePreview(true) }}
-        title={binary ? t.preview.binaryTitle : t.preview.largeTitle}
+        title={binary ? t.preview.binaryTitle : t.preview.oversizedTitle}
         tone="warning"
       />
     )
@@ -531,25 +486,89 @@ export function LocalFilePreview({ reloadKey, target }: { reloadKey: number; tar
 
   if (isText && state.text !== undefined) {
     const isMarkdown = (state.language || target.language) === 'markdown'
-    const showRendered = isMarkdown && !renderMarkdownAsSource
+    const showRendered = isMarkdown && !renderMarkdownAsSource && !isEditing
+
+
 
     return (
-      <div className="h-full overflow-auto bg-transparent">
-        {state.truncated && (
-          <div className="border-b border-border/60 bg-muted/35 px-3 py-1.5 text-[0.68rem] text-muted-foreground">
-            {t.preview.truncated}
+      <div className="flex h-full flex-col bg-transparent">
+          {state.largeWarning && (
+            <div className="shrink-0 flex items-center gap-2 border-b border-amber-400/30 bg-amber-50/80 px-3 py-1.5 text-[0.68rem] text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+              <Codicon name="warning" size="0.75rem" className="shrink-0 text-amber-500 dark:text-amber-400" />
+              <span>
+                {t.preview.largeFileWarning(formatBytes(state.largeWarning.size), state.largeWarning.estimatedLines.toLocaleString())}
+              </span>
+            </div>
+          )}
+          {state.truncated && (
+            <div className="shrink-0 border-b border-border/60 bg-muted/35 px-3 py-1.5 text-[0.68rem] text-muted-foreground">
+              {t.preview.truncated}
+            </div>
+          )}
+          <div className="shrink-0 z-10 flex items-center justify-between border-b border-border/40 bg-transparent px-3 py-1 backdrop-blur">
+            {isMarkdown && !isEditing && (
+              <button
+                className="text-[0.625rem] font-bold text-muted underline decoration-current/20 underline-offset-4 transition-colors hover:text-foreground"
+                onClick={() => setRenderMarkdownAsSource(s => !s)}
+                type="button"
+              >
+                {showRendered ? t.preview.source : t.preview.renderedPreview}
+              </button>
+            )}
+            {isEditing && (
+              <span className="text-[0.625rem] font-medium text-foreground">Editing</span>
+            )}
+            <div className="flex items-center gap-1">
+              {isEditing && (
+                <>
+                  <button
+                    className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-green-600 transition-colors hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                    onClick={handleSave}
+                    type="button"
+                  >
+                    <Codicon name="check" size="0.75rem" />
+                    Save
+                  </button>
+                  <button
+                    className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                    onClick={handleCancelEdit}
+                    type="button"
+                  >
+                    <Codicon name="x" size="0.75rem" />
+                    Cancel
+                  </button>
+                </>
+              )}
+              {!isEditing && (
+                <button
+                  className="flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.625rem] font-medium text-muted-foreground transition-colors hover:bg-(--ui-control-hover-background) hover:text-foreground"
+                  onClick={() => setIsEditing(true)}
+                  type="button"
+                >
+                  <Codicon name="edit" size="0.75rem" />
+                  Edit
+                </button>
+              )}
+            </div>
           </div>
-        )}
-        {isMarkdown && <PreviewToggle asSource={!showRendered} onToggle={() => setRenderMarkdownAsSource(s => !s)} />}
-        {showRendered ? (
-          <MarkdownPreview text={state.text} />
-        ) : (
-          <SourceView filePath={filePath} language={state.language || 'text'} text={state.text} />
-        )}
-      </div>
+
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {showRendered ? (
+              <div className="h-full overflow-auto">
+                <MarkdownPreview text={state.text} />
+              </div>
+            ) : (
+              <MonacoEditorPane
+                value={isEditing ? editContentRef.current : state.text}
+                language={state.language || 'text'}
+                readOnly={!isEditing}
+                onChange={handleMonacoChange}
+              />
+            )}
+          </div>
+        </div>
     )
   }
-
   return (
     <PreviewEmptyState
       body={t.preview.noInlineBody(target.mimeType || '')}

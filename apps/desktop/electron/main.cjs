@@ -1182,6 +1182,17 @@ function findGitBash() {
   return findOnPath('bash')
 }
 
+function findWindowsShell(candidates) {
+  for (const candidate of candidates) {
+    // Try direct path first
+    if (fileExists(candidate)) return candidate
+    // Try on PATH
+    const onPath = findOnPath(candidate)
+    if (onPath) return onPath
+  }
+  return null
+}
+
 function getVenvPython(venvRoot) {
   return path.join(venvRoot, IS_WINDOWS ? path.join('Scripts', 'python.exe') : path.join('bin', 'python'))
 }
@@ -5069,6 +5080,18 @@ ipcMain.handle('anakot:readFileText', async (_event, filePath) => {
 })
 
 ipcMain.handle('anakot:selectPaths', async (_event, options = {}) => {
+  // DIAGNOSTIC: allow bypassing the native dialog for automated testing
+  if (options?.__directPath) {
+    try {
+      const p = path.resolve(String(options.__directPath))
+      if (fs.existsSync(p)) {
+        return [p]
+      }
+    } catch {
+      // fall through to dialog
+    }
+  }
+
   const properties = options?.directories ? ['openDirectory'] : ['openFile']
   if (options?.multiple !== false) properties.push('multiSelections')
 
@@ -5240,9 +5263,33 @@ function findGitRoot(start) {
   return null
 }
 
-function terminalShellCommand() {
+function terminalShellCommand(preferredShell) {
+  // If a specific shell is requested, try to resolve it
+  if (preferredShell && IS_WINDOWS) {
+    if (preferredShell === 'powershell') {
+      const pwsh = findWindowsShell(['pwsh.exe', 'powershell.exe'])
+      if (pwsh) return { args: [], command: pwsh, name: 'powershell' }
+    }
+    if (preferredShell === 'git-bash') {
+      const bash = findGitBash()
+      if (bash) return { args: ['--login', '-i'], command: bash, name: 'git-bash' }
+      // Fallback: try common Git Bash locations
+      const gitBashPaths = [
+        path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Git', 'bin', 'bash.exe'),
+      ]
+      for (const p of gitBashPaths) {
+        if (fs.existsSync(p)) return { args: ['--login', '-i'], command: p, name: 'git-bash' }
+      }
+    }
+    if (preferredShell === 'cmd') {
+      return { args: [], command: process.env.COMSPEC || 'cmd.exe', name: 'cmd' }
+    }
+  }
+
   if (IS_WINDOWS) {
-    return { args: [], command: process.env.COMSPEC || 'cmd.exe' }
+    return { args: [], command: process.env.COMSPEC || 'cmd.exe', name: 'cmd' }
   }
 
   const configuredShell = process.env.SHELL || ''
@@ -5365,7 +5412,7 @@ ipcMain.handle('anakot:terminal:start', async (event, payload = {}) => {
   }
 
   const id = crypto.randomUUID()
-  const { args, command, name } = terminalShellCommand()
+  const { args, command, name } = terminalShellCommand(payload?.shell)
   const cwd = safeTerminalCwd(payload?.cwd)
   const cols = Math.max(2, Number.parseInt(String(payload?.cols || 80), 10) || 80)
   const rows = Math.max(2, Number.parseInt(String(payload?.rows || 24), 10) || 24)
@@ -5744,6 +5791,18 @@ app.on('before-quit', () => {
   }
   flushDesktopLogBufferSync()
   closePreviewWatchers()
+
+  // Dispose live PTY sessions before the environment tears down.
+  // Without this, node-pty's ThreadSafeFunction::CallJS callback fires
+  // on a half-torn-down environment, throws an uncaught C++ exception,
+  // and the process aborts (microsoft/node-pty#904).
+  for (const [id] of terminalSessions) {
+    try {
+      disposeTerminalSession(id)
+    } catch {
+      void 0
+    }
+  }
 
   if (anakotProcess && !anakotProcess.killed) {
     anakotProcess.kill('SIGTERM')

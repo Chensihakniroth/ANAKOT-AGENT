@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
@@ -14,13 +14,17 @@ import { formatRefValue } from '../components/assistant-ui/directive-text'
 import { getSessionMessages, listAllProfileSessions, type SessionInfo } from '../anakot'
 import { preserveLocalAssistantErrors, toChatMessages } from '../lib/chat-messages'
 import {
+  $fileBrowserOpen,
   $panesFlipped,
   $pinnedSessionIds,
+  $rightRailCollapsed,
+  $sidebarOpen,
   $sessionsLimit,
   bumpSessionsLimit,
   FILE_BROWSER_DEFAULT_WIDTH,
   FILE_BROWSER_MAX_WIDTH,
   FILE_BROWSER_MIN_WIDTH,
+  FILE_BROWSER_PANE_ID,
   pinSession,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -53,6 +57,12 @@ import {
 } from '../store/session'
 import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store/updates'
 
+import { Explorer } from '@/components/workbench/Explorer'
+import { SearchPanel } from '@/components/workbench/SearchPanel'
+import { SessionList } from '@/components/workbench/SessionList'
+import { ActivityBar } from '@/components/workbench/ActivityBar'
+import { BottomPanel } from '@/components/workbench/BottomPanel'
+import { SidebarHost } from '@/components/workbench/SidebarHost'
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
 import {
@@ -61,7 +71,6 @@ import {
   PREVIEW_RAIL_MIN_WIDTH,
   PREVIEW_RAIL_PANE_WIDTH
 } from './chat/right-rail'
-import { ChatSidebar } from './chat/sidebar'
 import { CommandPalette } from './command-palette'
 import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
 import { useGatewayRequest } from './gateway/hooks/use-gateway-request'
@@ -69,8 +78,8 @@ import { useKeybinds } from './hooks/use-keybinds'
 import { ModelPickerOverlay } from './model-picker-overlay'
 import { ModelVisibilityOverlay } from './model-visibility-overlay'
 import { RightSidebarPane } from './right-sidebar'
+import { TerminalTab } from './right-sidebar/terminal'
 import { $terminalTakeover } from './right-sidebar/store'
-import { PersistentTerminal, TerminalSlot } from './right-sidebar/terminal/persistent'
 import { NEW_CHAT_ROUTE, routeSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
 import { useContextSuggestions } from './session/hooks/use-context-suggestions'
 import { useCwdActions } from './session/hooks/use-cwd-actions'
@@ -91,6 +100,7 @@ import type { StatusbarItem } from './shell/statusbar-controls'
 import type { TitlebarTool } from './shell/titlebar-controls'
 import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
+import { OverlayModal } from './overlays/overlay-modal'
 
 const AgentsView = lazy(async () => ({ default: (await import('./agents')).AgentsView }))
 const ArtifactsView = lazy(async () => ({ default: (await import('./artifacts')).ArtifactsView }))
@@ -148,16 +158,19 @@ export function DesktopController() {
 
   const {
     agentsOpen,
+    artifactsOpen,
     chatOpen,
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
     cronOpen,
     currentView,
+    messagingOpen,
     openAgents,
     openCommandCenterSection,
     profilesOpen,
     settingsOpen,
+    skillsOpen,
     toggleCommandCenter
   } = useOverlayRouting()
 
@@ -593,25 +606,31 @@ export function DesktopController() {
     toggleCommandCenter
   })
 
-  const sidebar = (
-    <ChatSidebar
-      currentView={currentView}
-      onArchiveSession={sessionId => void archiveSession(sessionId)}
-      onDeleteSession={sessionId => void removeSession(sessionId)}
-      onLoadMoreProfileSessions={loadMoreSessionsForProfile}
-      onLoadMoreSessions={loadMoreSessions}
-      onNavigate={selectSidebarItem}
-      onNewSessionInWorkspace={startSessionInWorkspace}
-      onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
-    />
+  // The ChatSidebar (session history) is now rendered inside the Chat panel.
+  // The Explorer panel has its own file tree.
+  // We no longer pass `sidebar` into SidebarHost.
+  // Chat panel: compact session list + active chat conversation
+  const chatPanel = (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Compact session list */}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <SessionList
+          onSelectSession={(sessionId) => { navigate(sessionRoute(sessionId)) }}
+          onNewSession={() => startFreshSessionDraft()}
+        />
+      </div>
+    </div>
+  )
+
+  const explorerPanel = (
+    <Explorer onOpenFile={(path: string) => {
+      // All file editing is handled by the preview pane's Edit button
+    }} />
   )
 
   const overlays = (
     <>
       <DesktopInstallOverlay />
-      {/* One PTY-backed terminal mounted forever; <TerminalSlot /> placeholders
-          decide where it shows. Toggling fullscreen never rebuilds the shell. */}
-      <PersistentTerminal cwd={currentCwd} onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
       <DesktopOnboardingOverlay
         enabled={gatewayState === 'open'}
         onCompleted={() => {
@@ -678,6 +697,30 @@ export function DesktopController() {
           <ProfilesView onClose={closeOverlayToPreviousRoute} />
         </Suspense>
       )}
+
+      {skillsOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Skills & Tools">
+            <SkillsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {messagingOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Messaging">
+            <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {artifactsOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Artifacts">
+            <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
     </>
   )
 
@@ -686,7 +729,7 @@ export function DesktopController() {
       gateway={gatewayRef.current}
       maxVoiceRecordingSeconds={voiceMaxRecordingSeconds}
       onAddContextRef={composer.addContextRefAttachment}
-      onAddUrl={url => composer.addContextRefAttachment(`@url:${formatRefValue(url)}`, url)}
+      onAddUrl={(url: string) => composer.addContextRefAttachment(`@url:${formatRefValue(url)}`, url)}
       onAttachDroppedItems={composer.attachDroppedItems}
       onAttachImageBlob={composer.attachImageBlob}
       onBranchInNewChat={branchInNewChat}
@@ -702,7 +745,7 @@ export function DesktopController() {
       onPickFolders={() => void composer.pickContextPaths('folder')}
       onPickImages={() => void composer.pickImages()}
       onReload={reloadFromMessage}
-      onRemoveAttachment={id => void composer.removeAttachment(id)}
+      onRemoveAttachment={(id: string) => void composer.removeAttachment(id)}
       onSteer={steerPrompt}
       onSubmit={submitText}
       onThreadMessagesChange={handleThreadMessagesChange}
@@ -713,7 +756,7 @@ export function DesktopController() {
 
   const takeoverTerminalView = (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
-      <TerminalSlot />
+      <TerminalTab cwd={currentCwd} onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
     </div>
   )
 
@@ -722,9 +765,11 @@ export function DesktopController() {
   const sidebarSide = panesFlipped ? 'right' : 'left'
   const railSide = panesFlipped ? 'left' : 'right'
 
+  const rightRailCollapsed = useStore($rightRailCollapsed)
+
   const previewPane = (
     <Pane
-      disabled={!chatOpen || (!previewTarget && !filePreviewTarget)}
+      disabled={rightRailCollapsed || !chatOpen || (!previewTarget && !filePreviewTarget)}
       id="preview"
       key="preview"
       maxWidth={PREVIEW_RAIL_MAX_WIDTH}
@@ -742,7 +787,7 @@ export function DesktopController() {
   const fileBrowserPane = (
     <Pane
       defaultOpen={false}
-      disabled={!chatOpen}
+      disabled={rightRailCollapsed || !chatOpen}
       id="file-browser"
       key="file-browser"
       maxWidth={FILE_BROWSER_MAX_WIDTH}
@@ -761,6 +806,7 @@ export function DesktopController() {
 
   return (
     <AppShell
+      activityBar={<ActivityBar />}
       leftStatusbarItems={leftStatusbarItems}
       leftTitlebarTools={titlebarToolGroups.flat.left}
       onOpenSettings={openSettings}
@@ -768,6 +814,7 @@ export function DesktopController() {
       statusbarItems={statusbarItems}
       titlebarTools={titlebarToolGroups.flat.right}
     >
+      {/* Sidebar — Explorer / Search / Chat panels */}
       <Pane
         disabled={terminalTakeoverActive}
         id="chat-sidebar"
@@ -777,53 +824,25 @@ export function DesktopController() {
         side={sidebarSide}
         width={`${SIDEBAR_DEFAULT_WIDTH}px`}
       >
-        {sidebar}
+        <SidebarHost
+          explorer={explorerPanel}
+          search={<SearchPanel />}
+          chat={chatPanel}
+        />
       </Pane>
+
+      {/* Main area — Chat view + Bottom Panel */}
       <PaneMain>
-        <Routes>
-          <Route element={terminalTakeoverActive ? takeoverTerminalView : chatView} index />
-          <Route element={terminalTakeoverActive ? takeoverTerminalView : chatView} path=":sessionId" />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <SkillsView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="skills"
-          />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="messaging"
-          />
-          <Route
-            element={
-              <Suspense fallback={null}>
-                <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
-              </Suspense>
-            }
-            path="artifacts"
-          />
-          <Route element={null} path="cron" />
-          <Route element={null} path="profiles" />
-          <Route element={null} path="settings" />
-          <Route element={null} path="command-center" />
-          <Route element={null} path="agents" />
-          <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="new" />
-          <Route element={<LegacySessionRedirect />} path="sessions/:sessionId" />
-          <Route element={<Navigate replace to={NEW_CHAT_ROUTE} />} path="*" />
-        </Routes>
+        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {chatView}
+          </div>
+          <BottomPanel onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
+        </div>
       </PaneMain>
-      {/*
-        Order within a side maps to column order. Default (rail on the right):
-        main | preview | file-browser. Flipped (rail on the left): mirror it to
-        file-browser | preview | main so preview stays adjacent to the chat.
-      */}
-      {panesFlipped ? fileBrowserPane : previewPane}
-      {panesFlipped ? previewPane : fileBrowserPane}
+
+      {/* Preview pane (right side) */}
+      {previewPane}
     </AppShell>
   )
 }

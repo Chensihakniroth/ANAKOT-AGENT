@@ -58,7 +58,7 @@ declare global {
         onData: (id: string, callback: (payload: string) => void) => () => void
         onExit: (id: string, callback: (payload: AnakotTerminalExit) => void) => () => void
         resize: (id: string, size: { cols: number; rows: number }) => Promise<boolean>
-        start: (options?: { cols?: number; cwd?: string; rows?: number }) => Promise<AnakotTerminalSession>
+        start: (options?: { cols?: number; cwd?: string; rows?: number; shell?: string }) => Promise<AnakotTerminalSession>
         write: (id: string, data: string) => Promise<boolean>
       }
       onClosePreviewRequested?: (callback: () => void) => () => void

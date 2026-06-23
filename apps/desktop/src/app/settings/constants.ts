@@ -40,8 +40,8 @@ export const CONTROL_TEXT = 'text-xs'
 export const PROVIDER_GROUPS: ProviderPrefix[] = [
   {
     prefix: 'NOUS_',
-    name: 'callmemo Portal',
-    description: 'Hosted Anakot & callmemo-trained models',
+    name: 'Local AI Gateway',
+    description: 'Local AI Gateway — hosted Anakot & locally-trained models',
     docsUrl: 'https://portal.callmemo.ai',
     priority: 0
   },

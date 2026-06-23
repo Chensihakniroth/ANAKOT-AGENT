@@ -7,8 +7,34 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 import { triggerHaptic } from '@/lib/haptics'
+import { useTheme } from '@/themes/context'
 
-import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel, terminalTheme } from './selection'
+import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel } from './selection'
+
+/** Read the fully-resolved background color from a DOM element that has the CSS var applied.
+ *  getComputedStyle().backgroundColor resolves color-mix() chains into plain rgb()/rgba()
+ *  strings that xterm.js can parse. Reading the raw var via getPropertyValue would return
+ *  the literal "color-mix(...)" text which xterm cannot understand. */
+function resolveThemeBackground(el: HTMLElement): string {
+  const resolved = getComputedStyle(el).backgroundColor
+  // Fallback to the old Solarized bg if something goes wrong
+  return resolved && resolved !== 'rgba(0, 0, 0, 0)' ? resolved : '#002b36'
+}
+
+/** Resolve a CSS variable's computed color by reading it off a live element.
+ *  Falls back to fallback if the value is empty/transparent. */
+function resolveCssColorVar(el: HTMLElement, varName: string, fallback: string): string {
+  const val = getComputedStyle(el).getPropertyValue(varName).trim()
+  if (!val) return fallback
+  // If it's a simple hex/color value, return as-is
+  // If it's color-mix(...), we need to read a computed property instead
+  if (val.startsWith('color-mix')) {
+    // Can't resolve color-mix from getPropertyValue — return fallback
+    // (the caller should use a computed property like backgroundColor instead)
+    return fallback
+  }
+  return val
+}
 
 type TerminalStatus = 'closed' | 'open' | 'starting'
 
@@ -93,9 +119,10 @@ function stripInitialPromptGap(data: string) {
 interface UseTerminalSessionOptions {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
+  shell?: 'powershell' | 'git-bash' | 'cmd'
 }
 
-function transferHasDropCandidates(t: DataTransfer): boolean {
+function transferHasDropCandidates(t: DataTransfer) {
   if (t.types?.includes(ANAKOT_PATHS_MIME)) {
     return true
   }
@@ -183,7 +210,7 @@ function quotePathForShell(path: string, shellName: string): string {
   return `'${path.replace(/'/g, "'\\''")}'`
 }
 
-export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSessionOptions) {
+export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerminalSessionOptions) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<Terminal | null>(null)
   const sessionIdRef = useRef<string | null>(null)
@@ -195,6 +222,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
   const [selection, setSelection] = useState('')
   const [selectionStyle, setSelectionStyle] = useState<CSSProperties | null>(null)
   const [shellName, setShellName] = useState('shell')
+  const themeCtx = useTheme()
 
   useEffect(() => {
     onAddSelectionToChatRef.current = onAddSelectionToChat
@@ -242,19 +270,43 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [addSelectionToChat, selection])
 
+  // SINGLE terminal lifecycle effect — handles creation, shell switch, and cwd change
+  // Dependency array: [shell, cwd] — one effect to rule them all
   useEffect(() => {
     const host = hostRef.current
     const terminalApi = window.anakotDesktop?.terminal
 
     if (!host || !terminalApi) {
       setStatus('closed')
-
       return
     }
 
     let disposed = false
     const cleanup: Array<() => void> = []
     let lastSentSize: { cols: number; rows: number } | null = null
+
+    // If a previous session exists, dispose it first
+    const prevId = sessionIdRef.current
+    if (prevId) {
+      console.log('[terminal] disposing previous session:', prevId)
+      void terminalApi.dispose(prevId)
+      sessionIdRef.current = null
+    }
+
+    // If a previous xterm instance exists, dispose it
+    const prevTerm = termRef.current
+    if (prevTerm) {
+      prevTerm.dispose()
+      termRef.current = null
+    }
+
+    // Resolve theme background from the container parent (which has var(--ui-bg-editor) applied).
+    // This resolves color-mix() chains into plain rgb() strings that xterm.js can parse.
+    const themeBg = host.parentElement ? resolveThemeBackground(host.parentElement) : '#002b36'
+    // Also resolve foreground from theme context for contrast
+    const themeFg = themeCtx.theme.colors.foreground || '#839496'
+
+    console.log('[terminal] theme bg resolved:', themeBg, 'from theme:', themeCtx.themeName, 'mode:', themeCtx.resolvedMode)
 
     const term = new Terminal({
       allowProposedApi: true,
@@ -266,7 +318,29 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       lineHeight: 1.12,
       macOptionIsMeta: true,
       scrollback: 1000,
-      theme: terminalTheme()
+      theme: {
+        background: themeBg,
+        foreground: themeFg,
+        cursor: themeFg,
+        cursorAccent: themeBg,
+        selectionBackground: '#586e7555',
+        black: '#073642',
+        red: '#dc322f',
+        green: '#859900',
+        yellow: '#b58900',
+        blue: '#268bd2',
+        magenta: '#d33682',
+        cyan: '#2aa198',
+        white: '#eee8d5',
+        brightBlack: '#586e75',
+        brightRed: '#f25c54',
+        brightGreen: '#b3d437',
+        brightYellow: '#f7c948',
+        brightBlue: '#5fb3ff',
+        brightMagenta: '#ff6ab4',
+        brightCyan: '#5cd9c8',
+        brightWhite: '#fdf6e3'
+      }
     })
 
     const fit = new FitAddon()
@@ -277,10 +351,8 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
     term.loadAddon(new WebLinksAddon())
     term.unicode.activeVersion = '11'
     term.open(host)
-    term.focus()
 
-    // WebGL renderer matches the dashboard ChatPage path; xterm's default DOM
-    // renderer paints SGR via CSS classes that visibly mute against our skins.
+    // WebGL renderer
     try {
       const webgl = new WebglAddon()
       webgl.onContextLoss(() => webgl.dispose())
@@ -289,11 +361,9 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       console.warn('[anakot-terminal] WebGL unavailable; falling back to DOM', err)
     }
 
+    // Drag and drop handlers
     const onDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) {
-        return
-      }
-
+      if (!e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
       e.preventDefault()
       e.stopPropagation()
       e.dataTransfer.dropEffect = 'copy'
@@ -301,19 +371,11 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
 
     const onDrop = (e: DragEvent) => {
       const id = sessionIdRef.current
-
-      if (!id || !e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) {
-        return
-      }
-
+      if (!id || !e.dataTransfer || !transferHasDropCandidates(e.dataTransfer)) return
       e.preventDefault()
       e.stopPropagation()
       const paths = collectDroppedPaths(e.dataTransfer)
-
-      if (!paths.length) {
-        return
-      }
-
+      if (!paths.length) return
       void terminalApi.write(id, `${paths.map(p => quotePathForShell(p, shellNameRef.current)).join(' ')} `)
       term.focus()
       triggerHaptic('selection')
@@ -328,10 +390,14 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       host.removeEventListener('drop', onDrop)
     })
 
+    // Fit and resize handler — fit.fit() is the single source of truth
+    let lastCols = 0
+    let lastRows = 0
+    let rafId = 0
+
     const fitAndResize = () => {
-      if (disposed || !host.isConnected || host.clientWidth <= 0 || host.clientHeight <= 0) {
-        return
-      }
+      if (disposed || !host.isConnected) return
+      if (host.clientWidth <= 0 || host.clientHeight <= 0) return
 
       try {
         fit.fit()
@@ -339,53 +405,44 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
         return
       }
 
-      const id = sessionIdRef.current
+      // Sanity floor — skip transient 0-size frames
+      if (term.rows < 2 || term.cols < 2) return
 
-      if (id && (lastSentSize?.cols !== term.cols || lastSentSize?.rows !== term.rows)) {
+      const id = sessionIdRef.current
+      if (!id) return
+
+      // If EITHER dimension changed (grow OR shrink), resize the PTY
+      if (term.rows !== lastRows || term.cols !== lastCols) {
+        lastRows = term.rows
+        lastCols = term.cols
         lastSentSize = { cols: term.cols, rows: term.rows }
         void terminalApi.resize(id, { cols: term.cols, rows: term.rows })
       }
     }
 
-    // Coalesce ResizeObserver bursts through rAF — running fit.fit()
-    // synchronously while sibling panes are mid-transition (e.g. file browser
-    // collapsing to 0px) crashes the WebGL renderer mid texture-atlas rebuild.
-    let pendingFrame = 0
-
-    const scheduleResize = () => {
-      if (pendingFrame) {
-        return
-      }
-
-      pendingFrame = window.requestAnimationFrame(() => {
-        pendingFrame = 0
-
-        if (!disposed) {
-          fitAndResize()
-        }
+    // ResizeObserver — debounced via rAF so we only fit once per frame,
+    // not on every single ResizeObserver callback (which can fire 60+ times/sec)
+    const resizeObserver = new ResizeObserver(() => {
+      if (disposed) return
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        if (!disposed) fitAndResize()
       })
-    }
-
-    const resizeObserver = new ResizeObserver(scheduleResize)
+    })
     resizeObserver.observe(host)
     cleanup.push(() => {
+      cancelAnimationFrame(rafId)
       resizeObserver.disconnect()
-
-      if (pendingFrame) {
-        window.cancelAnimationFrame(pendingFrame)
-      }
     })
 
+    // Data handler
     const dataDisposable = term.onData(data => {
       const id = sessionIdRef.current
-
-      if (id) {
-        void terminalApi.write(id, data)
-      }
+      if (id) void terminalApi.write(id, data)
     })
-
     cleanup.push(() => dataDisposable.dispose())
 
+    // Selection handler
     const selectionDisposable = term.onSelectionChange(() => {
       const next = term.getSelection()
       selectionRef.current = next
@@ -393,105 +450,155 @@ export function useTerminalSession({ cwd, onAddSelectionToChat }: UseTerminalSes
       setSelection(next)
       setSelectionStyle(next.trim() ? terminalSelectionAnchor(host) : null)
     })
-
     cleanup.push(() => selectionDisposable.dispose())
 
+    // Key handler
     term.attachCustomKeyEventHandler(event => {
-      if (event.type !== 'keydown') {
-        return true
-      }
-
+      if (event.type !== 'keydown') return true
       if (isAddSelectionShortcut(event) && term.hasSelection()) {
         event.preventDefault()
         addSelectionToChat()
-
         return false
       }
-
       return true
     })
 
-    fitAndResize()
+    // Start PTY session after container is ready
+    const startPty = () => {
+      if (disposed) return
+      console.log('[terminal] startPty check:', { clientWidth: host.clientWidth, clientHeight: host.clientHeight })
+      if (host.clientWidth <= 0 || host.clientHeight < 50) {
+        console.log('[terminal] container too small (' + host.clientWidth + 'x' + host.clientHeight + '), retrying...')
+        const t = setTimeout(startPty, 100)
+        cleanup.push(() => clearTimeout(t))
+        return
+      }
 
-    void terminalApi
-      .start({ cols: term.cols, cwd, rows: term.rows })
-      .then(session => {
-        if (disposed) {
-          void terminalApi.dispose(session.id)
+      try {
+        fit.fit()
+        console.log('[terminal] startPty fit.fit() done, term=' + term.cols + 'x' + term.rows)
+      } catch (err) {
+        console.log('[terminal] fit.fit() failed:', err)
+        const t = setTimeout(startPty, 50)
+        cleanup.push(() => clearTimeout(t))
+        return
+      }
 
-          return
-        }
+      let cols = term.cols
+      let rows = term.rows
+      console.log('[terminal] after fit:', { cols, rows, termCols: term.cols, termRows: term.rows, hostW: host.clientWidth, hostH: host.clientHeight })
+      if (cols <= 0 || rows <= 0) {
+        cols = Math.max(80, Math.floor(host.clientWidth / 7))
+        rows = Math.max(8, Math.floor(host.clientHeight / 12.32))
+      }
+      rows = Math.max(rows, 8)
+      cols = Math.max(cols, 80)
 
-        sessionIdRef.current = session.id
-        lastSentSize = { cols: term.cols, rows: term.rows }
-        shellNameRef.current = session.shell || 'shell'
-        setShellName(session.shell || 'shell')
+      console.log('[terminal] starting PTY:', { cols, cwd, rows, shell })
+      void terminalApi
+        .start({ cols, cwd, rows, shell })
+        .then(session => {
+          console.log('[terminal] PTY started:', { sessionId: session.id, shell: session.shell })
+          if (disposed) {
+            void terminalApi.dispose(session.id)
+            return
+          }
 
-        if (term.hasSelection()) {
-          const currentSelection = term.getSelection()
-          selectionRef.current = currentSelection
-          selectionLabelRef.current = terminalSelectionLabel(term, shellNameRef.current, currentSelection)
-        } else {
-          selectionRef.current = ''
-          selectionLabelRef.current = ''
-        }
+          sessionIdRef.current = session.id
+          lastSentSize = { cols: term.cols, rows: term.rows }
+          lastRows = term.rows
+          lastCols = term.cols
+          shellNameRef.current = session.shell || 'shell'
+          setShellName(session.shell || 'shell')
+          setStatus('open')
 
-        setStatus('open')
-        let wrotePromptContent = false
+          if (term.hasSelection()) {
+            const currentSelection = term.getSelection()
+            selectionRef.current = currentSelection
+            selectionLabelRef.current = terminalSelectionLabel(term, shellNameRef.current, currentSelection)
+          } else {
+            selectionRef.current = ''
+            selectionLabelRef.current = ''
+          }
 
-        cleanup.push(
-          terminalApi.onData(session.id, data => {
-            if (wrotePromptContent) {
-              term.write(data)
+          let wrotePromptContent = false
 
-              return
-            }
-
-            if (isStartupSpacer(data)) {
-              return
-            }
-
-            const next = stripInitialPromptGap(data)
-
-            if (next) {
-              wrotePromptContent = true
-              term.write(next)
-            }
-          }),
-          terminalApi.onExit(session.id, sessionExit => {
-            const { code, signal } = sessionExit
-            setStatus('closed')
-            term.write(`\r\n[terminal exited${signal ? `: ${signal}` : code !== null ? `: ${code}` : ''}]\r\n`)
-          })
-        )
-        window.requestAnimationFrame(() => {
-          fitAndResize()
-          term.focus()
+          cleanup.push(
+            terminalApi.onData(session.id, data => {
+              if (wrotePromptContent) {
+                term.write(data)
+                return
+              }
+              if (isStartupSpacer(data)) return
+              const next = stripInitialPromptGap(data)
+              if (next) {
+                wrotePromptContent = true
+                term.write(next)
+              }
+            }),
+            terminalApi.onExit(session.id, sessionExit => {
+              setStatus('closed')
+              term.write(`\r\n[terminal exited${sessionExit.signal ? `: ${sessionExit.signal}` : sessionExit.code !== null ? `: ${sessionExit.code}` : ''}]\r\n`)
+            })
+          )
         })
-      })
-      .catch(error => {
-        setStatus('closed')
-        term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
-      })
+        .catch(error => {
+          console.error('[terminal] PTY start failed:', error)
+          setStatus('closed')
+          term.write(`Terminal failed to start: ${error instanceof Error ? error.message : String(error)}\r\n`)
+        })
+    }
+
+    // Delay start to ensure DOM layout is complete
+    const tryStart = (attempt = 0) => {
+      if (disposed) return
+      if (host.clientWidth > 0 && host.clientHeight > 50) {
+        startPty()
+      } else if (attempt < 10) {
+        const t = setTimeout(() => tryStart(attempt + 1), 100)
+        cleanup.push(() => clearTimeout(t))
+      } else {
+        startPty()
+      }
+    }
+    const startTimer = setTimeout(tryStart, 200)
+    cleanup.push(() => clearTimeout(startTimer))
+
+    term.focus()
 
     return () => {
       disposed = true
       cleanup.forEach(run => run())
-
       const id = sessionIdRef.current
       sessionIdRef.current = null
-
-      if (id) {
-        void terminalApi.dispose(id)
-      }
-
+      if (id) void terminalApi.dispose(id)
       term.dispose()
       termRef.current = null
       shellNameRef.current = 'shell'
       selectionRef.current = ''
       selectionLabelRef.current = ''
     }
-  }, [addSelectionToChat, cwd])
+  }, [shell, cwd])  // <-- single dependency array, handles both shell switch AND cwd change
+
+  // Live theme-switch update: when the theme context changes, re-resolve the background
+  // color from the container and update xterm.js theme options (no PTY restart needed).
+  // xterm.js supports updating .options.theme at runtime — it triggers a full re-render.
+  useEffect(() => {
+    const term = termRef.current
+    if (!term || !hostRef.current?.parentElement) return
+
+    const newBg = resolveThemeBackground(hostRef.current.parentElement)
+    const newFg = themeCtx.theme.colors.foreground || '#839496'
+    console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
+
+    term.options.theme = {
+      ...term.options.theme,
+      background: newBg,
+      foreground: newFg,
+      cursor: newFg,
+      cursorAccent: newBg
+    }
+  }, [themeCtx.resolvedMode, themeCtx.themeName])
 
   return {
     addSelectionToChat,

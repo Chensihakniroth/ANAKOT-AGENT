@@ -86,6 +86,22 @@ export function setFileBrowserOpen(open: boolean) {
   setPaneOpen(FILE_BROWSER_PANE_ID, open)
 }
 
+// ── Right rail collapse (file-browser + preview as a unit) ──────────────────
+// $rightRailCollapsed is a "master hide" that forces both right-side panes to
+// zero width without destroying their individual state.  Toggling it back
+// restores each pane to whatever it was doing before (file-browser open/closed,
+// preview showing/hidden based on target).
+
+const RIGHT_RAIL_COLLAPSED_KEY = 'anakot.desktop.rightRailCollapsed'
+
+export const $rightRailCollapsed = atom(storedBoolean(RIGHT_RAIL_COLLAPSED_KEY, false))
+
+$rightRailCollapsed.subscribe(collapsed => persistBoolean(RIGHT_RAIL_COLLAPSED_KEY, collapsed))
+
+export function toggleRightRail() {
+  $rightRailCollapsed.set(!$rightRailCollapsed.get())
+}
+
 // Hotkey → focus the sessions search field. Opens the sidebar first, then lets
 // the field (which only mounts when the sidebar is open) subscribe + focus.
 export const SESSION_SEARCH_FOCUS_EVENT = 'anakot:focus-session-search'

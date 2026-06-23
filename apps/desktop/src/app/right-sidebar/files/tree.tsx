@@ -80,13 +80,14 @@ export function ProjectTree({
     (node: NodeApi<TreeNode>) => {
       if (node.data && !node.data.isDirectory) {
         onPreviewFile?.(node.data.id)
+        onActivateFile?.(node.data.id)
       }
     },
-    [onPreviewFile]
+    [onPreviewFile, onActivateFile]
   )
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden" ref={containerRef}>
+    <div className="h-full" ref={containerRef}>
       {size.height > 0 && size.width > 0 ? (
         <Tree<TreeNode>
           childrenAccessor={node => (node?.isDirectory ? (node.children ?? []) : null)}
@@ -181,6 +182,7 @@ function ProjectTreeRow({
 
         if (!isFolder && !isPlaceholder) {
           onPreviewFile?.(node.data.id)
+          onAttachFile?.(node.data.id)
         }
       }}
       onDragStart={event => {

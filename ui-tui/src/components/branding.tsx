@@ -329,7 +329,7 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
         {info.mcp_servers && info.mcp_servers.length > 0 && (
           <Box flexDirection="column" marginTop={1}>
             <CollapseToggle
-              count={info.mcp_servers.length}
+              count={info.mcp_servers.filter(s => s.connected).length}
               onToggle={() => setMcpOpen(v => !v)}
               open={mcpOpen}
               suffix="connected"
@@ -345,7 +345,7 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
         <Text color={t.color.text}>
           {toolsTotal} tools{' · '}
           {skillsTotal} skills
-          {info.mcp_servers?.length ? ` · ${info.mcp_servers.length} MCP` : ''}
+          {info.mcp_servers?.filter(s => s.connected).length ? ` · ${info.mcp_servers.filter(s => s.connected).length} MCP` : ''}
           {' · '}
           <Text color={t.color.muted}>/help for commands</Text>
         </Text>

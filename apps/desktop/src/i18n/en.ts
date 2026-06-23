@@ -540,7 +540,7 @@ export const en: Translations = {
       noProviderOptions: 'This toolset has no provider options — enable it and it works with your current setup.',
       noProviders: 'No providers are available for this toolset right now.',
       ready: 'Ready',
-      nousIncluded: 'Included with a callmemo subscription — sign in to callmemo Portal to activate.',
+      nousIncluded: 'Included with a local AI Gateway subscription — sign in to Local AI Gateway to activate.',
       noApiKeyRequired: 'No API key required.',
       postSetupHint: step =>
         `This backend needs a one-time install (${step}). Runs on this machine — may take a few minutes.`,
@@ -1517,9 +1517,12 @@ export const en: Translations = {
     binaryTitle: 'This looks like a binary file',
     binaryBody: label => `Previewing ${label} may show unreadable text.`,
     largeTitle: 'This file is large',
-    largeBody: (label, size) => `${label} is ${size}. Anakot will only show the first 512 KB.`,
+    largeBody: (label, size) => `${label} is ${size}. Anakot will only show the first 2 MB.`,
+    oversizedTitle: 'This file is too large to preview',
+    oversizedBody: (label, size) => `${label} is ${size}. Files over 10 MB cannot be previewed in the editor.`,
+    largeFileWarning: (size, lines) => `This file is ${size} with ~${lines} lines. Rendering may be slow.`,
     previewAnyway: 'Preview anyway',
-    truncated: 'Showing first 512 KB.',
+    truncated: 'Showing first 2 MB.',
     noInlineTitle: 'No inline preview',
     noInlineBody: mimeType => `${mimeType || 'This file type'} can still be attached as context.`,
     console: {
