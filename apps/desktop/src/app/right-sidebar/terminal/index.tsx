@@ -23,12 +23,13 @@ interface TerminalTabProps {
 
 export interface TerminalTabHandle {
   resize: () => void
+  clear: () => void
 }
 
 export const TerminalTab = forwardRef<TerminalTabHandle, TerminalTabProps>(
 function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
   const { t } = useI18n()
-  const { addSelectionToChat, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
+  const { addSelectionToChat, clear: clearTerminal, hostRef, selection, selectionStyle, shellName, status } = useTerminalSession({
     cwd,
     onAddSelectionToChat,
     shell
@@ -44,10 +45,13 @@ function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
     setTerminalTakeover(!takeover)
   }
 
-  // Expose resize method to parent
+  // Expose resize and clear methods to parent
   useImperativeHandle(ref, () => ({
     resize: () => {
       window.dispatchEvent(new CustomEvent('terminal-resize'))
+    },
+    clear: () => {
+      clearTerminal()
     },
   }))
 

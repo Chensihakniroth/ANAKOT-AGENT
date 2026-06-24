@@ -14,9 +14,12 @@ interface ActivityBarItem {
   route?: string
 }
 
-const TOP_ITEMS: ActivityBarItem[] = [
+const SIDEBAR_TOGGLE_ITEMS: ActivityBarItem[] = [
   { id: 'explorer', icon: 'files', label: 'Explorer', panel: 'explorer' },
   { id: 'chat', icon: 'comment-discussion', label: 'All Sessions', panel: 'chat' },
+]
+
+const GLOBAL_VIEW_ITEMS: ActivityBarItem[] = [
   { id: 'skills', icon: 'symbol-misc', label: 'Skills & Tools', route: SKILLS_ROUTE },
   { id: 'messaging', icon: 'comment', label: 'Messaging', route: MESSAGING_ROUTE },
   { id: 'artifacts', icon: 'files', label: 'Artifacts', route: ARTIFACTS_ROUTE },
@@ -47,32 +50,36 @@ export function ActivityBar() {
     }
   }
 
+  const renderItem = (item: ActivityBarItem) => {
+    const isActive = item.panel === activePanel && sidebarOpen
+    return (
+      <button
+        key={item.id}
+        aria-label={item.label}
+        aria-pressed={isActive}
+        className={cn(
+          'group relative flex h-10 w-10 items-center justify-center transition-colors',
+          'hover:text-foreground',
+          isActive && 'text-foreground'
+        )}
+        onClick={() => handleClick(item)}
+        title={item.label}
+        type="button"
+      >
+        {isActive && (
+          <div className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-sm bg-foreground" />
+        )}
+        <Codicon name={item.icon} size="1.25rem" />
+      </button>
+    )
+  }
+
   return (
     <div className="flex h-full w-full flex-col items-center bg-(--ui-activity-bar-background) text-(--ui-text-tertiary)">
       <div className="flex flex-1 flex-col items-center gap-0.5 pt-1">
-        {TOP_ITEMS.map(item => {
-          const isActive = item.panel === activePanel && sidebarOpen
-          return (
-            <button
-              key={item.id}
-              aria-label={item.label}
-              aria-pressed={isActive}
-              className={cn(
-                'group relative flex h-10 w-10 items-center justify-center transition-colors',
-                'hover:text-foreground',
-                isActive && 'text-foreground'
-              )}
-              onClick={() => handleClick(item)}
-              title={item.label}
-              type="button"
-            >
-              {isActive && (
-                <div className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-sm bg-foreground" />
-              )}
-              <Codicon name={item.icon} size="1.25rem" />
-            </button>
-          )
-        })}
+        {SIDEBAR_TOGGLE_ITEMS.map(renderItem)}
+        <div className="my-1 h-px w-6 bg-(--ui-stroke-tertiary)" />
+        {GLOBAL_VIEW_ITEMS.map(renderItem)}
       </div>
 
       {/* Bottom items */}

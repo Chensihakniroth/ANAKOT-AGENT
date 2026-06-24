@@ -605,6 +605,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
 
   return {
     addSelectionToChat,
+    clear: () => termRef.current?.clear(),
     hostRef,
     selection,
     selectionStyle,

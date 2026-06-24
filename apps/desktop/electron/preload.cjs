@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   revealLogs: () => ipcRenderer.invoke('anakot:logs:reveal'),
   getRecentLogs: () => ipcRenderer.invoke('anakot:logs:recent'),
   readDir: dirPath => ipcRenderer.invoke('anakot:fs:readDir', dirPath),
+  renameFile: (oldPath, newPath) => ipcRenderer.invoke('anakot:fs:rename', oldPath, newPath),
+  deleteFile: filePath => ipcRenderer.invoke('anakot:fs:unlink', filePath),
+  writeFile: (filePath, content) => ipcRenderer.invoke('anakot:fs:writeFile', filePath, content),
   gitRoot: startPath => ipcRenderer.invoke('anakot:fs:gitRoot', startPath),
   terminal: {
     dispose: id => ipcRenderer.invoke('anakot:terminal:dispose', id),

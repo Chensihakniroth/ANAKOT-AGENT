@@ -1,16 +1,18 @@
 import { Codicon } from '@/components/ui/codicon'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ShikiHighlighter from 'react-shiki'
 
-const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
+import { closeOtherTabs, closeAllTabs, closeTabsToTheRight, type EditorTab } from '@/store/workbench'
 
-interface EditorTab {
-  id: string
-  path: string
-  label: string
-  dirty: boolean
-}
+const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
 
 interface EditorAreaProps {
   tabs: EditorTab[]
@@ -25,41 +27,114 @@ function EditorTabBar({ tabs, activeId, onSetActiveTab, onCloseTab }: {
   onSetActiveTab: (id: string | null) => void
   onCloseTab: (id: string) => void
 }) {
+  const [contextTabId, setContextTabId] = useState<string | null>(null)
+  const contextTab = tabs.find(t => t.id === contextTabId) ?? null
+
   if (tabs.length === 0) return null
 
   return (
-    <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background)">
-      {tabs.map(tab => {
-        const isActive = tab.id === activeId
-        return (
-          <button
-            key={tab.id}
-            className={cn(
-              'flex h-full shrink-0 items-center gap-1.5 border-r border-(--ui-stroke-secondary) px-3 text-xs transition-colors',
-              isActive
-                ? 'bg-(--ui-tab-active-background) text-foreground'
-                : 'text-muted-foreground hover:text-(--ui-text-secondary)'
-            )}
-            onClick={() => onSetActiveTab(tab.id)}
-            type="button"
-          >
-            <Codicon name="file-code" size="0.75rem" />
-            <span className="max-w-[120px] truncate">{tab.label}</span>
-            {tab.dirty && <span className="size-2 rounded-full bg-foreground/40" />}
-            <span
-              className="ml-0.5 flex size-4 items-center justify-center rounded-sm transition-colors hover:bg-(--ui-control-hover-background)"
-              onClick={e => {
-                e.stopPropagation()
-                onCloseTab(tab.id)
+    <ContextMenu>
+      <ContextMenuTrigger
+        className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background)"
+        onContextMenu={() => setContextTabId(null)}
+      >
+        {tabs.map(tab => {
+          const isActive = tab.id === activeId
+          return (
+            <button
+              key={tab.id}
+              className={cn(
+                'flex h-full shrink-0 items-center gap-1.5 border-r border-(--ui-stroke-secondary) px-3 text-xs transition-colors',
+                isActive
+                  ? 'bg-(--ui-tab-active-background) text-foreground'
+                  : 'text-muted-foreground hover:text-(--ui-text-secondary)'
+              )}
+              onClick={() => onSetActiveTab(tab.id)}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setContextTabId(tab.id)
               }}
-              onMouseDown={e => e.preventDefault()}
+              type="button"
             >
-              <Codicon name="chrome-close" size="0.625rem" />
-            </span>
-          </button>
-        )
-      })}
-    </div>
+              <Codicon name="file-code" size="0.75rem" />
+              <span className="max-w-[120px] truncate">{tab.label}</span>
+              {tab.dirty && <span className="size-2 rounded-full bg-foreground/40" />}
+              <span
+                className="ml-0.5 flex size-4 items-center justify-center rounded-sm transition-colors hover:bg-(--ui-control-hover-background)"
+                onClick={e => {
+                  e.stopPropagation()
+                  onCloseTab(tab.id)
+                }}
+                onMouseDown={e => e.preventDefault()}
+              >
+                <Codicon name="chrome-close" size="0.625rem" />
+              </span>
+            </button>
+          )
+        })}
+      </ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[180px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-xl">
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={!contextTabId}
+          onSelect={() => { if (contextTabId) onCloseTab(contextTabId) }}
+        >
+          <Codicon name="chrome-close" size="0.75rem" />
+          Close
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={tabs.length < 2 || !contextTabId}
+          onSelect={() => { if (contextTabId) closeOtherTabs(contextTabId) }}
+        >
+          <Codicon name="chrome-close" size="0.75rem" />
+          Close Others
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={!contextTabId || tabs.findIndex(t => t.id === contextTabId) === tabs.length - 1}
+          onSelect={() => { if (contextTabId) closeTabsToTheRight(contextTabId) }}
+        >
+          <Codicon name="arrow-right" size="0.75rem" />
+          Close to Right
+        </ContextMenuItem>
+        <ContextMenuSeparator className="my-1 h-px bg-(--ui-stroke-tertiary)" />
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={tabs.length === 0}
+          onSelect={() => closeAllTabs()}
+        >
+          <Codicon name="chrome-close" size="0.75rem" />
+          Close All
+        </ContextMenuItem>
+        <ContextMenuSeparator className="my-1 h-px bg-(--ui-stroke-tertiary)" />
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={!contextTab}
+          onSelect={() => {
+            if (contextTab?.path) {
+              navigator.clipboard.writeText(contextTab.path).catch(() => undefined)
+            }
+          }}
+        >
+          <Codicon name="copy" size="0.75rem" />
+          Copy Path
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="gap-2 px-3 py-1.5 text-xs"
+          disabled={!contextTab}
+          onSelect={() => {
+            if (contextTab?.path) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ;(window.anakotDesktop as any)?.showItemInFolder?.(contextTab.path)
+            }
+          }}
+        >
+          <Codicon name="folder-opened" size="0.75rem" />
+          Reveal in Explorer
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 

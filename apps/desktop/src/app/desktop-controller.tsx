@@ -63,6 +63,10 @@ import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
 import { BottomPanel } from '@/components/workbench/BottomPanel'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
+import { SessionTab } from '@/components/workbench/SessionTab'
+import { WelcomeView } from '@/components/workbench/WelcomeView'
+import { EditorArea } from '@/components/workbench/EditorArea'
+import { openRecentFile, setActiveFilePath, closeEditorTab, setActiveEditorTab, $editorTabs, $activeEditorTabId } from '@/store/workbench'
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
 import {
@@ -624,7 +628,9 @@ export function DesktopController() {
 
   const explorerPanel = (
     <Explorer onOpenFile={(path: string) => {
-      // All file editing is handled by the preview pane's Edit button
+      const label = path.split(/[\\/]/).pop() || path
+      openRecentFile(path, label)
+      setActiveFilePath(path)
     }} />
   )
 
@@ -831,11 +837,30 @@ export function DesktopController() {
         />
       </Pane>
 
-      {/* Main area — Chat view + Bottom Panel */}
+      {/* Main area — Editor tabs + Chat view + Bottom Panel */}
       <PaneMain>
         <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
-            {chatView}
+            {!currentCwd.trim() && !activeSessionId && !freshDraftReady ? (
+              <WelcomeView
+                onNewSession={() => startFreshSessionDraft(true)}
+                onOpenFolder={() => {
+                  void (async () => {
+                    const selected = await window.anakotDesktop?.selectPaths({
+                      defaultPath: $currentCwd.get().trim() || undefined,
+                      directories: true,
+                      multiple: false,
+                      title: 'Select a folder'
+                    })
+                    if (selected?.[0]) {
+                      setCurrentCwd(selected[0])
+                    }
+                  })()
+                }}
+              />
+            ) : (
+              chatView
+            )}
           </div>
           <BottomPanel onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
         </div>

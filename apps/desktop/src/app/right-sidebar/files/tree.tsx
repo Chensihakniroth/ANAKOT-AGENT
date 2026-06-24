@@ -3,6 +3,7 @@ import { type NodeApi, type NodeRendererProps, Tree, type TreeApi } from 'react-
 
 import { PageLoader } from '@/components/page-loader'
 import { Codicon } from '@/components/ui/codicon'
+
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,8 @@ interface ProjectTreeProps {
   onLoadChildren: (id: string) => void | Promise<void>
   onNodeOpenChange: (id: string, open: boolean) => void
   onPreviewFile?: (path: string) => void
+  onRenameFile?: (path: string) => void
+  onDeleteFile?: (path: string) => void
   openState: Record<string, boolean>
 }
 
@@ -33,11 +36,15 @@ export function ProjectTree({
   onLoadChildren,
   onNodeOpenChange,
   onPreviewFile,
+  onRenameFile,
+  onDeleteFile,
   openState
 }: ProjectTreeProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const treeRef = useRef<TreeApi<TreeNode> | null>(null)
   const [size, setSize] = useState({ height: 0, width: 0 })
+  const [contextNode, setContextNode] = useState<TreeNode | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
 
   const syncTreeSize = useCallback(() => {
     const el = containerRef.current
@@ -113,13 +120,100 @@ export function ProjectTree({
               onAttachFile={onActivateFile}
               onAttachFolder={onActivateFolder}
               onPreviewFile={onPreviewFile}
+              onContextMenu={(node, e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setContextNode(node)
+                setMenuPosition({ x: e.clientX, y: e.clientY })
+              }}
             />
           )}
         </Tree>
       ) : (
         <TreeSizingState />
       )}
+
+      {contextNode && menuPosition && (
+        <FileContextMenu
+          x={menuPosition.x}
+          y={menuPosition.y}
+          node={contextNode}
+          onClose={() => { setContextNode(null); setMenuPosition(null) }}
+          onRename={onRenameFile}
+          onDelete={onDeleteFile}
+        />
+      )}
     </div>
+  )
+}
+
+function FileContextMenu({
+  x, y, node, onClose, onRename, onDelete
+}: {
+  x: number
+  y: number
+  node: TreeNode
+  onClose: () => void
+  onRename?: (path: string) => void
+  onDelete?: (path: string) => void
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-[9998]" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }} />
+      <div
+        className="fixed z-[9999] min-w-[180px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-xl"
+        style={{ left: Math.min(x, window.innerWidth - 200), top: Math.min(y, window.innerHeight - 250) }}
+        onContextMenu={e => e.preventDefault()}
+      >
+        {onRename && (
+          <button
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+            onClick={() => { onRename(node.id); onClose() }}
+            type="button"
+          >
+            <Codicon name="pencil" size="0.75rem" />
+            Rename
+          </button>
+        )}
+        {onDelete && (
+          <>
+            <button
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-(--ui-control-hover-background)"
+              onClick={() => { onDelete(node.id); onClose() }}
+              type="button"
+            >
+              <Codicon name="trash" size="0.75rem" />
+              Delete
+            </button>
+            <div className="mx-3 my-1 h-px bg-(--ui-stroke-tertiary)" />
+          </>
+        )}
+        <button
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+          onClick={() => {
+            navigator.clipboard.writeText(node.id).catch(() => undefined)
+            onClose()
+          }}
+          type="button"
+        >
+          <Codicon name="copy" size="0.75rem" />
+          Copy Path
+        </button>
+        <button
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+          onClick={() => {
+            // Reveal in system explorer — open parent directory
+            const parentDir = node.id.split(/[\\/]/).slice(0, -1).join('/') || '/'
+            void window.anakotDesktop?.openExternal?.(`file://${parentDir}`)
+            onClose()
+          }}
+          type="button"
+        >
+          <Codicon name="folder-opened" size="0.75rem" />
+          Reveal in Explorer
+        </button>
+      </div>
+    </>
   )
 }
 
@@ -129,18 +223,22 @@ function TreeSizingState() {
   return <PageLoader aria-label={t.rightSidebar.loadingFiles} className="min-h-24 px-3" />
 }
 
+interface ProjectTreeRowProps extends NodeRendererProps<TreeNode> {
+  onAttachFile: (path: string) => void
+  onAttachFolder: (path: string) => void
+  onPreviewFile?: (path: string) => void
+  onContextMenu?: (node: TreeNode, e: React.MouseEvent) => void
+}
+
 function ProjectTreeRow({
   dragHandle,
   node,
   onAttachFile,
   onAttachFolder,
   onPreviewFile,
+  onContextMenu,
   style
-}: NodeRendererProps<TreeNode> & {
-  onAttachFile: (path: string) => void
-  onAttachFolder: (path: string) => void
-  onPreviewFile?: (path: string) => void
-}) {
+}: ProjectTreeRowProps) {
   if (!node.data) {
     return <div style={style} />
   }
@@ -197,6 +295,11 @@ function ProjectTreeRow({
         event.dataTransfer.effectAllowed = 'copy'
         event.dataTransfer.setData('application/x-anakot-paths', payload)
         event.dataTransfer.setData('text/plain', node.data.id)
+      }}
+      onContextMenu={e => {
+        if (onContextMenu && node.data) {
+          onContextMenu(node.data, e)
+        }
       }}
       ref={dragHandle}
       style={style}

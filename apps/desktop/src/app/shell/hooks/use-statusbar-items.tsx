@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Clock,
   Command,
+  FolderOpen,
   Hash,
   Loader2,
   Sparkles,
@@ -27,6 +28,7 @@ import { $previewServerRestartStatus } from '@/store/preview'
 import {
   $activeSessionId,
   $busy,
+  $currentCwd,
   $currentFastMode,
   $currentModel,
   $currentProvider,
@@ -98,6 +100,11 @@ export function useStatusbarItems({
   const updateStatus = useStore($updateStatus)
   const updateApply = useStore($updateApply)
   const desktopVersion = useStore($desktopVersion)
+  const currentCwd = useStore($currentCwd)
+
+  const workspaceFolder = currentCwd.trim()
+    ? currentCwd.split(/[\\/]+/).filter(Boolean).pop() || currentCwd
+    : null
 
   const contextUsage = useMemo(() => usageContextLabel(currentUsage), [currentUsage])
   const contextBar = useMemo(() => contextBarLabel(currentUsage), [currentUsage])
@@ -226,6 +233,15 @@ export function useStatusbarItems({
   const coreLeftStatusbarItems = useMemo<readonly StatusbarItem[]>(
     () => [
       {
+        icon: <FolderOpen className="size-3" />,
+        id: 'workspace-folder',
+        label: workspaceFolder || copy.noWorkspace,
+        title: currentCwd.trim() || copy.noWorkspace,
+        hidden: false,
+        variant: workspaceFolder ? 'action' : 'text',
+        ...(workspaceFolder ? { onSelect: () => {} } : {})
+      },
+      {
         className: `w-7 justify-center px-0${commandCenterOpen ? ' bg-accent/55 text-foreground' : ''}`,
         icon: <Command className="size-3.5" />,
         id: 'command-center',
@@ -286,6 +302,7 @@ export function useStatusbarItems({
       bgRunning,
       commandCenterOpen,
       copy,
+      currentCwd,
       gatewayMenuContent,
       gatewayClassName,
       gatewayDetail,
@@ -293,7 +310,8 @@ export function useStatusbarItems({
       inferenceStatus?.reason,
       openAgents,
       subagentsRunning,
-      toggleCommandCenter
+      toggleCommandCenter,
+      workspaceFolder
     ]
   )
 

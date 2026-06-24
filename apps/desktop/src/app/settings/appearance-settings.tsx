@@ -22,7 +22,8 @@ import {
   setBackgroundPositionY,
   setBackgroundSize
 } from './background-image-settings'
-import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize } from '@/store/background'
+import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize, $backgroundType, setBackgroundType } from '@/store/background'
+import { ShaderBackground } from '@/components/ui/shader-background'
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 
 function ThemePreview({ name }: { name: string }) {
@@ -139,132 +140,140 @@ function BackgroundImageSettings() {
     ? (/^https?:\/\/|^file:\/\/\/|^data:/.test(image) ? image : `${import.meta.env.BASE_URL}${image.replace(/^\/+/, '')}`)
     : null
 
+  // Read current type
+  const bgType = useStore($backgroundType)
+
   return (
     <ListRow
       below={
         <div className="mt-3 grid gap-4">
-          {/* Current image preview */}
-          {image && (
-            <div className="relative overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
-              <img
-                alt="Background preview"
-                className="h-40 w-full object-cover"
-                src={image}
-              />
-              <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
-                <button
-                  className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-white/30"
-                  onClick={() => inputRef.current?.click()}
-                  type="button"
-                >
-                  <Plus className="size-3.5" />
-                  Replace
-                </button>
-                <button
-                  className="flex items-center gap-1.5 rounded-lg bg-red-500/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-red-500/80"
-                  onClick={handleClear}
-                  type="button"
-                >
-                  <Trash2 className="size-3.5" />
-                  Remove
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Type selector */}
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-medium text-(--ui-text-secondary)">Background type</span>
+            <SegmentedControl
+              value={bgType}
+              onChange={v => { setBackgroundType(v); triggerHaptic('crisp') }}
+              options={[
+                { id: 'shader', label: 'Shader' },
+                { id: 'image', label: 'Image' },
+              ]}
+            />
+          </div>
 
-          {/* Built-in gallery */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-(--ui-text-secondary)">Built-in Backgrounds</span>
-              {!image && (
-                <span className="text-[0.65rem] text-muted-foreground">Click one to apply</span>
+          {/* Shader preview or image UI */}
+          {bgType === 'shader' ? (
+            <div className="relative h-40 overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
+              <ShaderBackground />
+            </div>
+          ) : (
+            <>
+              {image && (
+                <div className="relative overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
+                  <img alt="Background preview" className="h-40 w-full object-cover" src={image} />
+                  <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+                    <button className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-white/30" onClick={() => inputRef.current?.click()} type="button">
+                      <Plus className="size-3.5" /> Replace
+                    </button>
+                    <button className="flex items-center gap-1.5 rounded-lg bg-red-500/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-red-500/80" onClick={handleClear} type="button">
+                      <Trash2 className="size-3.5" /> Remove
+                    </button>
+                  </div>
+                </div>
               )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {/* Upload card */}
-              <button
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-3 transition-colors',
-                  dragOver
-                    ? 'border-primary bg-primary/5'
-                    : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
-                )}
-                onClick={() => inputRef.current?.click()}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                type="button"
-              >
-                <Plus className="size-5 text-muted-foreground" />
-                <span className="text-[0.65rem] leading-tight text-muted-foreground">Upload</span>
-              </button>
 
-              {/* Built-in images */}
-              {BUILT_IN_BACKGROUNDS.map(bg => {
-                const url = resolveBuiltIn(bg.path)
-                const active = currentBuiltInId === bg.id
-
-                return (
+              {/* Built-in gallery */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-(--ui-text-secondary)">Built-in Backgrounds</span>
+                  {!image && (
+                    <span className="text-[0.65rem] text-muted-foreground">Click one to apply</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {/* Upload card */}
                   <button
                     className={cn(
-                      'group relative h-20 w-28 overflow-hidden rounded-lg border-2 transition-all',
-                      active
-                        ? 'border-primary ring-2 ring-primary/20'
-                        : 'border-transparent hover:border-(--ui-stroke-secondary)'
+                      'flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-3 transition-colors',
+                      dragOver
+                        ? 'border-primary bg-primary/5'
+                        : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) hover:border-(--ui-stroke-secondary) hover:bg-(--chrome-action-hover)'
                     )}
-                    key={bg.id}
-                    onClick={() => handleSelectBuiltIn(bg)}
-                    title={bg.label}
+                    onClick={() => inputRef.current?.click()}
+                    onDragLeave={handleDragLeave}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
                     type="button"
                   >
-                    <img
-                      alt={bg.label}
-                      className="h-full w-full object-cover"
-                      src={url}
-                    />
-                    {active && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-                        <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
-                          <Check className="size-3" />
-                        </span>
-                      </div>
-                    )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-0.5">
-                      <span className="text-[0.6rem] font-medium text-white">{bg.label}</span>
-                    </div>
+                    <Plus className="size-5 text-muted-foreground" />
+                    <span className="text-[0.65rem] leading-tight text-muted-foreground">Upload</span>
                   </button>
-                )
-              })}
-            </div>
-          </div>
+
+                  {/* Built-in images */}
+                  {BUILT_IN_BACKGROUNDS.map(bg => {
+                    const url = resolveBuiltIn(bg.path)
+                    const active = currentBuiltInId === bg.id
+
+                    return (
+                      <button
+                        className={cn(
+                          'group relative h-20 w-28 overflow-hidden rounded-lg border-2 transition-all',
+                          active
+                            ? 'border-primary ring-2 ring-primary/20'
+                            : 'border-transparent hover:border-(--ui-stroke-secondary)'
+                        )}
+                        key={bg.id}
+                        onClick={() => handleSelectBuiltIn(bg)}
+                        title={bg.label}
+                        type="button"
+                      >
+                        <img
+                          alt={bg.label}
+                          className="h-full w-full object-cover"
+                          src={url}
+                        />
+                        {active && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+                            <span className="grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                              <Check className="size-3" />
+                            </span>
+                          </div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 py-0.5">
+                          <span className="text-[0.6rem] font-medium text-white">{bg.label}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          {/* Opacity slider */}
-          {image && (
-            <div className="grid gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Opacity</span>
-                <span className="text-xs font-mono text-muted-foreground">{Math.round(opacity * 100)}%</span>
-              </div>
-              <input
-                className="w-full accent-primary"
-                max={1}
-                min={0}
-                onChange={e => handleOpacityChange(parseFloat(e.target.value))}
-                step={0.01}
-                type="range"
-                value={opacity}
-              />
-              <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
-                <span>Subtle</span>
-                <span>Full</span>
-              </div>
+          {/* Opacity slider — works for both shader and image */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Opacity</span>
+              <span className="text-xs font-mono text-muted-foreground">{Math.round(opacity * 100)}%</span>
             </div>
-          )}
+            <input
+              className="w-full accent-primary"
+              max={1}
+              min={0}
+              onChange={e => handleOpacityChange(parseFloat(e.target.value))}
+              step={0.01}
+              type="range"
+              value={opacity}
+            />
+            <div className="flex justify-between text-[0.65rem] text-muted-foreground/50">
+              <span>Subtle</span>
+              <span>Full</span>
+            </div>
+          </div>
 
-          {/* Position & Size */}
-          {image && (
+          {/* Position & Size — only for image type */}
+          {image && bgType === 'image' && (
             <div className="grid gap-3">
               {/* Live preview */}
               <div className="grid gap-1.5">

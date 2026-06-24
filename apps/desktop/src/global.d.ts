@@ -52,6 +52,9 @@ declare global {
       revealLogs: () => Promise<{ ok: boolean; path: string; error?: string }>
       getRecentLogs: () => Promise<{ path: string; lines: string[] }>
       readDir: (path: string) => Promise<AnakotReadDirResult>
+  renameFile: (oldPath: string, newPath: string) => Promise<{ ok: boolean; error?: string }>
+  deleteFile: (path: string) => Promise<{ ok: boolean; error?: string }>
+  writeFile: (path: string, content: string) => Promise<{ ok: boolean; error?: string }>
       gitRoot?: (path: string) => Promise<string | null>
       terminal: {
         dispose: (id: string) => Promise<boolean>

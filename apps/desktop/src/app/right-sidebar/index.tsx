@@ -158,29 +158,31 @@ function RightSidebarChrome({
             const label = r[tab.labelKey]
 
             return (
-              <Tip key={tab.id} label={label}>
-                <Button
+              <Tip key={tab.id} label={label} side="bottom">
+                <button
                   aria-label={label}
                   aria-pressed={tab.id === activeTab}
                   className={cn(
-                    'text-(--ui-text-tertiary) hover:bg-(--ui-control-hover-background) hover:text-foreground',
-                    tab.id === activeTab && 'bg-(--ui-control-active-background) text-foreground'
+                    'flex items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors',
+                    tab.id === activeTab
+                      ? 'bg-(--ui-control-active-background) text-foreground'
+                      : 'text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground'
                   )}
                   onClick={() => setRightSidebarTab(tab.id)}
-                  size="icon-xs"
-                  variant="ghost"
+                  type="button"
                 >
-                  <Codicon name={tab.icon} size="0.875rem" />
-                </Button>
+                  <Codicon name={tab.icon} size="0.75rem" />
+                  {tab.id === 'files' ? r.files : r.terminal}
+                </button>
               </Tip>
             )
           })}
         </nav>
 
         {branch && (
-          <span className="ml-auto flex min-w-0 items-center gap-1 text-[0.6875rem] text-(--ui-text-tertiary)">
-            <Codicon className="shrink-0" name="git-branch" size="0.75rem" />
-            <span className="truncate">{branch}</span>
+          <span className="ml-auto flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
+            <Codicon className="shrink-0" name="git-branch" size="0.625rem" />
+            <span className="max-w-[80px] truncate">{branch}</span>
           </span>
         )}
       </div>

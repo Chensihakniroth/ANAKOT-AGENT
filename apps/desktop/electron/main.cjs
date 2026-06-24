@@ -5392,6 +5392,55 @@ ipcMain.handle('anakot:fs:readDir', async (_event, dirPath) => {
   }
 })
 
+ipcMain.handle('anakot:fs:rename', async (_event, oldPath, newPath) => {
+  try {
+    const src = path.resolve(String(oldPath || ''))
+    const dst = path.resolve(String(newPath || ''))
+
+    if (!src || !dst) {
+      return { ok: false, error: 'invalid-path' }
+    }
+
+    await fs.promises.rename(src, dst)
+
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.code || 'rename-error' }
+  }
+})
+
+ipcMain.handle('anakot:fs:unlink', async (_event, filePath) => {
+  try {
+    const resolved = path.resolve(String(filePath || ''))
+
+    if (!resolved) {
+      return { ok: false, error: 'invalid-path' }
+    }
+
+    await fs.promises.unlink(resolved)
+
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.code || 'unlink-error' }
+  }
+})
+
+ipcMain.handle('anakot:fs:writeFile', async (_event, filePath, content) => {
+  try {
+    const resolved = path.resolve(String(filePath || ''))
+
+    if (!resolved) {
+      return { ok: false, error: 'invalid-path' }
+    }
+
+    await fs.promises.writeFile(resolved, String(content || ''), 'utf8')
+
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.code || 'write-error' }
+  }
+})
+
 ipcMain.handle('anakot:fs:gitRoot', async (_event, startPath) => {
   const input = String(startPath || '')
   const resolved = input.startsWith('file:') ? fileURLToPath(input) : path.resolve(input)

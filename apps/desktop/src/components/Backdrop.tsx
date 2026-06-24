@@ -2,7 +2,8 @@ import { useStore } from '@nanostores/react'
 import { Leva, useControls } from 'leva'
 import { type CSSProperties, useEffect, useState } from 'react'
 
-import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize } from '@/store/background'
+import { $backgroundImage, $backgroundOpacity, $backgroundPositionX, $backgroundPositionY, $backgroundSize, $backgroundType } from '@/store/background'
+import { ShaderBackground } from '@/components/ui/shader-background'
 
 const BLEND_MODES = [
   'normal',
@@ -97,11 +98,15 @@ export function Backdrop() {
     { collapsed: true }
   )
 
+  const bgType = useStore($backgroundType)
+
   return (
     <>
       <Leva collapsed hidden={!import.meta.env.DEV || !controlsOpen} titleBar={{ title: 'backdrop', drag: true }} />
 
-      {statue.enabled && (
+      {bgType === 'shader' ? (
+        <ShaderBackground />
+      ) : statue.enabled && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 z-2"

@@ -774,6 +774,8 @@ export const zh: Translations = {
     back: '返回',
     searchPlaceholder: '搜索会话、视图与操作',
     goTo: '前往',
+    recentFiles: '最近文件',
+    files: '文件',
     commandCenter: '命令中心',
     appearance: '外观',
     settings: '设置',
@@ -1609,7 +1611,8 @@ export const zh: Translations = {
       switchModel: '切换模型',
       openModelPicker: '打开模型选择器',
       modelTitle: (provider, model) => `模型 · ${provider}: ${model}`,
-      providerModelTitle: (provider, model) => `${provider} · ${model}`
+      providerModelTitle: (provider, model) => `${provider} · ${model}`,
+      noWorkspace: '无工作区'
     }
   },
 

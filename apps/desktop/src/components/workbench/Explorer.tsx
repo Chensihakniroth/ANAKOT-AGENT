@@ -1,10 +1,11 @@
+import { useCallback } from 'react'
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { useI18n } from '@/i18n'
 import { $currentCwd } from '@/store/session'
 import { ProjectTree } from '@/app/right-sidebar/files/tree'
 import { useProjectTree } from '@/app/right-sidebar/files/use-project-tree'
-import { openEditorTab } from '@/store/workbench'
+import { openEditorTab, openRecentFile } from '@/store/workbench'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { setCurrentSessionPreviewTarget } from '@/store/preview'
 import { notifyError } from '@/store/notifications'
@@ -57,6 +58,8 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
       if (preview) {
         setCurrentSessionPreviewTarget(preview, 'file-browser', path)
       }
+      const label = path.split(/[\\/]/).pop() || path
+      openRecentFile(path, label)
       onOpenFile(path)
     } catch (error) {
       notifyError(error, r.previewUnavailable)
@@ -74,6 +77,61 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
       notifyError(error, r.previewUnavailable)
     }
   }
+
+  const handleRenameFile = useCallback(async (path: string) => {
+    const name = path.split(/[\\/]/).pop() || path
+    const newName = window.prompt('Rename to:', name)
+    if (newName && newName !== name) {
+      const parentDir = path.split(/[\\/]/).slice(0, -1).join('/') || '/'
+      const newPath = `${parentDir}/${newName}`
+      try {
+        const result = await window.anakotDesktop?.renameFile?.(path, newPath)
+        if (result?.ok) {
+          void window.anakotDesktop?.notify?.({
+            title: 'Renamed',
+            body: `${name} → ${newName}`,
+          })
+          refreshRoot()
+        } else {
+          void window.anakotDesktop?.notify?.({
+            title: 'Rename failed',
+            body: result?.error || 'Unknown error',
+          })
+        }
+      } catch {
+        void window.anakotDesktop?.notify?.({
+          title: 'Rename failed',
+          body: 'Could not rename file',
+        })
+      }
+    }
+  }, [refreshRoot])
+
+  const handleDeleteFile = useCallback(async (path: string) => {
+    const name = path.split(/[\\/]/).pop() || path
+    if (window.confirm(`Delete "${name}"?`)) {
+      try {
+        const result = await window.anakotDesktop?.deleteFile?.(path)
+        if (result?.ok) {
+          void window.anakotDesktop?.notify?.({
+            title: 'Deleted',
+            body: name,
+          })
+          refreshRoot()
+        } else {
+          void window.anakotDesktop?.notify?.({
+            title: 'Delete failed',
+            body: result?.error || 'Unknown error',
+          })
+        }
+      } catch {
+        void window.anakotDesktop?.notify?.({
+          title: 'Delete failed',
+          body: 'Could not delete file',
+        })
+      }
+    }
+  }, [refreshRoot])
 
   return (
     <div className="group/project-header flex min-h-0 flex-1 flex-col">
@@ -150,6 +208,8 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
             onLoadChildren={loadChildren}
             onNodeOpenChange={setNodeOpen}
             onPreviewFile={previewFile}
+            onRenameFile={handleRenameFile}
+            onDeleteFile={handleDeleteFile}
             openState={openState}
           />
         )}

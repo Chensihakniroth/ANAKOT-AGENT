@@ -11,6 +11,7 @@ import {
   setFileBrowserOpen,
   toggleFileBrowserOpen,
   togglePanesFlipped,
+  toggleRightRail,
   toggleSidebarOpen
 } from '@/store/layout'
 import {
@@ -21,6 +22,7 @@ import {
   toggleShowAllProfiles
 } from '@/store/profile'
 import { $activeSessionId, $sessions, setModelPickerOpen } from '@/store/session'
+import { setBottomPanelOpen, $bottomPanelOpen, $activeEditorTabId, closeEditorTab, setActiveFilePath } from '@/store/workbench'
 import { useTheme } from '@/themes/context'
 
 import { requestComposerFocus } from '../chat/composer/focus'
@@ -110,10 +112,16 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     'session.togglePin': deps.toggleSelectedPin,
 
     'view.toggleSidebar': toggleSidebarOpen,
-    'view.toggleRightSidebar': toggleFileBrowserOpen,
+    'view.toggleRightSidebar': () => toggleRightRail(),
+    'view.toggleBottomPanel': () => setBottomPanelOpen(!$bottomPanelOpen.get()),
     'view.showFiles': () => showRightSidebarTab('files'),
     'view.showTerminal': () => showRightSidebarTab('terminal'),
     'view.flipPanes': togglePanesFlipped,
+    'editor.closeTab': () => {
+      const activeId = $activeEditorTabId.get()
+      if (activeId) closeEditorTab(activeId)
+      setActiveFilePath(null)
+    },
 
     'appearance.toggleMode': () => setMode(resolvedMode === 'dark' ? 'light' : 'dark'),
 

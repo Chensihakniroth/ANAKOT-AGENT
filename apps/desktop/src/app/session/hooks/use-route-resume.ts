@@ -57,6 +57,7 @@ export function useRouteResume({
 }: RouteResumeOptions) {
   const lastPathnameRef = useRef<string | null>(null)
   const wasGatewayOpenRef = useRef(false)
+  const hasSettledRef = useRef(false)
 
   useEffect(() => {
     const gatewayOpen = gatewayState === 'open'
@@ -64,6 +65,16 @@ export function useRouteResume({
     const gatewayBecameOpen = !wasGatewayOpenRef.current && gatewayOpen
     lastPathnameRef.current = locationPathname
     wasGatewayOpenRef.current = gatewayOpen
+
+    // Skip until the gateway has been seen as open at least once.
+    // This prevents auto-starting a session draft before the user has
+    // had a chance to see the WelcomeView on first launch.
+    if (!hasSettledRef.current) {
+      if (gatewayOpen) {
+        hasSettledRef.current = true
+      }
+      return
+    }
 
     if (currentView !== 'chat' || !gatewayOpen) {
       return

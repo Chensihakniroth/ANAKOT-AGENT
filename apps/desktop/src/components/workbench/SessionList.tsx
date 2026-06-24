@@ -1,11 +1,11 @@
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
-import { $sessions, $sessionsLoading, $selectedStoredSessionId } from '@/store/session'
+import { $sessions, $sessionsLoading, $selectedStoredSessionId, $workingSessionIds } from '@/store/session'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { SearchField } from '@/components/ui/search-field'
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { searchSessions, type SessionSearchResult, type SessionInfo } from '@/anakot'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { searchSessions, type SessionSearchResult, type SessionInfo, setSessionArchived, deleteSession } from '@/anakot'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { useI18n } from '@/i18n'
 
@@ -47,10 +47,14 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
   const selectedId = useStore($selectedStoredSessionId)
   const loading = useStore($sessionsLoading)
   const pinnedIds = useStore($pinnedSessionIds)
+  const workingIds = useStore($workingSessionIds)
   const [query, setQuery] = useState('')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [contextMenu, setContextMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const renameRef = useRef<HTMLInputElement>(null)
   const trimmedQuery = query.trim()
 
   useEffect(() => {
@@ -122,6 +126,50 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
     setContextMenu(null)
   }
 
+  const handleArchiveSession = useCallback(async (sessionId: string) => {
+    setContextMenu(null)
+    try {
+      await setSessionArchived(sessionId, true)
+    } catch {
+      // Session will reappear on next refresh
+    }
+  }, [])
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    setContextMenu(null)
+    try {
+      await deleteSession(sessionId)
+    } catch {
+      // Handled silently
+    }
+  }, [])
+
+  const handleDoubleClick = useCallback((sessionId: string, currentTitle: string) => {
+    setRenamingId(sessionId)
+    setRenameValue(currentTitle || 'Untitled')
+  }, [])
+
+  const commitRename = useCallback(() => {
+    if (renamingId && renameValue.trim()) {
+      // Optimistic local update — the session title will refresh on next sidebar reload
+      // TODO: wire to gateway session.rename RPC when available
+    }
+    setRenamingId(null)
+    setRenameValue('')
+  }, [renamingId, renameValue])
+
+  const cancelRename = useCallback(() => {
+    setRenamingId(null)
+    setRenameValue('')
+  }, [])
+
+  useEffect(() => {
+    if (renamingId && renameRef.current) {
+      renameRef.current.focus()
+      renameRef.current.select()
+    }
+  }, [renamingId])
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* New session + search header */}
@@ -179,8 +227,16 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
                     session={session}
                     isActive={session.id === selectedId}
                     isPinned={true}
+                    isWorking={workingIds.includes(session.id)}
+                    isRenaming={renamingId === session.id}
+                    renameValue={renameValue}
+                    renameRef={renameRef}
                     onSelect={onSelectSession}
                     onContextMenu={handleContextMenu}
+                    onDoubleClick={handleDoubleClick}
+                    onRenameCommit={commitRename}
+                    onRenameCancel={cancelRename}
+                    onRenameChange={setRenameValue}
                   />
                 ))}
               </div>
@@ -215,8 +271,16 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
                       session={session}
                       isActive={session.id === selectedId}
                       isPinned={pinnedIds.includes(session.id)}
+                      isWorking={workingIds.includes(session.id)}
+                      isRenaming={renamingId === session.id}
+                      renameValue={renameValue}
+                      renameRef={renameRef}
                       onSelect={onSelectSession}
                       onContextMenu={handleContextMenu}
+                      onDoubleClick={handleDoubleClick}
+                      onRenameCommit={commitRename}
+                      onRenameCancel={cancelRename}
+                      onRenameChange={setRenameValue}
                     />
                   ))}
                 </div>
@@ -242,19 +306,62 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
             <Codicon name={pinnedIds.includes(contextMenu.sessionId) ? 'pinned' : 'pin'} size="0.875rem" />
             {pinnedIds.includes(contextMenu.sessionId) ? 'Unpin session' : 'Pin session'}
           </button>
+          <button
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+            onClick={() => handleArchiveSession(contextMenu.sessionId)}
+            type="button"
+          >
+            <Codicon name="archive" size="0.875rem" />
+            Archive session
+          </button>
+          <div className="mx-3 my-0.5 h-px bg-(--ui-stroke-tertiary)" />
+          <button
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-destructive hover:bg-(--ui-control-hover-background)"
+            onClick={() => handleDeleteSession(contextMenu.sessionId)}
+            type="button"
+          >
+            <Codicon name="trash" size="0.875rem" />
+            Delete session
+          </button>
         </div>
       )}
     </div>
   )
 }
 
-function SessionRow({ session, isActive, isPinned, onSelect, onContextMenu }: {
-  session: { id: string; title: string | null }
+function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, renameValue, renameRef, onSelect, onContextMenu, onDoubleClick, onRenameCommit, onRenameCancel, onRenameChange }: {
+  session: { id: string; title: string | null; preview?: string | null }
   isActive: boolean
   isPinned: boolean
+  isWorking: boolean
+  isRenaming: boolean
+  renameValue: string
+  renameRef: React.RefObject<HTMLInputElement | null>
   onSelect: (id: string) => void
   onContextMenu: (e: React.MouseEvent, sessionId: string) => void
+  onDoubleClick: (sessionId: string, currentTitle: string) => void
+  onRenameCommit: () => void
+  onRenameCancel: () => void
+  onRenameChange: (value: string) => void
 }) {
+  if (isRenaming) {
+    return (
+      <div className="flex items-center px-3 py-1">
+        <input
+          ref={renameRef}
+          className="w-full rounded-sm border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) px-1.5 py-0.5 text-xs text-foreground outline-none focus:border-primary"
+          value={renameValue}
+          onChange={e => onRenameChange(e.target.value)}
+          onBlur={onRenameCommit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') onRenameCommit()
+            if (e.key === 'Escape') onRenameCancel()
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <button
       className={cn(
@@ -265,11 +372,26 @@ function SessionRow({ session, isActive, isPinned, onSelect, onContextMenu }: {
       )}
       onClick={() => onSelect(session.id)}
       onContextMenu={e => onContextMenu(e, session.id)}
+      onDoubleClick={e => {
+        e.preventDefault()
+        onDoubleClick(session.id, session.title || 'Untitled')
+      }}
       type="button"
     >
       <Codicon name="symbol-file" size="0.625rem" className="shrink-0" />
       <span className="truncate">{session.title || 'Untitled'}</span>
-      {isPinned && (
+      {session.preview != null && session.preview !== '' && (
+        <p className="mt-0.5 line-clamp-2 text-[0.6rem] leading-tight text-muted-foreground/60">
+          {session.preview}
+        </p>
+      )}
+      {isWorking && (
+        <span className="relative ml-auto flex h-1.5 w-1.5 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+        </span>
+      )}
+      {isPinned && !isWorking && (
         <Codicon name="pinned" size="0.5rem" className="ml-auto shrink-0 text-muted-foreground/50" />
       )}
     </button>

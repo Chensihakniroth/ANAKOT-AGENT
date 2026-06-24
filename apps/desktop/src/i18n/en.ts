@@ -187,9 +187,11 @@ export const en: Translations = {
       'view.toggleRightSidebar': 'Toggle file browser',
       'view.showFiles': 'Show file browser',
       'view.showTerminal': 'Show terminal',
+      'view.toggleBottomPanel': 'Toggle bottom panel',
       'view.terminalSelection': 'Send terminal selection to composer',
       'view.closePreviewTab': 'Close preview tab',
       'view.flipPanes': 'Swap sidebar sides',
+      'editor.closeTab': 'Close active editor tab',
       'appearance.toggleMode': 'Toggle light / dark',
       'profile.default': 'Switch to default profile',
       'profile.switch.1': 'Switch to profile 1',
@@ -621,6 +623,8 @@ export const en: Translations = {
     back: 'Back',
     searchPlaceholder: 'Search sessions, views, and actions',
     goTo: 'Go to',
+    recentFiles: 'Recent Files',
+    files: 'Files',
     commandCenter: 'Command Center',
     appearance: 'Appearance',
     settings: 'Settings',
@@ -1468,7 +1472,8 @@ export const en: Translations = {
       switchModel: 'Switch model',
       openModelPicker: 'Open model picker',
       modelTitle: (provider, model) => `Model · ${provider}: ${model}`,
-      providerModelTitle: (provider, model) => `${provider} · ${model}`
+      providerModelTitle: (provider, model) => `${provider} · ${model}`,
+      noWorkspace: 'No workspace'
     }
   },
 

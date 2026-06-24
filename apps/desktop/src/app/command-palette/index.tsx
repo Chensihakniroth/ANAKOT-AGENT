@@ -7,6 +7,10 @@ import { useNavigate } from 'react-router-dom'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { getAnakotConfigRecord, listSessions } from '@/anakot'
 import { useI18n } from '@/i18n'
+import { $recentFiles, openRecentFile } from '@/store/workbench'
+import { $currentCwd } from '@/store/session'
+import { useProjectTree } from '@/app/right-sidebar/files/use-project-tree'
+import type { TreeNode } from '@/app/right-sidebar/files/use-project-tree'
 import { sessionTitle } from '@/lib/chat-runtime'
 import {
   Activity,
@@ -17,6 +21,7 @@ import {
   ChevronRight,
   Clock,
   Cpu,
+  FileText,
   Globe,
   type IconComponent,
   Info,
@@ -184,6 +189,38 @@ export function CommandPalette() {
 
   const sessions = useMemo(() => (sessionsQuery.data?.sessions ?? []).map(toSessionEntry), [sessionsQuery.data])
   const archivedSessions = useMemo(() => (archivedQuery.data?.sessions ?? []).map(toSessionEntry), [archivedQuery.data])
+  const recentFiles = useStore($recentFiles)
+
+  // File search — walk project tree when user types
+  const currentCwd = useStore($currentCwd)
+  const { data: treeData } = useProjectTree(currentCwd)
+
+  const fileSearchItems = useMemo(() => {
+    if (!search.trim() || !treeData) return []
+    const query = search.toLowerCase()
+    const matches: PaletteItem[] = []
+    const walk = (nodes: TreeNode[], depth = 0) => {
+      if (matches.length >= 20 || depth > 8) return
+      for (const node of nodes) {
+        if (matches.length >= 20) break
+        if (!node.isDirectory && node.name.toLowerCase().includes(query)) {
+          matches.push({
+            icon: FileText,
+            id: `file-${node.id}`,
+            keywords: ['file', 'open', node.name, node.id],
+            label: node.name,
+            run: () => {
+              openRecentFile(node.id, node.name)
+              closeCommandPalette()
+            },
+          })
+        }
+        if (node.children) walk(node.children, depth + 1)
+      }
+    }
+    walk(treeData)
+    return matches
+  }, [search, treeData])
 
   // Reset the query/sub-page on close so it reopens clean.
   useEffect(() => {
@@ -210,7 +247,21 @@ export function CommandPalette() {
     const settingsTab = (tab: string) => `${SETTINGS_ROUTE}?tab=${tab}`
     const cc = t.commandCenter
 
+    const recentFileItems: PaletteItem[] = recentFiles.map(entry => ({
+      icon: FileText,
+      id: `recent-file-${entry.path}`,
+      keywords: ['file', 'recent', entry.label, entry.path],
+      label: entry.label,
+      run: () => {
+        // Files are opened via the editor area — for now just close the palette
+        // The editor area will need to handle the file open via IPC
+        closeCommandPalette()
+      }
+    }))
+
     return [
+      ...(recentFileItems.length > 0
+        ? [{ heading: cc.recentFiles || 'Recent Files', items: recentFileItems }] : []),
       {
         heading: cc.goTo,
         items: [
@@ -298,7 +349,7 @@ export function CommandPalette() {
         ]
       }
     ]
-  }, [go, settingsSectionLabel, t])
+  }, [fileSearchItems, go, recentFiles, search, settingsSectionLabel, t])
 
   // The long, granular lists (settings fields, API keys, MCP servers, archived
   // chats) only surface once the user types — otherwise they'd bury the
@@ -309,6 +360,13 @@ export function CommandPalette() {
     }
 
     const result: PaletteGroup[] = []
+
+    if (fileSearchItems.length > 0) {
+      result.push({
+        heading: t.commandCenter.files || 'Files',
+        items: fileSearchItems,
+      })
+    }
 
     if (sessions.length > 0) {
       result.push({

@@ -107,6 +107,17 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
         </div>
         <div className="flex items-center gap-1">
           {activeTab === 'terminal' && (
+            <button
+              className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.6rem] text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
+              onClick={() => terminalRef.current?.clear()}
+              title="Clear terminal"
+              type="button"
+            >
+              <Codicon name="trash" size="0.7rem" />
+              Clear
+            </button>
+          )}
+          {activeTab === 'terminal' && (
             <div className="relative">
               <button
                 className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[0.6rem] text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
@@ -154,7 +165,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {/* Panel content — always mount all tabs so TerminalTab stays alive */}
       <div ref={contentRef} className="relative overflow-hidden" style={{ width: '100%', minWidth: 0 }}>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, height: '100%', width: '100%' }}>
-          <TerminalTab cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
+          <TerminalTab ref={terminalRef} cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         </div>
         <div style={{ display: activeTab === 'output' ? 'flex' : 'none', height: '100%' }}>
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">

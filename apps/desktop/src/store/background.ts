@@ -14,6 +14,8 @@ const OPACITY_KEY = 'anakot-desktop-bg-opacity-v1'
 const POSITION_X_KEY = 'anakot-desktop-bg-position-x-v1'
 const POSITION_Y_KEY = 'anakot-desktop-bg-position-y-v1'
 const SIZE_KEY = 'anakot-desktop-bg-size-v1'
+const TYPE_KEY = 'anakot-desktop-bg-type-v1'
+const DEFAULT_TYPE = 'shader'
 const DEFAULT_OPACITY = 0.15
 const DEFAULT_POSITION_X = 50
 const DEFAULT_POSITION_Y = 50
@@ -67,6 +69,27 @@ export const $backgroundOpacity = atom<number>(loadOpacity())
 export const $backgroundPositionX = atom<number>(loadPositionX())
 export const $backgroundPositionY = atom<number>(loadPositionY())
 export const $backgroundSize = atom<string>(loadSize())
+
+function loadType(): 'image' | 'shader' {
+  try {
+    const v = window.localStorage.getItem(TYPE_KEY)
+    return v === 'image' ? 'image' : 'shader'
+  } catch {
+    return DEFAULT_TYPE
+  }
+}
+
+export const $backgroundType = atom<'image' | 'shader'>(loadType())
+
+$backgroundType.subscribe(type => {
+  try {
+    window.localStorage.setItem(TYPE_KEY, type)
+  } catch { /* ignore */ }
+})
+
+export function setBackgroundType(type: 'image' | 'shader') {
+  $backgroundType.set(type)
+}
 
 $backgroundImage.subscribe(img => {
   try {

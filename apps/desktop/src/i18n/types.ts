@@ -528,6 +528,8 @@ export interface Translations {
     back: string
     searchPlaceholder: string
     goTo: string
+    recentFiles: string
+    files: string
     commandCenter: string
     appearance: string
     settings: string
@@ -1141,6 +1143,7 @@ export interface Translations {
       openModelPicker: string
       modelTitle: (provider: string, model: string) => string
       providerModelTitle: (provider: string, model: string) => string
+      noWorkspace: string
     }
   }
 
