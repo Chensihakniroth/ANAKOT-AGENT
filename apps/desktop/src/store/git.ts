@@ -51,18 +51,28 @@ function toIpcSafePath(p: string): string {
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let lastRefreshCwd: string = ''
-let busy = false // true while a user action is in flight — skip polling during this
+// Per-workspace busy flag — keyed by cwd. Allows multiple workspace tabs.
+const busyMap = new Map<string, boolean>()
 
-function startPolling(cwd: string) {
+function isBusy(cwd: string): boolean {
+  return busyMap.get(cwd) === true
+}
+function setBusy(cwd: string, value: boolean) {
+  if (value) busyMap.set(cwd, true)
+  else busyMap.delete(cwd)
+}
+
+function startPolling(cwd: string, intervalMs = 15000) {
   stopPolling()
   if (!cwd.trim()) return
   lastRefreshCwd = cwd
-  // Poll every 5 seconds — same as VS Code default
+  // Poll at the given interval — default 15s is a fallback safety net.
+  // The primary mechanism is the OS-level file watcher (see main process).
   refreshTimer = setInterval(() => {
-    if (lastRefreshCwd && !busy) {
+    if (lastRefreshCwd && !isBusy(lastRefreshCwd)) {
       void refreshGitStatus(lastRefreshCwd, { silent: true })
     }
-  }, 5000)
+  }, intervalMs)
 }
 
 function stopPolling() {
@@ -74,20 +84,24 @@ function stopPolling() {
 
 /**
  * Call this when cwd changes from the UI.
- * Stops old polling, refreshes status for new cwd, starts new polling.
+ * Stops old polling, refreshes status for new cwd, starts fallback polling.
  */
 export function changeWorkspace(cwd: string) {
-  busy = false
+  setBusy(cwd, false)
   stopPolling()
   if (cwd.trim()) {
     void refreshGitStatus(cwd)
+    // Fallback polling: only fires if file watcher misses something.
+    // Longer interval (15s) since watcher is the primary mechanism.
+    startPolling(cwd, 15000)
   }
 }
 
-/** Manually trigger a status refresh (e.g. after a file save) */
-export function triggerGitRefresh() {
-  if (lastRefreshCwd && !busy) {
-    void refreshGitStatus(lastRefreshCwd, { silent: true })
+/** Manually trigger a status refresh (e.g. after a file save or file-watcher event) */
+export function triggerGitRefresh(cwd?: string) {
+  const target = cwd || lastRefreshCwd
+  if (target && !isBusy(target)) {
+    void refreshGitStatus(target, { silent: true })
   }
 }
 
@@ -173,7 +187,7 @@ export async function refreshGitStatus(cwd: string, options?: { silent?: boolean
 export async function gitStageFile(cwd: string, file: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
-  busy = true
+  setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, [file])
     if (result) {
@@ -209,14 +223,14 @@ export async function gitStageFile(cwd: string, file: string) {
     })
     return { ok: false, error: msg }
   } finally {
-    busy = false
+    setBusy(cwd, false)
   }
 }
 
 export async function gitStageAllFiles(cwd: string, files: string[]) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
-  busy = true
+  setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, files)
     if (result) {
@@ -252,14 +266,14 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
     })
     return { ok: false, error: msg }
   } finally {
-    busy = false
+    setBusy(cwd, false)
   }
 }
 
 export async function gitUnstageFile(cwd: string, file: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
-  busy = true
+  setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitRestore?.(safePath, [file])
     if (result) {
@@ -294,12 +308,15 @@ export async function gitUnstageFile(cwd: string, file: string) {
       summary: msg,
     })
     return { ok: false, error: msg }
+  } finally {
+    setBusy(cwd, false)
   }
 }
 
 export async function gitDiscardChanges(cwd: string, file: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
+  setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitRestore?.(safePath, [file])
     if (result) {
@@ -334,12 +351,15 @@ export async function gitDiscardChanges(cwd: string, file: string) {
       summary: msg,
     })
     return { ok: false, error: msg }
+  } finally {
+    setBusy(cwd, false)
   }
 }
 
 export async function gitCommit(cwd: string, message: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
+  setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitCommit?.(safePath, message)
     if (result) {
@@ -375,6 +395,8 @@ export async function gitCommit(cwd: string, message: string) {
       summary: msg,
     })
     return { ok: false, error: msg }
+  } finally {
+    setBusy(cwd, false)
   }
 }
 

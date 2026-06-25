@@ -58,6 +58,18 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   gitCommit: (cwd, message) => ipcRenderer.invoke('anakot:git:commit', { cwd, message }),
   gitDiff: (cwd, file) => ipcRenderer.invoke('anakot:git:diff', { cwd, file }),
   gitLog: (cwd, limit) => ipcRenderer.invoke('anakot:git:log', { cwd, limit }),
+  gitSubscribe: cwd => ipcRenderer.invoke('anakot:git:subscribe', cwd),
+  gitUnsubscribe: cwd => ipcRenderer.invoke('anakot:git:unsubscribe', cwd),
+  onGitChanged: callback => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('anakot:git:changed', listener)
+    return () => ipcRenderer.removeListener('anakot:git:changed', listener)
+  },
+  onFileChanged: callback => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('anakot:fs:fileChanged', listener)
+    return () => ipcRenderer.removeListener('anakot:fs:fileChanged', listener)
+  },
   terminal: {
     dispose: id => ipcRenderer.invoke('anakot:terminal:dispose', id),
     resize: (id, size) => ipcRenderer.invoke('anakot:terminal:resize', id, size),

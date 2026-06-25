@@ -5441,6 +5441,18 @@ ipcMain.handle('anakot:fs:writeFile', async (_event, filePath, content) => {
 
     await fs.promises.writeFile(resolved, String(content || ''), 'utf8')
 
+    // Notify renderer that a file was written — triggers git refresh if it's in a git repo
+    try {
+      const root = findGitRoot(resolved)
+      if (root) {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('anakot:fs:fileChanged', { path: resolved, root })
+        }
+      }
+    } catch {
+      // git root lookup is best-effort
+    }
+
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error?.code || 'write-error' }
@@ -5458,6 +5470,123 @@ ipcMain.handle('anakot:fs:gitRoot', async (_event, startPath) => {
     return findGitRoot(start)
   } catch {
     return findGitRoot(resolved)
+  }
+})
+
+// ─── Git File Watcher ─────────────────────────────────────────────────────────
+// Primary mechanism: watch .git/ directory for changes (OS-level events).
+// Renderer subscribes to workspace-specific channels.
+// Falls back to polling if watcher can't be set up.
+
+const gitWatchers = new Map<string, { watcher: ReturnType<typeof fs.watch>; timer: ReturnType<typeof setTimeout> | null }>()
+
+function startGitWatcher(gitRoot: string) {
+  // Don't double-watch
+  const existing = gitWatchers.get(gitRoot)
+  if (existing) return
+
+  const watchDirs = [
+    path.join(gitRoot, '.git'),
+    path.join(gitRoot, '.git', 'refs', 'heads'),
+    path.join(gitRoot, '.git', 'refs', 'tags'),
+    path.join(gitRoot, '.git', 'refs', 'remotes'),
+    path.join(gitRoot, '.git', 'refs', 'stash'),
+    path.join(gitRoot, '.git', 'logs'),
+  ]
+
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const debouncedNotify = () => {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null
+      // Notify ALL windows — any open source control panel may need to update
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('anakot:git:changed', { root: gitRoot })
+      }
+    }, 300) // 300ms debounce — coalesce rapid-fire events
+  }
+
+  const watchers: ReturnType<typeof fs.watch>[] = []
+
+  for (const dir of watchDirs) {
+    try {
+      if (!fs.existsSync(dir)) continue
+      const w = fs.watch(dir, { persistent: false }, (eventType, filename) => {
+        // Ignore lock file flips — they're transient and don't change semantic state
+        if (filename && String(filename).endsWith('lock')) return
+        debouncedNotify()
+      })
+      watchers.push(w)
+    } catch {
+      // Directory doesn't exist yet (e.g. refs/tags) — skip
+    }
+  }
+
+  // Also watch the working tree root for untracked file changes
+  try {
+    const rootWatcher = fs.watch(gitRoot, { persistent: false }, (eventType, filename) => {
+      if (!filename) return
+      const name = String(filename)
+      // Skip .git directory events (handled above) and lock files
+      if (name === '.git' || name.endsWith('lock')) return
+      // Only care about top-level additions/deletions (untracked files)
+      debouncedNotify()
+    })
+    watchers.push(rootWatcher)
+  } catch {
+    // ignore
+  }
+
+  gitWatchers.set(gitRoot, {
+    watcher: watchers[0], // placeholder — we track via the array
+    timer: null,
+  })
+
+  // Store all watchers for cleanup
+  ;(gitWatchers.get(gitRoot) as any)._allWatchers = watchers
+}
+
+function stopGitWatcher(gitRoot: string) {
+  const entry = gitWatchers.get(gitRoot)
+  if (!entry) return
+  const watchers = (entry as any)._allWatchers as ReturnType<typeof fs.watch>[]
+  if (watchers) {
+    for (const w of watchers) {
+      try { w.close() } catch { /* ignore */ }
+    }
+  }
+  if (entry.timer) clearTimeout(entry.timer)
+  gitWatchers.delete(gitRoot)
+}
+
+// IPC: renderer subscribes to git change notifications for a workspace
+ipcMain.handle('anakot:git:subscribe', async (event, cwd) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'no-git-root' }
+    startGitWatcher(root)
+    return { ok: true, root }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'subscribe failed' }
+  }
+})
+
+// IPC: renderer unsubscribes when switching workspaces
+ipcMain.handle('anakot:git:unsubscribe', async (event, cwd) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: true }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: true }
+    stopGitWatcher(root)
+    return { ok: true }
+  } catch {
+    return { ok: true }
   }
 })
 

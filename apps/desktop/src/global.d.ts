@@ -62,6 +62,10 @@ declare global {
       gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
       gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
+      gitSubscribe?: (cwd: string) => Promise<{ ok: boolean; root?: string; error?: string }>
+      gitUnsubscribe?: (cwd: string) => Promise<{ ok: boolean; error?: string }>
+      onGitChanged?: (callback: (data: { root: string }) => void) => () => void
+      onFileChanged?: (callback: (data: { path: string; root: string }) => void) => () => void
       terminal: {
         dispose: (id: string) => Promise<boolean>
         onData: (id: string, callback: (payload: string) => void) => () => void

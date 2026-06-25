@@ -9,7 +9,7 @@ import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { setBottomPanelTab, setBottomPanelOpen } from '@/store/workbench'
 import {
   $gitStatus, $gitLoading, $gitCommitMessage, $gitError,
-  refreshGitStatus, gitStageFile, gitStageAllFiles, gitUnstageFile, gitDiscardChanges, gitCommit,
+  changeWorkspace, triggerGitRefresh, gitStageFile, gitStageAllFiles, gitUnstageFile, gitDiscardChanges, gitCommit,
   type GitFile
 } from '@/store/git'
 
@@ -42,21 +42,40 @@ export function GitSourceControl() {
 
   useEffect(() => {
     if (cwd.trim()) {
-      void refreshGitStatus(cwd)
+      changeWorkspace(cwd)
+      // Subscribe to .git/ file-watcher events (primary mechanism)
+      void window.anakotDesktop?.gitSubscribe?.(cwd)
+      const unsubscribeGit = window.anakotDesktop?.onGitChanged?.((data: { root: string }) => {
+        // Only refresh if the change is for our workspace
+        if (data.root && status.root && data.root.toLowerCase() === status.root.toLowerCase()) {
+          void triggerGitRefresh()
+        }
+      })
+      // Also listen for file-write events from the main process (e.g. editor saves via IPC)
+      const unsubscribeFile = window.anakotDesktop?.onFileChanged?.((data: { path: string; root: string }) => {
+        if (data.root && status.root && data.root.toLowerCase() === status.root.toLowerCase()) {
+          void triggerGitRefresh()
+        }
+      })
+      return () => {
+        unsubscribeGit?.()
+        unsubscribeFile?.()
+        void window.anakotDesktop?.gitUnsubscribe?.(cwd)
+      }
     }
   }, [cwd])
 
   // Refresh when the panel becomes visible (sidebar tab switch)
   const handleFocus = useCallback(() => {
     if (cwd.trim()) {
-      void refreshGitStatus(cwd)
+      changeWorkspace(cwd)
     }
   }, [cwd])
 
   useEffect(() => {
     const handleVisibility = () => {
       if (!document.hidden && cwd.trim()) {
-        void refreshGitStatus(cwd)
+        changeWorkspace(cwd)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
