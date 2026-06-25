@@ -530,6 +530,21 @@ export interface Translations {
     goTo: string
     recentFiles: string
     files: string
+    git: string
+    gitSourceControl: string
+    gitStaged: string
+    gitChanges: string
+    gitUntracked: string
+    gitNoChanges: string
+    gitNotAGitRepo: string
+    gitLoadingGit: string
+    gitCommit: string
+    gitCommitPlaceholder: string
+    gitStageFile: string
+    gitUnstageFile: string
+    gitDiscardChanges: string
+    gitStageAll: string
+    gitCommitHint: string
     commandCenter: string
     appearance: string
     settings: string

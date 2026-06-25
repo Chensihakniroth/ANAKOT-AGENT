@@ -50,6 +50,7 @@ import {
   setCurrentModel,
   setCurrentProvider,
   setMessages,
+  setFreshDraftReady,
   setSessionProfileTotals,
   setSessions,
   setSessionsLoading,
@@ -58,6 +59,7 @@ import {
 import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store/updates'
 
 import { Explorer } from '@/components/workbench/Explorer'
+import { GitSourceControl } from '@/components/workbench/GitSourceControl'
 import { SearchPanel } from '@/components/workbench/SearchPanel'
 import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
@@ -834,6 +836,7 @@ export function DesktopController() {
           explorer={explorerPanel}
           search={<SearchPanel />}
           chat={chatPanel}
+          git={<GitSourceControl />}
         />
       </Pane>
 
@@ -841,7 +844,7 @@ export function DesktopController() {
       <PaneMain>
         <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
-            {!currentCwd.trim() && !activeSessionId && !freshDraftReady ? (
+            {!currentCwd.trim() && !activeSessionId && !freshDraftReady && !previewTarget ? (
               <WelcomeView
                 onNewSession={() => startFreshSessionDraft(true)}
                 onOpenFolder={() => {
@@ -854,6 +857,7 @@ export function DesktopController() {
                     })
                     if (selected?.[0]) {
                       setCurrentCwd(selected[0])
+                      setFreshDraftReady(true)
                     }
                   })()
                 }}

@@ -1,16 +1,11 @@
 import '@xterm/xterm/css/xterm.css'
 
-import { useStore } from '@nanostores/react'
 import { forwardRef, useImperativeHandle } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Loader } from '@/components/ui/loader'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-
-import { SidebarPanelLabel } from '../../shell/sidebar-label'
-import { $terminalTakeover, setRightSidebarTab, setTerminalTakeover } from '../store'
 
 import { addSelectionShortcutLabel } from './selection'
 import { useTerminalSession } from './use-terminal-session'
@@ -35,16 +30,6 @@ function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
     shell
   })
 
-  const takeover = useStore($terminalTakeover)
-  const label = takeover ? t.rightSidebar.terminalSplit : t.rightSidebar.terminalFocus
-
-  const toggleTakeover = () => {
-    if (takeover) {
-      setRightSidebarTab('terminal')
-    }
-    setTerminalTakeover(!takeover)
-  }
-
   // Expose resize and clear methods to parent
   useImperativeHandle(ref, () => ({
     resize: () => {
@@ -57,21 +42,6 @@ function TerminalTabInner({ cwd, onAddSelectionToChat, shell }, ref) {
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 px-2.5">
-        <SidebarPanelLabel className="text-white!">{shellName}</SidebarPanelLabel>
-        <Tip label={label}>
-          <Button
-            aria-label={label}
-            className="ml-auto size-6 rounded-md text-white!"
-            onClick={toggleTakeover}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <Codicon name={takeover ? 'screen-normal' : 'screen-full'} size="0.875rem" />
-          </Button>
-        </Tip>
-      </div>
       {/* Terminal container: width: 100% + flex: 1 1 auto + min-width: 0 prevents shrink-to-content */}
       <div className="relative flex-1 p-2" style={{ width: '100%', minWidth: 0, backgroundColor: 'var(--ui-bg-editor)' }}>
         {status === 'starting' && (

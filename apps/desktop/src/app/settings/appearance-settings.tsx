@@ -152,7 +152,7 @@ function BackgroundImageSettings() {
             <span className="text-xs font-medium text-(--ui-text-secondary)">Background type</span>
             <SegmentedControl
               value={bgType}
-              onChange={v => { setBackgroundType(v); triggerHaptic('crisp') }}
+              onChange={(v: 'image' | 'shader') => { setBackgroundType(v); triggerHaptic('crisp') }}
               options={[
                 { id: 'shader', label: 'Shader' },
                 { id: 'image', label: 'Image' },
@@ -160,7 +160,7 @@ function BackgroundImageSettings() {
             />
           </div>
 
-          {/* Shader preview or image UI */}
+          {/* Dynamic preview or image UI */}
           {bgType === 'shader' ? (
             <div className="relative h-40 overflow-hidden rounded-xl border border-(--ui-stroke-tertiary)">
               <ShaderBackground />

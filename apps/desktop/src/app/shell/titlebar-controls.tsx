@@ -13,11 +13,7 @@ import {
   $fileBrowserOpen,
   $panesFlipped,
   $rightRailCollapsed,
-  $sidebarOpen,
-  toggleFileBrowserOpen,
-  togglePanesFlipped,
-  toggleRightRail,
-  toggleSidebarOpen
+  togglePanesFlipped
 } from '@/store/layout'
 import { $previewTarget, $filePreviewTarget } from '@/store/preview'
 
@@ -53,10 +49,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const navigate = useNavigate()
   const location = useLocation()
   const hapticsMuted = useStore($hapticsMuted)
-  const fileBrowserOpen = useStore($fileBrowserOpen)
-  const sidebarOpen = useStore($sidebarOpen)
   const panesFlipped = useStore($panesFlipped)
-  const previewTarget = useStore($previewTarget)
   const filePreviewTarget = useStore($filePreviewTarget)
   const rightRailCollapsed = useStore($rightRailCollapsed)
 
@@ -73,35 +66,14 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   }
 
   // Right rail visibility: collapsed flag OR (no file-browser AND no preview)
+  const fileBrowserOpen = useStore($fileBrowserOpen)
+  const previewTarget = useStore($previewTarget)
   const rightRailHasContent = fileBrowserOpen || previewTarget || filePreviewTarget
   const rightRailVisible = !rightRailCollapsed && rightRailHasContent
 
   // All utility tools grouped on the left side (macOS-style).
   // Only window controls (minimize, maximize, close) stay on the far right.
   const leftToolbarTools: TitlebarTool[] = [
-    {
-      icon: <Codicon name="layout-sidebar-left" />,
-      id: 'sidebar',
-      // Left button toggles whatever is on the left side
-      label: (panesFlipped ? fileBrowserOpen : sidebarOpen)
-        ? t.titlebar.hideSidebar
-        : t.titlebar.showSidebar,
-      onSelect: () => {
-        triggerHaptic('tap')
-        panesFlipped ? toggleFileBrowserOpen() : toggleSidebarOpen()
-      }
-    },
-    {
-      icon: <Codicon name="layout-sidebar-right" />,
-      id: 'right-sidebar',
-      label: (panesFlipped ? sidebarOpen : rightRailVisible)
-        ? t.titlebar.hideRightSidebar
-        : t.titlebar.showRightSidebar,
-      onSelect: () => {
-        triggerHaptic('tap')
-        panesFlipped ? toggleSidebarOpen() : toggleRightRail()
-      }
-    },
     {
       icon: <Codicon name="arrow-swap" />,
       id: 'flip-panes',

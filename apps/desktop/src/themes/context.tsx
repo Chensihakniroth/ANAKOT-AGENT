@@ -234,7 +234,7 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
 // Boot-time paint to avoid a flash before <ThemeProvider> mounts.
 if (typeof window !== 'undefined') {
   const skin = normalizeSkin(window.localStorage.getItem(SKIN_KEY))
-  const mode = (window.localStorage.getItem(MODE_KEY) as ThemeMode) ?? 'light'
+  const mode = (window.localStorage.getItem(MODE_KEY) as ThemeMode) ?? 'system'
   const resolved = resolveMode(mode)
   applyTheme(deriveTheme(skin, resolved), resolved)
 }
@@ -256,7 +256,7 @@ const SKIN_LIST = BUILTIN_THEME_LIST.map(({ name, label, description }) => ({ na
 const ThemeContext = createContext<ThemeContextValue>({
   theme: nousTheme,
   themeName: DEFAULT_SKIN_NAME,
-  mode: 'light',
+  mode: 'system',
   resolvedMode: 'light',
   availableThemes: SKIN_LIST,
   setTheme: () => {},
@@ -269,7 +269,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 
   const [mode, setModeState] = useState<ThemeMode>(() =>
-    typeof window === 'undefined' ? 'light' : ((window.localStorage.getItem(MODE_KEY) as ThemeMode) ?? 'light')
+    typeof window === 'undefined' ? 'system' : ((window.localStorage.getItem(MODE_KEY) as ThemeMode) ?? 'system')
   )
 
   const systemDark = useMediaQuery('(prefers-color-scheme: dark)')

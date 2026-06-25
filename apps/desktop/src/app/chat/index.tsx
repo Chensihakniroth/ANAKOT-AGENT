@@ -192,7 +192,7 @@ export function ChatView({
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
 
   const showIntro =
-    freshDraftReady && !isRoutedSessionView && !selectedSessionId && !activeSessionId && messages.length === 0
+    !activeSessionId && !selectedSessionId && messages.length === 0 && !isRoutedSessionView
 
   // Session is still loading if the route references a session we haven't
   // resumed yet. Once `activeSessionId` is set (runtime has resumed), the

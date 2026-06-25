@@ -13,6 +13,7 @@ import { $panesFlipped } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import { setCurrentSessionPreviewTarget } from '@/store/preview'
 import { $currentBranch, $currentCwd } from '@/store/session'
+import { GitSourceControl } from '@/components/workbench/GitSourceControl'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
 

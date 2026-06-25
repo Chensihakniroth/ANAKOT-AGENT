@@ -3,8 +3,9 @@
  * and active sidebar panel.
  */
 import { atom } from 'nanostores'
+import { toggleSidebarOpen } from './layout'
 
-export type SidebarPanelId = 'explorer' | 'search' | 'chat' | 'none'
+export type SidebarPanelId = 'explorer' | 'search' | 'chat' | 'git' | 'none'
 export type BottomPanelTabId = 'terminal' | 'output' | 'problems'
 
 /** Which sidebar panel is visible */
@@ -36,7 +37,7 @@ export function setSidebarPanel(panel: SidebarPanelId) {
 }
 
 export function toggleSidebar() {
-  $sidebarOpen.set(!$sidebarOpen.get())
+  toggleSidebarOpen()
 }
 
 export function setBottomPanelOpen(open: boolean) {

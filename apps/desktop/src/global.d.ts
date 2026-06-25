@@ -56,6 +56,12 @@ declare global {
   deleteFile: (path: string) => Promise<{ ok: boolean; error?: string }>
   writeFile: (path: string, content: string) => Promise<{ ok: boolean; error?: string }>
       gitRoot?: (path: string) => Promise<string | null>
+      gitStatus?: (cwd: string) => Promise<{ root: string | null; files: Array<{ path: string; status: string; staged: boolean; unstaged: boolean }>; branch: string; error?: string }>
+      gitAdd?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitRestore?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
+      gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
       terminal: {
         dispose: (id: string) => Promise<boolean>
         onData: (id: string, callback: (payload: string) => void) => () => void

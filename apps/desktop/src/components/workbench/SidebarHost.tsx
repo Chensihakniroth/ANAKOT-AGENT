@@ -5,9 +5,10 @@ interface SidebarHostProps {
   explorer: React.ReactNode
   search: React.ReactNode
   chat: React.ReactNode
+  git: React.ReactNode
 }
 
-export function SidebarHost({ explorer, search, chat }: SidebarHostProps) {
+export function SidebarHost({ explorer, search, chat, git }: SidebarHostProps) {
   const panel = useStore($sidebarPanel)
 
   return (
@@ -15,6 +16,7 @@ export function SidebarHost({ explorer, search, chat }: SidebarHostProps) {
       {panel === 'explorer' && explorer}
       {panel === 'search' && search}
       {panel === 'chat' && chat}
+      {panel === 'git' && git}
     </div>
   )
 }

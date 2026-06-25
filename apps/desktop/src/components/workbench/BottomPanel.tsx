@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
 import { TerminalTab, type TerminalTabHandle } from '@/app/right-sidebar/terminal'
 import { $currentCwd } from '@/store/session'
+import { $gitLog } from '@/store/git-log'
+import { GitOutputPanel } from './GitOutputPanel'
 import { useState, useCallback, useRef } from 'react'
 
 type ShellType = 'powershell' | 'git-bash' | 'cmd'
@@ -88,22 +90,25 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {/* Tab bar */}
       <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
         <div className="flex items-center gap-0.5">
-          {BOTTOM_TABS.map(tab => (
-            <button
-              key={tab.id}
-              className={cn(
-                'flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.65rem] transition-colors',
-                activeTab === tab.id
-                  ? 'bg-(--ui-tab-active-background) text-foreground'
-                  : 'text-muted-foreground hover:text-(--ui-text-secondary)'
-              )}
-              onClick={() => setBottomPanelTab(tab.id)}
-              type="button"
-            >
-              <Codicon name={tab.icon} size="0.75rem" />
-              {tab.label}
-            </button>
-          ))}
+          {BOTTOM_TABS.map(tab => {
+            const logCount = tab.id === 'output' ? $gitLog.get().length : 0
+            return (
+              <button
+                key={tab.id}
+                className={`flex items-center gap-1 rounded-sm px-2 py-0.5 text-[0.65rem] transition-colors ${activeTab === tab.id ? 'bg-(--ui-tab-active-background) text-foreground' : 'text-muted-foreground hover:text-(--ui-text-secondary)'}`}
+                onClick={() => setBottomPanelTab(tab.id)}
+                type="button"
+              >
+                <Codicon name={tab.icon} size="0.75rem" />
+                {tab.label}
+                {tab.id === 'output' && logCount > 0 && (
+                  <span className="ml-0.5 rounded-full bg-primary/20 px-1.5 text-[0.55rem] text-primary">
+                    {logCount > 99 ? '99+' : logCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
         <div className="flex items-center gap-1">
           {activeTab === 'terminal' && (
@@ -130,14 +135,11 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
                 <Codicon name="chevron-down" size="0.6rem" />
               </button>
               {showShellPicker && (
-                <div className="absolute bottom-full right-0 z-50 mb-1 min-w-[120px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-lg">
+                <div className="absolute top-full right-0 z-50 mt-1 min-w-[120px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-lg">
                   {SHELL_OPTIONS.map(shell => (
                     <button
                       key={shell.id}
-                      className={cn(
-                        'flex w-full items-center gap-2 px-2 py-1 text-[0.65rem] transition-colors hover:bg-(--ui-control-hover-background)',
-                        selectedShell === shell.id ? 'text-foreground' : 'text-muted-foreground'
-                      )}
+                      className={`flex w-full items-center gap-2 px-2 py-1 text-[0.65rem] transition-colors hover:bg-(--ui-control-hover-background) ${selectedShell === shell.id ? 'text-foreground' : 'text-muted-foreground'}`}
                       onClick={() => {
                         setSelectedShell(shell.id)
                         setShowShellPicker(false)
@@ -168,9 +170,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
           <TerminalTab ref={terminalRef} cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         </div>
         <div style={{ display: activeTab === 'output' ? 'flex' : 'none', height: '100%' }}>
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-            Output panel
-          </div>
+          <GitOutputPanel />
         </div>
         <div style={{ display: activeTab === 'problems' ? 'flex' : 'none', height: '100%' }}>
           <div className="flex h-full items-center justify-center text-xs text-muted-foreground">

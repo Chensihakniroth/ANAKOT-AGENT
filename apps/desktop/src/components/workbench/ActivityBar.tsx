@@ -3,7 +3,8 @@ import { triggerHaptic } from '@/lib/haptics'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
-import { $sidebarPanel, $sidebarOpen, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
+import { $sidebarPanel, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
+import { $sidebarOpen } from '@/store/layout'
 import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, CRON_ROUTE, PROFILES_ROUTE, AGENTS_ROUTE, COMMAND_CENTER_ROUTE } from '../../app/routes'
 
 interface ActivityBarItem {
@@ -20,6 +21,7 @@ const SIDEBAR_TOGGLE_ITEMS: ActivityBarItem[] = [
 ]
 
 const GLOBAL_VIEW_ITEMS: ActivityBarItem[] = [
+  { id: 'git', icon: 'source-control', label: 'Source Control', panel: 'git' },
   { id: 'skills', icon: 'symbol-misc', label: 'Skills & Tools', route: SKILLS_ROUTE },
   { id: 'messaging', icon: 'comment', label: 'Messaging', route: MESSAGING_ROUTE },
   { id: 'artifacts', icon: 'files', label: 'Artifacts', route: ARTIFACTS_ROUTE },
