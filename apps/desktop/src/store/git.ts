@@ -275,11 +275,11 @@ export async function gitUnstageFile(cwd: string, file: string) {
   $gitError.set(null)
   setBusy(cwd, true)
   try {
-    const result = await window.anakotDesktop?.gitRestore?.(safePath, [file])
+    const result = await window.anakotDesktop?.gitUnstage?.(safePath, [file])
     if (result) {
       addGitLogEntry({
-        command: 'restore',
-        fullCommand: `git restore --staged --worktree ${file}`,
+        command: 'unstage',
+        fullCommand: `git reset HEAD -- ${file}`,
         cwd,
         stdout: result.ok ? `Unstaged: ${file}` : '',
         stderr: result.error || '',
@@ -295,11 +295,11 @@ export async function gitUnstageFile(cwd: string, file: string) {
     }
     return result
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'git restore failed'
+    const msg = e instanceof Error ? e.message : 'git unstage failed'
     $gitError.set(msg)
     addGitLogEntry({
-      command: 'restore',
-      fullCommand: `git restore --staged --worktree ${file}`,
+      command: 'unstage',
+      fullCommand: `git reset HEAD -- ${file}`,
       cwd,
       stdout: '',
       stderr: msg,
@@ -318,11 +318,11 @@ export async function gitDiscardChanges(cwd: string, file: string) {
   $gitError.set(null)
   setBusy(cwd, true)
   try {
-    const result = await window.anakotDesktop?.gitRestore?.(safePath, [file])
+    const result = await window.anakotDesktop?.gitDiscard?.(safePath, [file])
     if (result) {
       addGitLogEntry({
-        command: 'restore',
-        fullCommand: `git restore --staged --worktree ${file}`,
+        command: 'discard',
+        fullCommand: `git restore -- ${file}`,
         cwd,
         stdout: result.ok ? `Discarded: ${file}` : '',
         stderr: result.error || '',
@@ -338,11 +338,11 @@ export async function gitDiscardChanges(cwd: string, file: string) {
     }
     return result
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'git restore failed'
+    const msg = e instanceof Error ? e.message : 'git discard failed'
     $gitError.set(msg)
     addGitLogEntry({
-      command: 'restore',
-      fullCommand: `git restore --staged --worktree ${file}`,
+      command: 'discard',
+      fullCommand: `git restore -- ${file}`,
       cwd,
       stdout: '',
       stderr: msg,

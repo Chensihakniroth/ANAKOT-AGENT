@@ -58,7 +58,8 @@ declare global {
       gitRoot?: (path: string) => Promise<string | null>
       gitStatus?: (cwd: string) => Promise<{ root: string | null; files: Array<{ path: string; status: string; staged: boolean; unstaged: boolean }>; branch: string; error?: string }>
       gitAdd?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
-      gitRestore?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitUnstage?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitDiscard?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
       gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
       gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>

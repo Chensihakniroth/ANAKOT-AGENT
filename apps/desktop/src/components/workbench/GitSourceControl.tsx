@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback, useState } from 'react'
+import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { Button } from '@/components/ui/button'
@@ -40,20 +40,26 @@ export function GitSourceControl() {
   const commitMessage = useStore($gitCommitMessage)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
 
+  // Track the current git root in a ref so async callbacks always see the latest value
+  const gitRootRef = useRef<string | null>(null)
+  useEffect(() => {
+    gitRootRef.current = status.root
+  }, [status.root])
+
   useEffect(() => {
     if (cwd.trim()) {
       changeWorkspace(cwd)
       // Subscribe to .git/ file-watcher events (primary mechanism)
       void window.anakotDesktop?.gitSubscribe?.(cwd)
       const unsubscribeGit = window.anakotDesktop?.onGitChanged?.((data: { root: string }) => {
-        // Only refresh if the change is for our workspace
-        if (data.root && status.root && data.root.toLowerCase() === status.root.toLowerCase()) {
+        // Compare against the ref — always reads the latest resolved root
+        if (data.root && gitRootRef.current && data.root.toLowerCase() === gitRootRef.current.toLowerCase()) {
           void triggerGitRefresh()
         }
       })
       // Also listen for file-write events from the main process (e.g. editor saves via IPC)
       const unsubscribeFile = window.anakotDesktop?.onFileChanged?.((data: { path: string; root: string }) => {
-        if (data.root && status.root && data.root.toLowerCase() === status.root.toLowerCase()) {
+        if (data.root && gitRootRef.current && data.root.toLowerCase() === gitRootRef.current.toLowerCase()) {
           void triggerGitRefresh()
         }
       })

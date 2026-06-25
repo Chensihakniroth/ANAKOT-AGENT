@@ -5658,21 +5658,47 @@ ipcMain.handle('anakot:git:add', async (_event, { cwd, files }) => {
   }
 })
 
-ipcMain.handle('anakot:git:restore', async (_event, { cwd, files }) => {
+// ── Shared git-path validation ────────────────────────────────────────────────
+// Returns the resolved git root, or an error result to send back.
+async function validateGitCwd(cwd: string): Promise<{ root: string } | { error: string }> {
+  let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+  rawPath = rawPath.replace(/[\\/]+$/, '')
+  if (!rawPath) return { error: 'empty-path' }
+  if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+    return { error: 'network or invalid path' }
+  }
+  const root = await findGitRoot(rawPath)
+  if (!root) return { error: 'not a git repo' }
+  return { root }
+}
+
+// ── Git Unstage: reset index, KEEP working tree ───────────────────────────────
+// This only removes changes from the staging area. Your file content is preserved.
+ipcMain.handle('anakot:git:unstage', async (_event, { cwd, files }) => {
   try {
-    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
-    rawPath = rawPath.replace(/[\\/]+$/, '')
-    if (!rawPath) return { ok: false, error: 'empty-path' }
-    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
-      return { ok: false, error: 'network or invalid path' }
-    }
-    const root = await findGitRoot(rawPath)
-    if (!root) return { ok: false, error: 'not a git repo' }
-    const result = await runGit(['restore', '--staged', '--worktree', ...files], { cwd: root })
+    const validated = await validateGitCwd(cwd)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await runGit(['reset', 'HEAD', ...files], { cwd: validated.root })
     const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
-    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git restore failed' }
+    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git unstage failed' }
   } catch (error) {
-    return { ok: false, error: error?.message || 'git restore failed' }
+    return { ok: false, error: error?.message || 'git unstage failed' }
+  }
+})
+
+// ── Git Discard: revert working-tree content to HEAD ──────────────────────────
+// WARNING: this destroys uncommitted edits. The renderer shows a confirm dialog first.
+ipcMain.handle('anakot:git:discard', async (_event, { cwd, files }) => {
+  try {
+    const validated = await validateGitCwd(cwd)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    // git restore -- <paths> reverts working tree to HEAD regardless of staging.
+    // No --staged flag — discard always means "throw away my edits"
+    const result = await runGit(['restore', ...files], { cwd: validated.root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git discard failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git discard failed' }
   }
 })
 
