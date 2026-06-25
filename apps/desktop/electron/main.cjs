@@ -5478,9 +5478,9 @@ ipcMain.handle('anakot:fs:gitRoot', async (_event, startPath) => {
 // Renderer subscribes to workspace-specific channels.
 // Falls back to polling if watcher can't be set up.
 
-const gitWatchers = new Map<string, { watcher: ReturnType<typeof fs.watch>; timer: ReturnType<typeof setTimeout> | null }>()
+const gitWatchers = new Map()
 
-function startGitWatcher(gitRoot: string) {
+function startGitWatcher(gitRoot) {
   // Don't double-watch
   const existing = gitWatchers.get(gitRoot)
   if (existing) return
@@ -5494,7 +5494,7 @@ function startGitWatcher(gitRoot: string) {
     path.join(gitRoot, '.git', 'logs'),
   ]
 
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let debounceTimer = null
 
   const debouncedNotify = () => {
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -5507,7 +5507,7 @@ function startGitWatcher(gitRoot: string) {
     }, 300) // 300ms debounce — coalesce rapid-fire events
   }
 
-  const watchers: ReturnType<typeof fs.watch>[] = []
+  const watchers = []
 
   for (const dir of watchDirs) {
     try {
@@ -5544,13 +5544,13 @@ function startGitWatcher(gitRoot: string) {
   })
 
   // Store all watchers for cleanup
-  ;(gitWatchers.get(gitRoot) as any)._allWatchers = watchers
+  ;(gitWatchers.get(gitRoot))._allWatchers = watchers
 }
 
-function stopGitWatcher(gitRoot: string) {
+function stopGitWatcher(gitRoot) {
   const entry = gitWatchers.get(gitRoot)
   if (!entry) return
-  const watchers = (entry as any)._allWatchers as ReturnType<typeof fs.watch>[]
+  const watchers = entry._allWatchers
   if (watchers) {
     for (const w of watchers) {
       try { w.close() } catch { /* ignore */ }
@@ -5660,7 +5660,7 @@ ipcMain.handle('anakot:git:add', async (_event, { cwd, files }) => {
 
 // ── Shared git-path validation ────────────────────────────────────────────────
 // Returns the resolved git root, or an error result to send back.
-async function validateGitCwd(cwd: string): Promise<{ root: string } | { error: string }> {
+async function validateGitCwd(cwd) {
   let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
   rawPath = rawPath.replace(/[\\/]+$/, '')
   if (!rawPath) return { error: 'empty-path' }

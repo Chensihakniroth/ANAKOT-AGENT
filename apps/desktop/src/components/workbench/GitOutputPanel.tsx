@@ -87,6 +87,15 @@ function LogEntryRow({ entry }: { entry: GitLogEntry }) {
 export function GitOutputPanel() {
   const log = useStore($gitLog)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Debug: log own dimensions
+  useEffect(() => {
+    if (rootRef.current) {
+      const rect = rootRef.current.getBoundingClientRect()
+      console.log(`[GitOutputPanel] root: ${rect.width}x${rect.height}`)
+    }
+  })
 
   // Auto-scroll to bottom when new entries arrive
   useEffect(() => {
@@ -97,14 +106,14 @@ export function GitOutputPanel() {
 
   if (log.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-xs text-muted-foreground/50">
+      <div ref={rootRef} className="flex h-full w-full items-center justify-center text-xs text-muted-foreground/50">
         No git activity yet. Stage, commit, or modify files to see git output here.
       </div>
     )
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={rootRef} className="flex h-full w-full flex-col">
       {/* Toolbar */}
       <div className="flex items-center justify-between border-b border-(--ui-stroke-tertiary) bg-(--ui-tab-inactive-background) px-3 py-1">
         <span className="text-[0.6rem] uppercase tracking-wider text-muted-foreground/60">

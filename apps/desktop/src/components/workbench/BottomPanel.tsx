@@ -6,7 +6,7 @@ import { TerminalTab, type TerminalTabHandle } from '@/app/right-sidebar/termina
 import { $currentCwd } from '@/store/session'
 import { $gitLog } from '@/store/git-log'
 import { GitOutputPanel } from './GitOutputPanel'
-import { useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 type ShellType = 'powershell' | 'git-bash' | 'cmd'
 
@@ -35,6 +35,14 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   // Direct DOM resize during drag — bypasses React entirely for smooth 60fps resizing.
   // Only commits to React state on mouseup (so the rest of the UI sees the final size).
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Debug: log content area dimensions
+  useEffect(() => {
+    if (contentRef.current && isOpen) {
+      const rect = contentRef.current.getBoundingClientRect()
+      console.log(`[BottomPanel] content area: ${rect.width}x${rect.height} (active: ${activeTab})`)
+    }
+  }, [isOpen, activeTab])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -73,22 +81,23 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const panel = (
     <div
       ref={panelRef}
-      className="shrink-0 grid border-t border-(--ui-stroke-secondary)"
+      className="shrink-0 flex flex-col border-t border-(--ui-stroke-secondary)"
       style={{
         height: isOpen ? panelHeight + 'px' : '0px',
-        gridTemplateRows: isOpen ? '4px 28px 1fr' : '0px',
         overflow: 'hidden',
+        minWidth: 0,
       }}
     >
       {/* Resize handle */}
       <div
         ref={resizeRef}
         className="cursor-ns-resize bg-transparent hover:bg-(--ui-stroke-secondary) active:bg-primary/30 transition-colors"
+        style={{ height: '4px', flexShrink: 0 }}
         onMouseDown={handleMouseDown}
       />
 
       {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2">
+      <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2" style={{ flexShrink: 0 }}>
         <div className="flex items-center gap-0.5">
           {BOTTOM_TABS.map(tab => {
             const logCount = tab.id === 'output' ? $gitLog.get().length : 0
@@ -165,15 +174,15 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       </div>
 
       {/* Panel content — always mount all tabs so TerminalTab stays alive */}
-      <div ref={contentRef} className="relative overflow-hidden" style={{ width: '100%', minWidth: 0 }}>
-        <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, height: '100%', width: '100%' }}>
+      <div ref={contentRef} className="relative flex flex-1 flex-col overflow-hidden" style={{ minHeight: 0, minWidth: 0 }}>
+        <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%', height: '100%' }}>
           <TerminalTab ref={terminalRef} cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         </div>
-        <div style={{ display: activeTab === 'output' ? 'flex' : 'none', height: '100%' }}>
+        <div style={{ display: activeTab === 'output' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%' }}>
           <GitOutputPanel />
         </div>
-        <div style={{ display: activeTab === 'problems' ? 'flex' : 'none', height: '100%' }}>
-          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        <div style={{ display: activeTab === 'problems' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%' }}>
+          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
             Problems panel
           </div>
         </div>
