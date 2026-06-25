@@ -52,6 +52,12 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   deleteFile: filePath => ipcRenderer.invoke('anakot:fs:unlink', filePath),
   writeFile: (filePath, content) => ipcRenderer.invoke('anakot:fs:writeFile', filePath, content),
   gitRoot: startPath => ipcRenderer.invoke('anakot:fs:gitRoot', startPath),
+  gitStatus: cwd => ipcRenderer.invoke('anakot:git:status', cwd),
+  gitAdd: (cwd, files) => ipcRenderer.invoke('anakot:git:add', { cwd, files }),
+  gitRestore: (cwd, files) => ipcRenderer.invoke('anakot:git:restore', { cwd, files }),
+  gitCommit: (cwd, message) => ipcRenderer.invoke('anakot:git:commit', { cwd, message }),
+  gitDiff: (cwd, file) => ipcRenderer.invoke('anakot:git:diff', { cwd, file }),
+  gitLog: (cwd, limit) => ipcRenderer.invoke('anakot:git:log', { cwd, limit }),
   terminal: {
     dispose: id => ipcRenderer.invoke('anakot:terminal:dispose', id),
     resize: (id, size) => ipcRenderer.invoke('anakot:terminal:resize', id, size),

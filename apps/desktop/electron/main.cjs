@@ -5417,7 +5417,13 @@ ipcMain.handle('anakot:fs:unlink', async (_event, filePath) => {
       return { ok: false, error: 'invalid-path' }
     }
 
-    await fs.promises.unlink(resolved)
+    // Check if it's a directory — use rm for recursive delete, unlink for files
+    const stat = await fs.promises.stat(resolved)
+    if (stat.isDirectory()) {
+      await fs.promises.rm(resolved, { recursive: true, force: true })
+    } else {
+      await fs.promises.unlink(resolved)
+    }
 
     return { ok: true }
   } catch (error) {
@@ -5452,6 +5458,152 @@ ipcMain.handle('anakot:fs:gitRoot', async (_event, startPath) => {
     return findGitRoot(start)
   } catch {
     return findGitRoot(resolved)
+  }
+})
+
+// ─── Git Source Control ──────────────────────────────────────────────────────
+
+ipcMain.handle('anakot:git:status', async (_event, cwd) => {
+  try {
+    // Renderer sends forward-slash paths for safe IPC transport
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { root: null, files: [], branch: '', error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { root: null, files: [], branch: '', error: 'network-path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { root: null, files: [], branch: '', error: 'no-git-root' }
+
+    const git = args => runGit(args, { cwd: root }).then(r => r.stdout.trim())
+    const [branch, statusStr] = await Promise.all([
+      git(['rev-parse', '--abbrev-ref', 'HEAD']),
+      git(['status', '--porcelain'])
+    ])
+
+    if (!statusStr) return { root, files: [], branch }
+
+    const allFiles = statusStr.split('\n').filter(Boolean).map(line => {
+      const indexStatus = line[0]
+      const workStatus = line[1]
+      let filePath = line.slice(3)
+      // Renamed/copied files have a tab-separated second path: "R  old\tnew"
+      // Use only the new path (or the only path if not tab-separated)
+      if (filePath.includes('\t')) {
+        filePath = filePath.split('\t').pop() ?? filePath
+      }
+      let status = 'modified'
+      if (indexStatus === '?' || workStatus === '?') status = 'untracked'
+      else if (indexStatus === 'A') status = 'added'
+      else if (indexStatus === 'D' || workStatus === 'D') status = 'deleted'
+      else if (indexStatus === 'R') status = 'renamed'
+      else if (indexStatus === 'U' || workStatus === 'U' || (indexStatus === 'A' && workStatus === 'A')) status = 'unmerged'
+      else if (indexStatus === 'M' || workStatus === 'M') status = 'modified'
+      const hasStaged = indexStatus !== ' ' && indexStatus !== '?'
+      const hasUnstaged = workStatus !== ' ' && workStatus !== '?'
+      return { path: filePath, status, staged: hasStaged, unstaged: hasUnstaged }
+    })
+
+    return { root, files: allFiles, branch }
+  } catch (error) {
+    const msg = error?.message || error?.stderr || String(error) || 'git status failed'
+    return { root: null, files: [], branch: '', error: msg }
+  }
+})
+
+ipcMain.handle('anakot:git:add', async (_event, { cwd, files }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const result = await runGit(['add', ...files], { cwd: root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git add failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git add failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:restore', async (_event, { cwd, files }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const result = await runGit(['restore', '--staged', '--worktree', ...files], { cwd: root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git restore failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git restore failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:commit', async (_event, { cwd, message }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    if (!message?.trim()) return { ok: false, error: 'empty commit message' }
+    const result = await runGit(['commit', '-m', message], { cwd: root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, output: result.stdout.trim(), error: result.ok ? undefined : errorOutput || 'git commit failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git commit failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:diff', async (_event, { cwd, file }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const diff = await runGit(['diff', 'HEAD', '--', file], { cwd: root })
+    return { ok: true, diff }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git diff failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:log', async (_event, { cwd, limit = 20 }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const log = await runGit([
+      'log', `--max-count=${limit}`, '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso'
+    ], { cwd: root })
+    if (!log) return { ok: true, commits: [] }
+    const commits = log.split('\n').filter(Boolean).map(line => {
+      const [hash, name, email, date, ...rest] = line.split('|')
+      return { hash: hash?.slice(0, 8), name, email, date, message: rest.join('|') }
+    })
+    return { ok: true, commits }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git log failed' }
   }
 })
 

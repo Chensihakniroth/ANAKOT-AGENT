@@ -17,7 +17,7 @@ interface ContextMenuState {
   x: number
   y: number
   file: GitFile
-  type: 'staged' | 'changes' | 'untracked'
+  type: 'staged' | 'changes'
 }
 
 const STATUS_ICONS: Record<string, { icon: string; color: string }> = {
@@ -76,8 +76,7 @@ export function GitSourceControl() {
   }, [contextMenu])
 
   const stagedFiles = useMemo(() => status.files.filter(f => f.staged), [status.files])
-  const unstagedFiles = useMemo(() => status.files.filter(f => f.unstaged && f.status !== 'untracked'), [status.files])
-  const untrackedFiles = useMemo(() => status.files.filter(f => f.status === 'untracked'), [status.files])
+  const unstagedFiles = useMemo(() => status.files.filter(f => !f.staged), [status.files])
 
   const handleStage = useCallback(async (file: string) => {
     setContextMenu(null)
@@ -98,11 +97,11 @@ export function GitSourceControl() {
 
   const handleStageAll = useCallback(async () => {
     setContextMenu(null)
-    const files = [...unstagedFiles, ...untrackedFiles].map(f => f.path)
+    const files = unstagedFiles.map(f => f.path)
     if (files.length > 0) {
       await gitStageAllFiles(cwd, files)
     }
-  }, [cwd, unstagedFiles, untrackedFiles])
+  }, [cwd, unstagedFiles])
 
   const handleCommit = useCallback(async () => {
     if (commitMessage.trim()) {
@@ -117,7 +116,7 @@ export function GitSourceControl() {
     }
   }, [handleCommit])
 
-  const openContextMenu = useCallback((e: React.MouseEvent, file: GitFile, type: 'staged' | 'changes' | 'untracked') => {
+  const openContextMenu = useCallback((e: React.MouseEvent, file: GitFile, type: 'staged' | 'changes') => {
     e.preventDefault()
     e.stopPropagation()
     setContextMenu({ x: e.clientX, y: e.clientY, file, type })
@@ -151,7 +150,7 @@ export function GitSourceControl() {
     void window.anakotDesktop?.openExternal?.(`file://${parentDir}`)
   }, [cwd, status.root])
 
-  const renderFileItem = (file: GitFile, type: 'staged' | 'changes' | 'untracked') => {
+  const renderFileItem = (file: GitFile, type: 'staged' | 'changes') => {
     const statusInfo = STATUS_ICONS[file.status] || STATUS_ICONS.modified
     return (
       <div
@@ -162,6 +161,7 @@ export function GitSourceControl() {
         <Codicon name={statusInfo.icon} size="0.75rem" className={`shrink-0 ${statusInfo.color}`} />
         <span className="flex-1 truncate text-foreground" title={file.path}>{file.path.split('/').pop()}</span>
         <span className="text-[0.6rem] uppercase text-muted-foreground">{file.status}</span>
+        {/* Hover actions */}
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           {type === 'staged' && (
             <button
@@ -192,16 +192,6 @@ export function GitSourceControl() {
                 <Codicon name="discard" size="0.625rem" />
               </button>
             </>
-          )}
-          {type === 'untracked' && (
-            <button
-              className="rounded-sm p-0.5 hover:bg-(--ui-control-active-background)"
-              onClick={() => handleStage(file.path)}
-              title="Stage"
-              type="button"
-            >
-              <Codicon name="add" size="0.625rem" />
-            </button>
           )}
         </div>
       </div>
@@ -339,19 +329,6 @@ export function GitSourceControl() {
               </div>
             )}
           </div>
-          {/* Untracked — always show like VS Code */}
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.gitUntracked || 'Untracked'} ({untrackedFiles.length})
-              </span>
-            </div>
-            {untrackedFiles.length > 0 && (
-              <div className="flex flex-col gap-px">
-                {untrackedFiles.map(f => renderFileItem(f, 'untracked'))}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -394,16 +371,6 @@ export function GitSourceControl() {
                   Discard Changes
                 </button>
               </>
-            )}
-            {contextMenu.type === 'untracked' && (
-              <button
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                onClick={() => handleStage(contextMenu.file.path)}
-                type="button"
-              >
-                <Codicon name="add" size="0.75rem" />
-                Stage Changes
-              </button>
             )}
             <div className="mx-3 my-1 h-px bg-(--ui-stroke-tertiary)" />
             {/* Open File */}

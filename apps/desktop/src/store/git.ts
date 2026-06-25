@@ -51,6 +51,7 @@ function toIpcSafePath(p: string): string {
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let lastRefreshCwd: string = ''
+let busy = false // true while a user action is in flight — skip polling during this
 
 function startPolling(cwd: string) {
   stopPolling()
@@ -58,7 +59,7 @@ function startPolling(cwd: string) {
   lastRefreshCwd = cwd
   // Poll every 5 seconds — same as VS Code default
   refreshTimer = setInterval(() => {
-    if (lastRefreshCwd) {
+    if (lastRefreshCwd && !busy) {
       void refreshGitStatus(lastRefreshCwd, { silent: true })
     }
   }, 5000)
@@ -71,9 +72,21 @@ function stopPolling() {
   }
 }
 
+/**
+ * Call this when cwd changes from the UI.
+ * Stops old polling, refreshes status for new cwd, starts new polling.
+ */
+export function changeWorkspace(cwd: string) {
+  busy = false
+  stopPolling()
+  if (cwd.trim()) {
+    void refreshGitStatus(cwd)
+  }
+}
+
 /** Manually trigger a status refresh (e.g. after a file save) */
 export function triggerGitRefresh() {
-  if (lastRefreshCwd) {
+  if (lastRefreshCwd && !busy) {
     void refreshGitStatus(lastRefreshCwd, { silent: true })
   }
 }
@@ -105,11 +118,6 @@ function determineLevel(exitCode: number, stderr: string): 'success' | 'error' |
 export async function refreshGitStatus(cwd: string, options?: { silent?: boolean }) {
   if (!cwd.trim()) return
   const safePath = toIpcSafePath(cwd.trim())
-
-  // Start polling on first call
-  if (!refreshTimer && cwd.trim()) {
-    startPolling(cwd.trim())
-  }
 
   if (!options?.silent) {
     $gitLoading.set(true)
@@ -165,6 +173,7 @@ export async function refreshGitStatus(cwd: string, options?: { silent?: boolean
 export async function gitStageFile(cwd: string, file: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
+  busy = true
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, [file])
     if (result) {
@@ -199,12 +208,15 @@ export async function gitStageFile(cwd: string, file: string) {
       summary: msg,
     })
     return { ok: false, error: msg }
+  } finally {
+    busy = false
   }
 }
 
 export async function gitStageAllFiles(cwd: string, files: string[]) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
+  busy = true
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, files)
     if (result) {
@@ -239,12 +251,15 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
       summary: msg,
     })
     return { ok: false, error: msg }
+  } finally {
+    busy = false
   }
 }
 
 export async function gitUnstageFile(cwd: string, file: string) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
+  busy = true
   try {
     const result = await window.anakotDesktop?.gitRestore?.(safePath, [file])
     if (result) {
