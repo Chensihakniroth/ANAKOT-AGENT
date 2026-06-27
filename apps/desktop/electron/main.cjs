@@ -1289,7 +1289,7 @@ function runGit(args, options = {}) {
       options.onLine?.('stderr', text)
     })
     child.once('error', reject)
-    child.once('exit', code => resolve({ code, stdout, stderr }))
+    child.once('exit', code => resolve({ ok: code === 0, code, stdout, stderr }))
   })
 }
 
@@ -5525,7 +5525,7 @@ function startGitWatcher(gitRoot) {
 
   // Also watch the working tree root for untracked file changes
   try {
-    const rootWatcher = fs.watch(gitRoot, { persistent: false }, (eventType, filename) => {
+    const rootWatcher = fs.watch(gitRoot, { persistent: false, recursive: true }, (eventType, filename) => {
       if (!filename) return
       const name = String(filename)
       // Skip .git directory events (handled above) and lock files
@@ -5615,7 +5615,7 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
     const allFiles = statusStr.split('\n').filter(Boolean).map(line => {
       const indexStatus = line[0]
       const workStatus = line[1]
-      let filePath = line.slice(3)
+      let filePath = line.slice(2)
       // Renamed/copied files have a tab-separated second path: "R  old\tnew"
       // Use only the new path (or the only path if not tab-separated)
       if (filePath.includes('\t')) {
@@ -5640,6 +5640,7 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
   }
 })
 
+// ── Git Add ────────────────────────────────────────────────────────────────────
 ipcMain.handle('anakot:git:add', async (_event, { cwd, files }) => {
   try {
     let rawPath = String(cwd || '').trim().replace(/\//g, '\\')

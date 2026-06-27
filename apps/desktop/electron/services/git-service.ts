@@ -125,7 +125,7 @@ export async function gitStatus(cwd: string): Promise<GitStatusResult> {
     .map((line): GitFileStatus => {
       const indexStatus = line[0]
       const workStatus = line[1]
-      const filePath = line.slice(3)
+      const filePath = line.slice(2)
 
       let status: GitFileStatus['status'] = 'modified'
       const isUntracked = indexStatus === '?' || workStatus === '?'

@@ -105,34 +105,39 @@ export function GitSourceControl() {
 
   const handleStage = useCallback(async (file: string) => {
     setContextMenu(null)
-    await gitStageFile(cwd, file)
-  }, [cwd])
+    const root = status.root || cwd
+    await gitStageFile(root, file)
+  }, [cwd, status.root])
 
   const handleUnstage = useCallback(async (file: string) => {
     setContextMenu(null)
-    await gitUnstageFile(cwd, file)
-  }, [cwd])
+    const root = status.root || cwd
+    await gitUnstageFile(root, file)
+  }, [cwd, status.root])
 
   const handleDiscard = useCallback(async (file: string) => {
     setContextMenu(null)
+    const root = status.root || cwd
     if (window.confirm(`Discard changes to "${file}"?`)) {
-      await gitDiscardChanges(cwd, file)
+      await gitDiscardChanges(root, file)
     }
-  }, [cwd])
+  }, [cwd, status.root])
 
   const handleStageAll = useCallback(async () => {
     setContextMenu(null)
+    const root = status.root || cwd
     const files = unstagedFiles.map(f => f.path)
     if (files.length > 0) {
-      await gitStageAllFiles(cwd, files)
+      await gitStageAllFiles(root, files)
     }
-  }, [cwd, unstagedFiles])
+  }, [cwd, status.root, unstagedFiles])
 
   const handleCommit = useCallback(async () => {
     if (commitMessage.trim()) {
-      await gitCommit(cwd, commitMessage)
+      const root = status.root || cwd
+      await gitCommit(root, commitMessage)
     }
-  }, [cwd, commitMessage])
+  }, [cwd, status.root, commitMessage])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -187,11 +192,10 @@ export function GitSourceControl() {
         <span className="flex-1 truncate text-foreground" title={file.path}>{file.path.split('/').pop()}</span>
         <span className="text-[0.6rem] uppercase text-muted-foreground">{file.status}</span>
         {/* Hover actions */}
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center gap-0.5">
           {type === 'staged' && (
             <button
-              className="rounded-sm p-0.5 hover:bg-(--ui-control-active-background)"
-              onClick={() => handleUnstage(file.path)}
+              onClick={() => { console.log('[inline] unstage click', file.path); handleUnstage(file.path) }}
               title="Unstage"
               type="button"
             >
@@ -201,15 +205,13 @@ export function GitSourceControl() {
           {type === 'changes' && (
             <>
               <button
-                className="rounded-sm p-0.5 hover:bg-(--ui-control-active-background)"
-                onClick={() => handleStage(file.path)}
+                onClick={() => { console.log('[inline] stage click', file.path); handleStage(file.path) }}
                 title="Stage"
                 type="button"
               >
                 <Codicon name="add" size="0.625rem" />
               </button>
               <button
-                className="rounded-sm p-0.5 hover:bg-(--ui-control-active-background)"
                 onClick={() => handleDiscard(file.path)}
                 title="Discard"
                 type="button"

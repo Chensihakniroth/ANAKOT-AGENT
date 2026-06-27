@@ -17,7 +17,7 @@ function LogEntryRow({ entry }: { entry: GitLogEntry }) {
   return (
     <div
       className={cn(
-        'group border-b border-(--ui-stroke-tertiary)/50 px-3 py-1.5 font-mono text-[0.65rem]',
+        'group select-text border-b border-(--ui-stroke-tertiary)/50 px-3 py-1.5 font-mono text-[0.65rem]',
         isError && 'bg-red-500/5',
         isWarning && 'bg-amber-500/5',
       )}
@@ -131,7 +131,7 @@ export function GitOutputPanel() {
       </div>
 
       {/* Log entries */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-auto select-text">
         {log.map(entry => (
           <LogEntryRow key={entry.id} entry={entry} />
         ))}

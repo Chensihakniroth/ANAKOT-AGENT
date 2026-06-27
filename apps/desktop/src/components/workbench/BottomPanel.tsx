@@ -178,7 +178,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%', height: '100%' }}>
           <TerminalTab ref={terminalRef} cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
         </div>
-        <div style={{ display: activeTab === 'output' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%' }}>
+        <div style={{ display: activeTab === 'output' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, width: '100%' }}>
           <GitOutputPanel />
         </div>
         <div style={{ display: activeTab === 'problems' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%' }}>
