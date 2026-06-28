@@ -36,6 +36,11 @@ export function setSidebarPanel(panel: SidebarPanelId) {
   $sidebarPanel.set(panel)
 }
 
+export function markEditorTabDirty(id: string, dirty: boolean) {
+  const tabs = $editorTabs.get()
+  $editorTabs.set(tabs.map(t => t.id === id ? { ...t, dirty } : t))
+}
+
 export function toggleSidebar() {
   toggleSidebarOpen()
 }

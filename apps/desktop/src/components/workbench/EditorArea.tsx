@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ShikiHighlighter from 'react-shiki'
 
-import { closeOtherTabs, closeAllTabs, closeTabsToTheRight, type EditorTab } from '@/store/workbench'
+import { closeOtherTabs, closeAllTabs, closeTabsToTheRight, markEditorTabDirty, type EditorTab } from '@/store/workbench'
 
 const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
 
@@ -195,7 +195,7 @@ function getLanguageFromPath(path: string): string {
   return languageMap[ext] || 'text'
 }
 
-function CodeEditorPane({ filePath }: { filePath: string }) {
+function CodeEditorPane({ tabId, filePath }: { tabId: string, filePath: string }) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -235,7 +235,24 @@ function CodeEditorPane({ filePath }: { filePath: string }) {
     }
   }, [content])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault()
+      if (content !== null) {
+        try {
+          const res = await window.anakotDesktop?.writeFile(filePath, content)
+          if (res?.ok) {
+            markEditorTabDirty(tabId, false)
+          } else {
+            console.error('Failed to save file:', res?.error)
+          }
+        } catch (err) {
+          console.error('Error saving file:', err)
+        }
+      }
+      return
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault()
       const textarea = textareaRef.current
@@ -265,11 +282,12 @@ function CodeEditorPane({ filePath }: { filePath: string }) {
         }, 0)
       }
     }
-  }, [content])
+  }, [content, filePath, tabId])
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setContent(e.target.value)
-  }, [])
+    markEditorTabDirty(tabId, true)
+  }, [tabId])
 
   const handleScroll = useCallback(() => {
     if (textareaRef.current && lineNumbersRef.current) {
@@ -350,7 +368,7 @@ export function EditorArea({ tabs, activeTabId, onSetActiveTab, onCloseTab }: Ed
       />
       <div className="relative min-h-0 flex-1 overflow-hidden bg-(--ui-chat-surface-background)">
         {activeTab ? (
-          <CodeEditorPane key={activeTab.id} filePath={activeTab.path} />
+          <CodeEditorPane key={activeTab.id} tabId={activeTab.id} filePath={activeTab.path} />
         ) : (
           <WelcomeTab />
         )}

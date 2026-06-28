@@ -487,7 +487,7 @@ function registerMediaProtocol() {
     try {
       const url = new URL(request.url)
       const filePath = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
-      ;({ resolvedPath } = await resolveReadableFileForIpc(filePath, { purpose: 'Media stream' }))
+        ; ({ resolvedPath } = await resolveReadableFileForIpc(filePath, { purpose: 'Media stream' }))
     } catch {
       return new Response('Media not found', { status: 404 })
     }
@@ -2239,8 +2239,8 @@ async function ensureRuntime(backend) {
     if (!bootstrapResult.ok) {
       const bootstrapError = new Error(
         `Anakot bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
-          `${bootstrapResult.error || 'unknown error'}. ` +
-          `Check ${path.join(ANAKOT_HOME, 'logs', 'desktop.log')} for the full transcript.`
+        `${bootstrapResult.error || 'unknown error'}. ` +
+        `Check ${path.join(ANAKOT_HOME, 'logs', 'desktop.log')} for the full transcript.`
       )
       bootstrapError.isBootstrapFailure = true
       bootstrapError.failedStage = bootstrapResult.failedStage || null
@@ -2266,7 +2266,7 @@ async function ensureRuntime(backend) {
   if (!isAnakotSourceRoot(ACTIVE_ANAKOT_ROOT)) {
     throw new Error(
       `Anakot install at ${ACTIVE_ANAKOT_ROOT} is missing or incomplete. ` +
-        'Reinstall via the desktop installer or scripts/install.ps1.'
+      'Reinstall via the desktop installer or scripts/install.ps1.'
     )
   }
 
@@ -2279,9 +2279,9 @@ async function ensureRuntime(backend) {
   if (IS_WINDOWS && !findGitBash()) {
     throw new Error(
       'Git for Windows is required for Anakot on Windows (provides Git Bash, ' +
-        "which the agent's terminal tool uses). Install it from " +
-        'https://git-scm.com/download/win or run `winget install -e --id Git.Git`, ' +
-        'then relaunch Anakot.'
+      "which the agent's terminal tool uses). Install it from " +
+      'https://git-scm.com/download/win or run `winget install -e --id Git.Git`, ' +
+      'then relaunch Anakot.'
     )
   }
 
@@ -2375,7 +2375,7 @@ function fetchJson(url, token, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Anakot backend.'
+                'The endpoint is likely missing on the Anakot backend.'
               )
             )
             return
@@ -2449,7 +2449,7 @@ function fetchPublicJson(url, options = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the Anakot backend.'
+                'The endpoint is likely missing on the Anakot backend.'
               )
             )
             return
@@ -3111,16 +3111,16 @@ function buildApplicationMenu() {
     submenu: [
       IS_MAC
         ? {
-            accelerator: 'CommandOrControl+W',
-            click: () => {
-              if (previewShortcutActive) {
-                sendClosePreviewRequested()
-              } else {
-                mainWindow?.close()
-              }
-            },
-            label: 'Close'
-          }
+          accelerator: 'CommandOrControl+W',
+          click: () => {
+            if (previewShortcutActive) {
+              sendClosePreviewRequested()
+            } else {
+              mainWindow?.close()
+            }
+          },
+          label: 'Close'
+        }
         : { role: 'quit' }
     ]
   })
@@ -3959,7 +3959,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
     if (!(await hasLiveOauthSession(baseUrl))) {
       const err = new Error(
         'Remote Anakot gateway uses OAuth, but you are not signed in. ' +
-          'Open Settings → Gateway and click "Sign in", or switch back to Local.'
+        'Open Settings → Gateway and click "Sign in", or switch back to Local.'
       )
       err.needsOauthLogin = true
       throw err
@@ -3991,7 +3991,7 @@ async function buildRemoteConnection(rawUrl, authMode, token, source) {
   if (!token) {
     throw new Error(
       'Remote Anakot gateway is selected, but no session token is saved. ' +
-        'Open Settings → Gateway and save a token, or switch back to Local.'
+      'Open Settings → Gateway and save a token, or switch back to Local.'
     )
   }
 
@@ -4031,7 +4031,7 @@ async function resolveRemoteBackend(profile) {
     if (!rawEnvToken) {
       throw new Error(
         'ANAKOT_DESKTOP_REMOTE_URL is set but ANAKOT_DESKTOP_REMOTE_TOKEN is not. ' +
-          'Both must be provided to connect to a remote Anakot backend.'
+        'Both must be provided to connect to a remote Anakot backend.'
       )
     }
     return buildRemoteConnection(rawEnvUrl, 'token', rawEnvToken, 'env')
@@ -4193,7 +4193,7 @@ async function testDesktopConnectionConfig(input = {}) {
     if (!probe.ok) {
       throw new Error(
         `Reached the gateway over HTTP, but the live WebSocket (/api/ws) connection failed: ${probe.reason} ` +
-          'The HTTP check can pass while the WebSocket is blocked by a proxy, firewall, or gateway auth/origin guard.'
+        'The HTTP check can pass while the WebSocket is blocked by a proxy, firewall, or gateway auth/origin guard.'
       )
     }
   }
@@ -5543,8 +5543,8 @@ function startGitWatcher(gitRoot) {
     timer: null,
   })
 
-  // Store all watchers for cleanup
-  ;(gitWatchers.get(gitRoot))._allWatchers = watchers
+    // Store all watchers for cleanup
+    ; (gitWatchers.get(gitRoot))._allWatchers = watchers
 }
 
 function stopGitWatcher(gitRoot) {
@@ -5604,7 +5604,7 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
     const root = await findGitRoot(rawPath)
     if (!root) return { root: null, files: [], branch: '', error: 'no-git-root' }
 
-    const git = args => runGit(args, { cwd: root }).then(r => r.stdout.trim())
+    const git = args => runGit(args, { cwd: root }).then(r => r.stdout.trimEnd())
     const [branch, statusStr] = await Promise.all([
       git(['rev-parse', '--abbrev-ref', 'HEAD']),
       git(['status', '--porcelain'])
@@ -5612,25 +5612,50 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
 
     if (!statusStr) return { root, files: [], branch }
 
-    const allFiles = statusStr.split('\n').filter(Boolean).map(line => {
+    const allFiles = []
+    statusStr.split('\n').filter(Boolean).forEach(line => {
+      if (line.length < 4) return
       const indexStatus = line[0]
       const workStatus = line[1]
-      let filePath = line.slice(2)
+      let filePath = line.slice(3) // Skip X, Y status and the single space separator
+      // Unquote if Git status output quoted the path due to spaces or special chars
+      if (filePath.startsWith('"') && filePath.endsWith('"')) {
+        filePath = filePath.slice(1, -1)
+        filePath = filePath.replace(/\\(.)/g, '$1')
+      }
       // Renamed/copied files have a tab-separated second path: "R  old\tnew"
       // Use only the new path (or the only path if not tab-separated)
       if (filePath.includes('\t')) {
         filePath = filePath.split('\t').pop() ?? filePath
       }
-      let status = 'modified'
-      if (indexStatus === '?' || workStatus === '?') status = 'untracked'
-      else if (indexStatus === 'A') status = 'added'
-      else if (indexStatus === 'D' || workStatus === 'D') status = 'deleted'
-      else if (indexStatus === 'R') status = 'renamed'
-      else if (indexStatus === 'U' || workStatus === 'U' || (indexStatus === 'A' && workStatus === 'A')) status = 'unmerged'
-      else if (indexStatus === 'M' || workStatus === 'M') status = 'modified'
-      const hasStaged = indexStatus !== ' ' && indexStatus !== '?'
-      const hasUnstaged = workStatus !== ' ' && workStatus !== '?'
-      return { path: filePath, status, staged: hasStaged, unstaged: hasUnstaged }
+
+      // Check for conflict/unmerged first
+      const isConflict = (indexStatus === 'U' || workStatus === 'U' ||
+        (indexStatus === 'A' && workStatus === 'A') ||
+        (indexStatus === 'D' && workStatus === 'D'))
+
+      if (isConflict) {
+        allFiles.push({ path: filePath, status: 'unmerged', staged: false })
+        return
+      }
+
+      // 1. Staged entry (if indexStatus is not space or ?)
+      if (indexStatus !== ' ' && indexStatus !== '?') {
+        let status = 'modified'
+        if (indexStatus === 'A') status = 'added'
+        else if (indexStatus === 'D') status = 'deleted'
+        else if (indexStatus === 'R') status = 'renamed'
+        allFiles.push({ path: filePath, status, staged: true })
+      }
+
+      // 2. Unstaged entry (if workStatus is not space or indexStatus is ?)
+      if (workStatus !== ' ' || indexStatus === '?') {
+        let status = 'modified'
+        if (workStatus === '?' || indexStatus === '?') status = 'untracked'
+        else if (workStatus === 'D') status = 'deleted'
+        else if (workStatus === 'A') status = 'added'
+        allFiles.push({ path: filePath, status, staged: false })
+      }
     })
 
     return { root, files: allFiles, branch }
@@ -5679,7 +5704,7 @@ ipcMain.handle('anakot:git:unstage', async (_event, { cwd, files }) => {
   try {
     const validated = await validateGitCwd(cwd)
     if ('error' in validated) return { ok: false, error: validated.error }
-    const result = await runGit(['reset', 'HEAD', ...files], { cwd: validated.root })
+    const result = await runGit(['reset', 'HEAD', '--', ...files], { cwd: validated.root })
     const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
     return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git unstage failed' }
   } catch (error) {
@@ -5693,11 +5718,18 @@ ipcMain.handle('anakot:git:discard', async (_event, { cwd, files }) => {
   try {
     const validated = await validateGitCwd(cwd)
     if ('error' in validated) return { ok: false, error: validated.error }
-    // git restore -- <paths> reverts working tree to HEAD regardless of staging.
-    // No --staged flag — discard always means "throw away my edits"
-    const result = await runGit(['restore', ...files], { cwd: validated.root })
-    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
-    return { ok: result.ok, error: result.ok ? undefined : errorOutput || 'git discard failed' }
+    // First try to restore staged and worktree changes for tracked files using restore --source=HEAD
+    const restoreResult = await runGit(['restore', '--source=HEAD', '--staged', '--worktree', '--', ...files], { cwd: validated.root })
+
+    // If restore failed (which happens for untracked files), clean them
+    if (!restoreResult.ok) {
+      const cleanResult = await runGit(['clean', '-f', '-d', '--', ...files], { cwd: validated.root })
+      if (!cleanResult.ok) {
+        const errorOutput = [restoreResult.stderr, cleanResult.stderr].filter(Boolean).join('\n').trim()
+        return { ok: false, error: errorOutput || 'git discard failed' }
+      }
+    }
+    return { ok: true }
   } catch (error) {
     return { ok: false, error: error?.message || 'git discard failed' }
   }
@@ -6012,8 +6044,8 @@ async function runDesktopUninstall(mode) {
     } else if (IS_WINDOWS) {
       rememberLog(
         '[uninstall] no system Python found for lite/full on Windows; falling back ' +
-          'to the venv python — venv files locked by the running interpreter may ' +
-          'remain and need manual deletion.'
+        'to the venv python — venv files locked by the running interpreter may ' +
+        'remain and need manual deletion.'
       )
     }
   }
@@ -6075,7 +6107,7 @@ async function runDesktopUninstall(mode) {
 
   rememberLog(
     `[uninstall] launched detached cleanup (${mode}): ${scriptPath} ` +
-      `(removesAgent=${modeRemovesAgent(mode)} removesUserData=${modeRemovesUserData(mode)} bundle=${removeBundle || 'none'})`
+    `(removesAgent=${modeRemovesAgent(mode)} removesUserData=${modeRemovesUserData(mode)} bundle=${removeBundle || 'none'})`
   )
 
   // Give the renderer a beat to show its "uninstalling…" state, then quit so

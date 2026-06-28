@@ -74,14 +74,14 @@ export function GitSourceControl() {
   // Refresh when the panel becomes visible (sidebar tab switch)
   const handleFocus = useCallback(() => {
     if (cwd.trim()) {
-      changeWorkspace(cwd)
+      void triggerGitRefresh(cwd)
     }
   }, [cwd])
 
   useEffect(() => {
     const handleVisibility = () => {
       if (!document.hidden && cwd.trim()) {
-        changeWorkspace(cwd)
+        void triggerGitRefresh(cwd)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
@@ -104,15 +104,23 @@ export function GitSourceControl() {
   const unstagedFiles = useMemo(() => status.files.filter(f => !f.staged), [status.files])
 
   const handleStage = useCallback(async (file: string) => {
+    console.log('[GitSourceControl] handleStage clicked, file:', file, 'cwd:', cwd, 'status.root:', status.root)
     setContextMenu(null)
     const root = status.root || cwd
+    console.log('[GitSourceControl] gitStageFile call:', root, file)
     await gitStageFile(root, file)
   }, [cwd, status.root])
 
   const handleUnstage = useCallback(async (file: string) => {
+    console.log('[GitSourceControl] handleUnstage clicked, file:', file, 'cwd:', cwd, 'status.root:', status.root)
     setContextMenu(null)
     const root = status.root || cwd
-    await gitUnstageFile(root, file)
+    console.log('[GitSourceControl] gitUnstageFile call:', root, file)
+    try {
+      await gitUnstageFile(root, file)
+    } catch (e) {
+      console.error('[GitSourceControl] gitUnstageFile error:', e)
+    }
   }, [cwd, status.root])
 
   const handleDiscard = useCallback(async (file: string) => {
@@ -124,11 +132,13 @@ export function GitSourceControl() {
   }, [cwd, status.root])
 
   const handleStageAll = useCallback(async () => {
+    console.log('[GitSourceControl] Stage All clicked, unstagedFiles:', unstagedFiles.length)
     setContextMenu(null)
     const root = status.root || cwd
     const files = unstagedFiles.map(f => f.path)
     if (files.length > 0) {
-      await gitStageAllFiles(root, files)
+      const result = await gitStageAllFiles(root, files)
+      console.log('[GitSourceControl] Stage All result:', result)
     }
   }, [cwd, status.root, unstagedFiles])
 
@@ -185,34 +195,41 @@ export function GitSourceControl() {
     return (
       <div
         key={file.path}
-        className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-(--ui-control-hover-background)"
+        className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-(--ui-control-hover-background) w-full cursor-pointer"
         onContextMenu={e => openContextMenu(e, file, type)}
+        onClick={() => {
+          console.log('[GitSourceControl] row click:', file.path, type)
+          void handleOpenFile(file.path)
+        }}
       >
-        <Codicon name={statusInfo.icon} size="0.75rem" className={`shrink-0 ${statusInfo.color}`} />
-        <span className="flex-1 truncate text-foreground" title={file.path}>{file.path.split('/').pop()}</span>
-        <span className="text-[0.6rem] uppercase text-muted-foreground">{file.status}</span>
-        {/* Hover actions */}
-        <div className="flex items-center gap-0.5">
+        <Codicon name={statusInfo.icon} size="0.75rem" className={`shrink-0 ${statusInfo.color} w-4`} />
+        <span className="flex-1 truncate text-foreground min-w-0" title={file.path}>{file.path.split('/').pop()}</span>
+        <span className="text-[0.6rem] uppercase text-muted-foreground shrink-0">{file.status}</span>
+        {/* Hover actions - always visible for testing */}
+        <div className="flex items-center gap-1 bg-white/10 px-1">
           {type === 'staged' && (
-            <button
-              onClick={() => { console.log('[inline] unstage click', file.path); handleUnstage(file.path) }}
-              title="Unstage"
-              type="button"
-            >
-              <Codicon name="remove" size="0.625rem" />
-            </button>
-          )}
+             <button
+               className="rounded-sm p-1 text-muted-foreground hover:text-foreground border border-red-500"
+               onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline unstage click, file:', file.path); handleUnstage(file.path) }}
+               title="Unstage"
+               type="button"
+             >
+               <Codicon name="remove" size="0.625rem" />
+             </button>
+           )}
           {type === 'changes' && (
             <>
               <button
-                onClick={() => { console.log('[inline] stage click', file.path); handleStage(file.path) }}
+                className="rounded-sm p-1 text-muted-foreground hover:text-foreground border border-green-500"
+                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline stage click, file:', file.path); handleStage(file.path) }}
                 title="Stage"
                 type="button"
               >
                 <Codicon name="add" size="0.625rem" />
               </button>
               <button
-                onClick={() => handleDiscard(file.path)}
+                className="rounded-sm p-1 text-muted-foreground hover:text-destructive border border-orange-500"
+                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline discard click, file:', file.path); handleDiscard(file.path) }}
                 title="Discard"
                 type="button"
               >
@@ -319,21 +336,21 @@ export function GitSourceControl() {
       )}
 
       {/* File lists */}
-      {!loading && status.root && status.files.length > 0 && (
+      {status.root && status.files.length > 0 && (
         <div className="flex flex-col gap-2 overflow-y-auto">
-          {/* Staged Changes — always show like VS Code */}
-          <div>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.gitStaged || 'Staged Changes'} ({stagedFiles.length})
-              </span>
-            </div>
-            {stagedFiles.length > 0 && (
+          {/* Staged Changes */}
+          {stagedFiles.length > 0 && (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
+                  {t.gitStaged || 'Staged Changes'} ({stagedFiles.length})
+                </span>
+              </div>
               <div className="flex flex-col gap-px">
                 {stagedFiles.map(f => renderFileItem(f, 'staged'))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
           {/* Changes (unstaged) — always show like VS Code */}
           <div>
             <div className="mb-1 flex items-center justify-between">
@@ -383,7 +400,7 @@ export function GitSourceControl() {
               <>
                 <button
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                  onClick={() => handleStage(contextMenu.file.path)}
+                  onClick={() => { console.log('[GitSourceControl] Stage Changes click, file:', contextMenu.file.path); handleStage(contextMenu.file.path) }}
                   type="button"
                 >
                   <Codicon name="add" size="0.75rem" />

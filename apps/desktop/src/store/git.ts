@@ -5,7 +5,6 @@ export interface GitFile {
   path: string
   status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'unmerged'
   staged: boolean
-  unstaged: boolean
 }
 
 function normalizeStatus(raw: string): GitFile['status'] {
@@ -88,6 +87,7 @@ function stopPolling() {
  */
 export function changeWorkspace(cwd: string) {
   setBusy(cwd, false)
+  busyMap.delete(lastRefreshCwd)
   stopPolling()
   if (cwd.trim()) {
     void refreshGitStatus(cwd)
@@ -178,18 +178,19 @@ export async function refreshGitStatus(cwd: string, options?: { silent?: boolean
       summary: msg,
     })
   } finally {
-    if (!options?.silent) {
-      $gitLoading.set(false)
-    }
+    $gitLoading.set(false)
   }
 }
 
 export async function gitStageFile(cwd: string, file: string) {
+  console.log('[gitStore] gitStageFile called:', { cwd, file })
   const safePath = toIpcSafePath(cwd)
+  console.log('[gitStore] gitAdd IPC call with safePath:', safePath, 'files:', [file])
   $gitError.set(null)
   setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, [file])
+    console.log('[gitStore] gitAdd result:', result)
     if (result) {
       addGitLogEntry({
         command: 'add',
@@ -210,6 +211,7 @@ export async function gitStageFile(cwd: string, file: string) {
     return result
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git add failed'
+    console.log('[gitStore] gitStageFile error:', msg)
     $gitError.set(msg)
     addGitLogEntry({
       command: 'add',
@@ -231,8 +233,10 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
   setBusy(cwd, true)
+  console.log('[store] gitStageAllFiles safePath:', safePath, 'files:', files.length)
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, files)
+    console.log('[store] gitStageAllFiles result:', JSON.stringify(result))
     if (result) {
       addGitLogEntry({
         command: 'add',
@@ -253,6 +257,7 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
     return result
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git add failed'
+    console.log('[store] gitStageAllFiles error:', msg)
     $gitError.set(msg)
     addGitLogEntry({
       command: 'add',
@@ -271,11 +276,13 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
 }
 
 export async function gitUnstageFile(cwd: string, file: string) {
+  console.log('[gitStore] gitUnstageFile called:', { cwd, file })
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
   setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitUnstage?.(safePath, [file])
+    console.log('[gitStore] gitUnstage result:', result)
     if (result) {
       addGitLogEntry({
         command: 'unstage',
