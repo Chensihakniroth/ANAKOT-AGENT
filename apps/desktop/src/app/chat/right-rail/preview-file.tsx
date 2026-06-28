@@ -338,10 +338,21 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
   const handleMonacoChange = useCallback((newValue: string | undefined) => {
     if (newValue !== undefined) editContentRef.current = newValue
   }, [])
-  const handleSave = useCallback(() => {
-    setState(prev => ({ ...prev, text: editContentRef.current }))
+  const handleSave = useCallback(async () => {
+    const newContent = editContentRef.current
+    try {
+      const res = await window.anakotDesktop.writeFile(filePath, newContent)
+      if (res?.ok === false) {
+        console.error('[PreviewFile] Save failed:', res.error)
+        return
+      }
+    } catch (err) {
+      console.error('[PreviewFile] Error saving file:', err)
+      return
+    }
+    setState(prev => ({ ...prev, text: newContent }))
     setIsEditing(false)
-  }, [])
+  }, [filePath])
   const handleCancelEdit = useCallback(() => {
     setIsEditing(false)
     editContentRef.current = state.text || ''

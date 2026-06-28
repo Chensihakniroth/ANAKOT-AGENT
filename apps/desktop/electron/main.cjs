@@ -362,6 +362,7 @@ const PREVIEW_LANGUAGE_BY_EXT = {
   '.cpp': 'cpp',
   '.css': 'css',
   '.csv': 'csv',
+  '.env': 'ini',
   '.go': 'go',
   '.graphql': 'graphql',
   '.h': 'c',

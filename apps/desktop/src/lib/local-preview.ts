@@ -9,6 +9,7 @@ const LANGUAGE_BY_EXT: Record<string, string> = {
   '.cpp': 'cpp',
   '.css': 'css',
   '.csv': 'csv',
+  '.env': 'ini',
   '.go': 'go',
   '.graphql': 'graphql',
   '.h': 'c',

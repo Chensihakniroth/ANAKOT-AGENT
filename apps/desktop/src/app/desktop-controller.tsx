@@ -67,7 +67,7 @@ import { BottomPanel } from '@/components/workbench/BottomPanel'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
 import { SessionTab } from '@/components/workbench/SessionTab'
 import { WelcomeView } from '@/components/workbench/WelcomeView'
-import { EditorArea } from '@/components/workbench/EditorArea'
+
 import { openRecentFile, setActiveFilePath, closeEditorTab, setActiveEditorTab, $editorTabs, $activeEditorTabId } from '@/store/workbench'
 import { ChatView } from './chat'
 import { useComposerActions } from './chat/hooks/use-composer-actions'

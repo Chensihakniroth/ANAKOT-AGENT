@@ -1,5 +1,7 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useStore } from '@nanostores/react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { PromptDialog } from '@/components/ui/prompt-dialog'
 import { Codicon } from '@/components/ui/codicon'
 import { useI18n } from '@/i18n'
 import { $currentCwd } from '@/store/session'
@@ -19,6 +21,9 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
   const r = t.rightSidebar
   const currentCwd = useStore($currentCwd).trim()
   const hasCwd = currentCwd.length > 0
+
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
   const cwdName = hasCwd
     ? (currentCwd.split(/[\\/]+/).filter(Boolean).pop() ?? currentCwd)
@@ -78,60 +83,51 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
     }
   }
 
-  const handleRenameFile = useCallback(async (path: string) => {
+  const handleRenameFile = useCallback((path: string) => {
+    setRenameTarget(path)
+  }, [])
+
+  const doRename = async (newName: string) => {
+    if (!renameTarget || !newName) return
+    const path = renameTarget
     const name = path.split(/[\\/]/).pop() || path
-    const newName = window.prompt('Rename to:', name)
-    if (newName && newName !== name) {
+    if (newName !== name) {
       const parentDir = path.split(/[\\/]/).slice(0, -1).join('/') || '/'
       const newPath = `${parentDir}/${newName}`
-      try {
-        const result = await window.anakotDesktop?.renameFile?.(path, newPath)
-        if (result?.ok) {
-          void window.anakotDesktop?.notify?.({
-            title: 'Renamed',
-            body: `${name} → ${newName}`,
-          })
-          refreshRoot()
-        } else {
-          void window.anakotDesktop?.notify?.({
-            title: 'Rename failed',
-            body: result?.error || 'Unknown error',
-          })
-        }
-      } catch {
+      const result = await window.anakotDesktop?.renameFile?.(path, newPath)
+      if (result?.ok) {
         void window.anakotDesktop?.notify?.({
-          title: 'Rename failed',
-          body: 'Could not rename file',
+          title: 'Renamed',
+          body: `${name} → ${newName}`,
         })
+        refreshRoot()
+      } else {
+        throw new Error(result?.error || 'Unknown error')
       }
     }
-  }, [refreshRoot])
+    setRenameTarget(null)
+  }
 
-  const handleDeleteFile = useCallback(async (path: string) => {
+  const handleDeleteFile = useCallback((path: string) => {
+    setDeleteTarget(path)
+  }, [])
+
+  const doDelete = async () => {
+    if (!deleteTarget) return
+    const path = deleteTarget
     const name = path.split(/[\\/]/).pop() || path
-    if (window.confirm(`Delete "${name}"?`)) {
-      try {
-        const result = await window.anakotDesktop?.deleteFile?.(path)
-        if (result?.ok) {
-          void window.anakotDesktop?.notify?.({
-            title: 'Deleted',
-            body: name,
-          })
-          refreshRoot()
-        } else {
-          void window.anakotDesktop?.notify?.({
-            title: 'Delete failed',
-            body: result?.error || 'Unknown error',
-          })
-        }
-      } catch {
-        void window.anakotDesktop?.notify?.({
-          title: 'Delete failed',
-          body: 'Could not delete file',
-        })
-      }
+    const result = await window.anakotDesktop?.deleteFile?.(path)
+    if (result?.ok) {
+      void window.anakotDesktop?.notify?.({
+        title: 'Deleted',
+        body: name,
+      })
+      refreshRoot()
+    } else {
+      throw new Error(result?.error || 'Unknown error')
     }
-  }, [refreshRoot])
+    setDeleteTarget(null)
+  }
 
   return (
     <div className="group/project-header flex min-h-0 flex-1 flex-col">
@@ -214,6 +210,25 @@ export function Explorer({ onOpenFile }: ExplorerProps) {
           />
         )}
       </div>
+
+      <PromptDialog
+        open={renameTarget !== null}
+        onClose={() => setRenameTarget(null)}
+        onConfirm={doRename}
+        title="Rename"
+        defaultValue={renameTarget ? (renameTarget.split(/[\\/]/).pop() || '') : ''}
+        confirmLabel="Rename"
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={doDelete}
+        title="Delete File"
+        description={`Are you sure you want to delete "${deleteTarget ? deleteTarget.split(/[\\/]/).pop() : ''}"?`}
+        confirmLabel="Delete"
+        destructive={true}
+      />
     </div>
   )
 }

@@ -159,13 +159,17 @@ export function GitSourceControl() {
   const openContextMenu = useCallback((e: React.MouseEvent, file: GitFile, type: 'staged' | 'changes') => {
     e.preventDefault()
     e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY, file, type })
+    const MENU_WIDTH = 200
+    const MENU_HEIGHT = 160
+    const x = Math.min(e.clientX, window.innerWidth - MENU_WIDTH)
+    const y = Math.min(e.clientY, window.innerHeight - MENU_HEIGHT)
+    setContextMenu({ x, y, file, type })
   }, [])
 
   const handleOpenFile = useCallback(async (file: string) => {
     setContextMenu(null)
     const root = status.root || cwd
-    const absolutePath = file.startsWith('/') ? file : `${root.replace(/\\/g, '/')}/${file}`
+    const absolutePath = file.startsWith('/') ? file : `${root}/${file}`.replace(/\\/g, '/').replace(/\/+/g, '/')
     try {
       const preview = await normalizeOrLocalPreviewTarget(absolutePath, root)
       if (preview) {
@@ -185,7 +189,7 @@ export function GitSourceControl() {
   const handleRevealInExplorer = useCallback((file: string) => {
     setContextMenu(null)
     const root = status.root || cwd
-    const absolutePath = file.startsWith('/') ? file : `${root.replace(/\\/g, '/')}/${file}`
+    const absolutePath = file.startsWith('/') ? file : `${root}/${file}`.replace(/\\/g, '/').replace(/\/+/g, '/')
     const parentDir = absolutePath.split('/').slice(0, -1).join('/') || '/'
     void window.anakotDesktop?.openExternal?.(`file://${parentDir}`)
   }, [cwd, status.root])
@@ -243,7 +247,7 @@ export function GitSourceControl() {
   }
 
   return (
-    <div className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-3" onFocus={handleFocus}>
+    <div tabIndex={-1} className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-3 outline-none" onFocus={handleFocus}>
       {/* Header */}
       <div className="flex min-w-0 items-center gap-2">
         <Codicon name="source-control" size="1rem" className="shrink-0 text-foreground" />
