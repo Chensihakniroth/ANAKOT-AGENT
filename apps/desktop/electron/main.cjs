@@ -2065,6 +2065,15 @@ function resolveAnakotBackend(dashboardArgs) {
     return createActiveBackend(dashboardArgs)
   }
 
+  // 3.5 Default install script directory -- the install.ps1/bat/sh scripts default
+  //     to placing the backend in ~/AnakotAgent. If it exists, use it. This prevents
+  //     double-installing if the PATH hasn't reloaded yet (e.g. launched via Desktop shortcut).
+  const defaultInstallRoot = path.join(app.getPath('home'), 'AnakotAgent')
+  if (isAnakotSourceRoot(defaultInstallRoot)) {
+    const backend = createPythonBackend(defaultInstallRoot, `Anakot install at ${defaultInstallRoot}`, dashboardArgs)
+    if (backend) return backend
+  }
+
   // 4. Existing `anakot` on PATH -- installed via install.ps1 / install.sh from
   //    a previous tool-only setup, or pip-installed system-wide. Use it but
   //    do NOT write a bootstrap marker; the user did this themselves and we
