@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   gitCommit: (cwd, message) => ipcRenderer.invoke('anakot:git:commit', { cwd, message }),
   gitDiff: (cwd, file) => ipcRenderer.invoke('anakot:git:diff', { cwd, file }),
   gitLog: (cwd, limit) => ipcRenderer.invoke('anakot:git:log', { cwd, limit }),
+  gitBranches: cwd => ipcRenderer.invoke('anakot:git:branches', cwd),
+  gitCheckout: (cwd, branch) => ipcRenderer.invoke('anakot:git:checkout', { cwd, branch }),
   gitSubscribe: cwd => ipcRenderer.invoke('anakot:git:subscribe', cwd),
   gitUnsubscribe: cwd => ipcRenderer.invoke('anakot:git:unsubscribe', cwd),
   onGitChanged: callback => {
@@ -152,6 +154,25 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('anakot:updates:progress', listener)
       return () => ipcRenderer.removeListener('anakot:updates:progress', listener)
+    }
+  },
+  lsp: {
+    start: (language, rootPath) => ipcRenderer.invoke('anakot:lsp:start', { language, rootPath }),
+    send: (id, message) => ipcRenderer.invoke('anakot:lsp:send', { id, message }),
+    stop: id => ipcRenderer.invoke('anakot:lsp:stop', { id }),
+    available: () => ipcRenderer.invoke('anakot:lsp:available'),
+    list: () => ipcRenderer.invoke('anakot:lsp:list'),
+    onMessage: (id, callback) => {
+      const channel = `anakot:lsp:${id}:message`
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on(channel, listener)
+      return () => ipcRenderer.removeListener(channel, listener)
+    },
+    onExit: (id, callback) => {
+      const channel = `anakot:lsp:${id}:exit`
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on(channel, listener)
+      return () => ipcRenderer.removeListener(channel, listener)
     }
   }
 })

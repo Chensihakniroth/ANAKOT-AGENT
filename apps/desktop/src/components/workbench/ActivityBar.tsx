@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
 import { $sidebarPanel, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
 import { $sidebarOpen } from '@/store/layout'
+import { $gitStatus } from '@/store/git'
 import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, CRON_ROUTE, PROFILES_ROUTE, AGENTS_ROUTE, COMMAND_CENTER_ROUTE } from '../../app/routes'
 
 interface ActivityBarItem {
@@ -35,6 +36,7 @@ export function ActivityBar() {
   const navigate = useNavigate()
   const activePanel = useStore($sidebarPanel)
   const sidebarOpen = useStore($sidebarOpen)
+  const gitStatus = useStore($gitStatus)
 
   const handleClick = (item: ActivityBarItem) => {
     triggerHaptic('crisp')
@@ -54,13 +56,16 @@ export function ActivityBar() {
 
   const renderItem = (item: ActivityBarItem) => {
     const isActive = item.panel === activePanel && sidebarOpen
+    const isGit = item.id === 'git'
+    const badgeCount = isGit ? gitStatus.files.length : 0
+
     return (
       <button
         key={item.id}
         aria-label={item.label}
         aria-pressed={isActive}
         className={cn(
-          'group relative flex h-10 w-10 items-center justify-center transition-colors',
+          'group relative flex h-10 w-10 items-center justify-center transition-colors focus:outline-none',
           'hover:text-foreground',
           isActive && 'text-foreground'
         )}
@@ -71,7 +76,14 @@ export function ActivityBar() {
         {isActive && (
           <div className="absolute left-0 top-1/2 h-5 w-[2px] -translate-y-1/2 rounded-r-sm bg-foreground" />
         )}
-        <Codicon name={item.icon} size="1.25rem" />
+        <div className="relative flex items-center justify-center h-full w-full">
+          <Codicon name={item.icon} size="1.25rem" />
+          {badgeCount > 0 && (
+            <div className="absolute right-0 top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground pointer-events-none">
+              {badgeCount > 99 ? '99+' : badgeCount}
+            </div>
+          )}
+        </div>
       </button>
     )
   }

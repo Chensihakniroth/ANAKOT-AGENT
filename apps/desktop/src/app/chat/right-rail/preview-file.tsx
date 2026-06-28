@@ -573,6 +573,7 @@ export function LocalFilePreview({ reloadKey, target, onOpenInEditor }: { reload
                 value={isEditing ? editContentRef.current : state.text}
                 language={state.language || 'text'}
                 readOnly={!isEditing}
+                filePath={target.path}
                 onChange={handleMonacoChange}
               />
             )}

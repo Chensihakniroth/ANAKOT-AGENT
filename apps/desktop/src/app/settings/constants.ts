@@ -9,6 +9,7 @@ import {
   Palette,
   Sparkles,
   Sun,
+  Terminal,
   Wrench
 } from '@/lib/icons'
 import type { ThemeMode } from '@/themes/context'
@@ -504,6 +505,12 @@ export const SECTIONS: DesktopConfigSection[] = [
       'voice.record_key',
       'voice.max_recording_seconds'
     ]
+  },
+  {
+    id: 'terminal',
+    label: 'Terminal',
+    icon: Terminal,
+    keys: []
   },
   {
     id: 'advanced',

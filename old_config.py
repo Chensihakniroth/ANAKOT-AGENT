@@ -23,8 +23,12 @@ from anakot_cli.config import (
     cfg_get,
     load_config, save_config, get_env_value, save_env_value,
 )
-from anakot_cli.callmemo_subscription import apply_nous_managed_defaults  # noqa: E402
 from anakot_cli.colors import Colors, color
+from anakot_cli.callmemo_subscription import (
+    apply_nous_managed_defaults,
+    get_callmemo_subscription_features,
+)
+from anakot_cli.callmemo_account import format_callmemo_portal_entitlement_message
 from tools.tool_backend_helpers import fal_key_is_configured
 from utils import base_url_hostname, is_truthy_value
 
@@ -246,6 +250,16 @@ TOOL_CATEGORIES = {
                 "tts_provider": "edge",
             },
             {
+                "name": "callmemo Subscription",
+                "badge": "subscription",
+                "tag": "Managed OpenAI TTS billed to your subscription",
+                "env_vars": [],
+                "tts_provider": "openai",
+                "requires_nous_auth": True,
+                "managed_nous_feature": "tts",
+                "override_env_vars": ["VOICE_TOOLS_OPENAI_KEY", "OPENAI_API_KEY"],
+            },
+            {
                 "name": "OpenAI TTS",
                 "badge": "paid",
                 "tag": "High quality voices",
@@ -317,10 +331,21 @@ TOOL_CATEGORIES = {
         # in _visible_providers(). Only non-provider UX setup-flow rows
         # for the firecrawl backend are listed here:
         #   - "callmemo Subscription" — managed Firecrawl billed via callmemo
+        #     subscription (requires_nous_auth + override_env_vars).
         #   - "Firecrawl Self-Hosted" — points firecrawl at a private
         #     Docker instance via FIRECRAWL_API_URL only.
         # See PR #25182 for the migration rationale.
         "providers": [
+            {
+                "name": "callmemo Subscription",
+                "badge": "subscription",
+                "tag": "Managed Firecrawl billed to your subscription",
+                "web_backend": "firecrawl",
+                "env_vars": [],
+                "requires_nous_auth": True,
+                "managed_nous_feature": "web",
+                "override_env_vars": ["FIRECRAWL_API_KEY", "FIRECRAWL_API_URL"],
+            },
             {
                 "name": "Firecrawl Self-Hosted",
                 "badge": "free · self-hosted",
@@ -341,10 +366,21 @@ TOOL_CATEGORIES = {
         # ``_plugin_image_gen_providers()`` in ``_visible_providers``.
         # Only non-provider UX setup-flow rows remain here:
         #   - "callmemo Subscription" — managed FAL billed via the callmemo
+        #     subscription (requires_nous_auth + override_env_vars).
         #     Uses the fal plugin as the underlying backend but has a
         #     distinct setup UX.
         # Mirrors the shape browser/video_gen ship today.
         "providers": [
+            {
+                "name": "callmemo Subscription",
+                "badge": "subscription",
+                "tag": "Managed FAL image generation billed to your subscription",
+                "env_vars": [],
+                "requires_nous_auth": True,
+                "managed_nous_feature": "image_gen",
+                "override_env_vars": ["FAL_KEY"],
+                "imagegen_backend": "fal",
+            },
         ],
     },
     "video_gen": {
@@ -355,6 +391,20 @@ TOOL_CATEGORIES = {
         # provider rows (FAL BYOK, xAI, …) are injected at runtime by
         # ``_plugin_video_gen_providers()`` in ``_visible_providers``.
         "providers": [
+            {
+                "name": "callmemo Subscription",
+                "badge": "subscription",
+                "tag": "Managed FAL video generation billed to your subscription",
+                "env_vars": [],
+                "requires_nous_auth": True,
+                "managed_nous_feature": "video_gen",
+                "override_env_vars": ["FAL_KEY"],
+                # The underlying plugin backend — when the user picks
+                # "callmemo Subscription" we set video_gen.provider = "fal"
+                # and video_gen.use_gateway = True so the FAL plugin
+                # routes through the managed queue gateway.
+                "video_gen_plugin_name": "fal",
+            },
         ],
     },
     "x_search": {
@@ -402,6 +452,7 @@ TOOL_CATEGORIES = {
         # backend, never on the paid callmemo Subscription gateway row:
         #   - "Local Browser" — non-cloud option, no CloudBrowserProvider.
         #   - "callmemo Subscription (Browser Use cloud)" — managed Browser Use
+        #     billed via callmemo subscription (requires_nous_auth +
         #     override_env_vars). Uses the browser-use plugin as the
         #     underlying backend but has a distinct setup UX.
         #   - "Camofox" — anti-detection local Firefox; short-circuits the
@@ -413,6 +464,17 @@ TOOL_CATEGORIES = {
                 "tag": "Headless Chromium, no API key needed",
                 "env_vars": [],
                 "browser_provider": "local",
+                "post_setup": "agent_browser",
+            },
+            {
+                "name": "callmemo Subscription (Browser Use cloud)",
+                "badge": "subscription",
+                "tag": "Managed Browser Use billed to your subscription",
+                "env_vars": [],
+                "browser_provider": "browser-use",
+                "requires_nous_auth": True,
+                "managed_nous_feature": "browser",
+                "override_env_vars": ["BROWSER_USE_API_KEY"],
                 "post_setup": "agent_browser",
             },
             {
@@ -1548,6 +1610,12 @@ def _toolset_has_keys(
         except Exception:
             return False
 
+    if ts_key in {"web", "image_gen", "video_gen", "tts", "browser"}:
+        features = get_callmemo_subscription_features(config, force_fresh=force_fresh)
+        feature = features.features.get(ts_key)
+        if feature and (feature.available or feature.managed_by_nous):
+            return True
+
     # Check TOOL_CATEGORIES first (provider-aware)
     cat = TOOL_CATEGORIES.get(ts_key)
     if cat:
@@ -1958,32 +2026,101 @@ def _visible_providers(
     *,
     force_fresh: bool = False,
 ) -> list[dict]:
-    """Return all provider entries for the given category."""
-    visible = list(cat.get("providers", []))
+    """Return provider entries visible for the current auth/config state.
 
-    # Inject plugin-registered image_gen backends
+    callmemo-managed Tool Gateway rows (``managed_nous_feature``) are always
+    shown — even to logged-out / unentitled users — so the picker advertises
+    that the capability exists.  Selecting one drives an inline callmemo Portal
+    login + entitlement check (see ``_configure_provider``); the row only
+    *activates* the gateway once paid access is confirmed.
+    """
+    features = get_callmemo_subscription_features(config, force_fresh=force_fresh)
+    acct = features.account_info
+    # Pool-only users (entitled to managed tools via the free tool pool but with
+    # no paid access) get image gen but NOT video gen — the pool doesn't fund
+    # `fal-video`. Rather than advertise a managed video row that would be denied
+    # on select, hide it for them. Logged-out users still see it (advertising)
+    # and paid users are entitled to it.
+    pool_only = bool(
+        acct
+        and acct.logged_in
+        and acct.paid_service_access is not True
+        and acct.tool_gateway_entitled
+    )
+    visible = []
+    for provider in cat.get("providers", []):
+        # callmemo-managed Tool Gateway rows stay visible regardless of auth —
+        # selecting one drives an inline Portal login. A `requires_nous_auth`
+        # row that is NOT a managed gateway feature (pure pre-auth UX) is
+        # still hidden until the user is logged in.
+        if (
+            provider.get("requires_nous_auth")
+            and not provider.get("managed_nous_feature")
+            and not features.nous_auth_present
+        ):
+            continue
+        # Hide the managed video-gen row from pool-only users — their free tool
+        # pool doesn't cover video, so showing it would only lead to a denial.
+        if (
+            pool_only
+            and provider.get("managed_nous_feature") == "video_gen"
+            and not (acct and acct.tool_gateway_entitled_for("fal-video"))
+        ):
+            continue
+        visible.append(provider)
+
+    # Inject plugin-registered image_gen backends (OpenAI today, more
+    # later) so the picker lists them alongside FAL / callmemo Subscription.
     if cat.get("name") == "Image Generation":
         visible.extend(_plugin_image_gen_providers())
 
-    # Inject plugin-registered video_gen backends.
+    # Inject plugin-registered video_gen backends. Unlike image_gen,
+    # video_gen has NO hardcoded providers — every backend is a plugin.
     if cat.get("name") == "Video Generation":
         visible.extend(_plugin_video_gen_providers())
 
-    # Inject plugin-registered web search backends.
+    # Inject plugin-registered web search backends. After PR #25182, this
+    # is the SOLE source of provider rows for the Web Search & Extract
+    # category — the per-provider hardcoded entries were deleted. The two
+    # remaining hardcoded rows ("callmemo Subscription", "Firecrawl
+    # Self-Hosted") are non-provider UX setup-flow rows for firecrawl.
     if cat.get("name") == "Web Search & Extract":
         visible.extend(_plugin_web_search_providers())
 
-    # Inject plugin-registered cloud browser backends.
+    # Inject plugin-registered cloud browser backends. After PR #25214,
+    # Browserbase / Browser Use / Firecrawl are the plugin-supplied rows;
+    # the hardcoded "callmemo Subscription" / "Local Browser" / "Camofox" rows
+    # stay because they're non-provider UX setup flows (subscription auth,
+    # local fallback, and the REST-API anti-detection backend respectively).
     if cat.get("name") == "Browser Automation":
         visible.extend(_plugin_browser_providers())
 
-    # Inject plugin-registered TTS backends.
+    # Inject plugin-registered TTS backends (issue #30398). Plugin rows
+    # render BELOW the 10 hardcoded built-in rows. Built-in shadowing
+    # is filtered out by ``_plugin_tts_providers`` defensively.
     if cat.get("name") == "Text-to-Speech":
         visible.extend(_plugin_tts_providers())
 
     return visible
 
 
+def _hidden_nous_gateway_message(
+    cat: dict,
+    config: dict,
+    capability: str,
+    *,
+    force_fresh: bool = False,
+) -> str:
+    """Deprecated: callmemo Tool Gateway rows are no longer hidden.
+
+    Previously this returned a "log in / upgrade" banner shown above a
+    category when its callmemo-managed rows were filtered out for unentitled
+    users. Those rows are now always listed (see ``_visible_providers``), and
+    the login + entitlement guidance happens inline when the user selects one
+    (``ensure_callmemo_portal_access``). Kept as a no-op so call sites stay simple;
+    always returns an empty string.
+    """
+    return ""
 
 
 _POST_SETUP_INSTALLED: dict = {
@@ -2097,6 +2234,12 @@ def _configure_tool_category(
     icon = cat.get("icon", "")
     name = cat["name"]
     providers = _visible_providers(cat, config, force_fresh=force_fresh)
+    hidden_nous_message = _hidden_nous_gateway_message(
+        cat,
+        config,
+        f"the callmemo Subscription provider for {name}",
+        force_fresh=force_fresh,
+    )
 
     # Check Python version requirement
     if cat.get("requires_python"):
@@ -2138,6 +2281,15 @@ def _configure_tool_category(
         # When the user is logged into callmemo, surface a marker on providers
         # whose access is included in their subscription so it's visually
         # obvious which options cost extra vs. cost nothing on top of callmemo.
+        try:
+            _nous_logged_in = bool(
+                get_callmemo_subscription_features(
+                    config,
+                    force_fresh=force_fresh,
+                ).nous_auth_present
+            )
+        except Exception:
+            _nous_logged_in = False
 
         provider_choices = []
         for p in providers:
@@ -2158,17 +2310,31 @@ def _configure_tool_category(
             # are always shown now (see _visible_providers) — selecting one
             # drives an inline login + entitlement check.
             sub_marker = ""
-            try:
-                enabled = _get_platform_tools(
-                    config,
-                    platform,
-                    include_default_mcp_servers=False,
-                )
-            except Exception:
-                continue
-            if ts_key in enabled:
-                return True
-    return False
+            if p.get("managed_nous_feature"):
+                if _nous_logged_in:
+                    sub_marker = "  ★ Included with your callmemo subscription"
+                else:
+                    sub_marker = "  ★ via callmemo Portal (login on select)"
+            provider_choices.append(f"{p['name']}{badge}{tag}{configured}{sub_marker}")
+
+        # Add skip option
+        provider_choices.append("Skip — keep defaults / configure later")
+
+        # Detect current provider as default
+        default_idx = _detect_active_provider_index(
+            providers,
+            config,
+            force_fresh=force_fresh,
+        )
+
+        provider_idx = _prompt_choice(f"  {title}:", provider_choices, default_idx)
+
+        # Skip selected
+        if provider_idx >= len(providers):
+            _print_info(f"  Skipped {name}")
+            return
+
+        _configure_provider(providers[provider_idx], config, force_fresh=force_fresh)
 
 
 def _is_provider_active(
@@ -2190,7 +2356,6 @@ def _is_provider_active(
 
     managed_feature = provider.get("managed_nous_feature")
     if managed_feature:
-        from anakot_cli.callmemo_subscription import get_callmemo_subscription_features
         features = get_callmemo_subscription_features(config, force_fresh=force_fresh)
         feature = features.features.get(managed_feature)
         if feature is None:
@@ -2247,6 +2412,726 @@ def _is_provider_active(
     return False
 
 
+def _detect_active_provider_index(
+    providers: list,
+    config: dict,
+    *,
+    force_fresh: bool = False,
+) -> int:
+    """Return the index of the currently active provider, or 0."""
+    for i, p in enumerate(providers):
+        if _is_provider_active(p, config, force_fresh=force_fresh):
+            return i
+        # Fallback: env vars present → likely configured
+        env_vars = p.get("env_vars", [])
+        if env_vars and all(get_env_value(v["key"]) for v in env_vars):
+            return i
+    return 0
+
+
+# ─── Image Generation Model Pickers ───────────────────────────────────────────
+#
+# IMAGEGEN_BACKENDS is a per-backend catalog. Each entry exposes:
+#   - config_key:        top-level config.yaml key for this backend's settings
+#   - model_catalog_fn:  returns an OrderedDict-like {model_id: metadata}
+#   - default_model:     fallback when nothing is configured
+#
+# This prepares for future imagegen backends (Replicate, Stability, etc.):
+# each new backend registers its own entry; the FAL provider entry in
+# TOOL_CATEGORIES tags itself with `imagegen_backend: "fal"` to select the
+# right catalog at picker time.
+
+
+def _fal_model_catalog():
+    """Lazy-load the FAL model catalog from the tool module."""
+    from tools.image_generation_tool import FAL_MODELS, DEFAULT_MODEL
+    return FAL_MODELS, DEFAULT_MODEL
+
+
+IMAGEGEN_BACKENDS = {
+    "fal": {
+        "display": "FAL.ai",
+        "config_key": "image_gen",
+        "catalog_fn": _fal_model_catalog,
+    },
+}
+
+
+def _format_imagegen_model_row(model_id: str, meta: dict, widths: dict) -> str:
+    """Format a single picker row with column-aligned speed / strengths / price."""
+    return (
+        f"{model_id:<{widths['model']}}  "
+        f"{meta.get('speed', ''):<{widths['speed']}}  "
+        f"{meta.get('strengths', ''):<{widths['strengths']}}  "
+        f"{meta.get('price', '')}"
+    )
+
+
+def _configure_imagegen_model(backend_name: str, config: dict) -> None:
+    """Prompt the user to pick a model for the given imagegen backend.
+
+    Writes selection to ``config[backend_config_key]["model"]``. Safe to
+    call even when stdin is not a TTY — curses_radiolist falls back to
+    keeping the current selection.
+    """
+    backend = IMAGEGEN_BACKENDS.get(backend_name)
+    if not backend:
+        return
+
+    catalog, default_model = backend["catalog_fn"]()
+    if not catalog:
+        return
+
+    cfg_key = backend["config_key"]
+    cur_cfg = config.setdefault(cfg_key, {})
+    if not isinstance(cur_cfg, dict):
+        cur_cfg = {}
+        config[cfg_key] = cur_cfg
+    current_model = cur_cfg.get("model") or default_model
+    if current_model not in catalog:
+        current_model = default_model
+
+    model_ids = list(catalog.keys())
+    # Put current model at the top so the cursor lands on it by default.
+    ordered = [current_model] + [m for m in model_ids if m != current_model]
+
+    # Column widths
+    widths = {
+        "model": max(len(m) for m in model_ids),
+        "speed": max((len(catalog[m].get("speed", "")) for m in model_ids), default=6),
+        "strengths": max((len(catalog[m].get("strengths", "")) for m in model_ids), default=0),
+    }
+
+    print()
+    header = (
+        f"  {'Model':<{widths['model']}}  "
+        f"{'Speed':<{widths['speed']}}  "
+        f"{'Strengths':<{widths['strengths']}}  "
+        f"Price"
+    )
+    print(color(header, Colors.CYAN))
+
+    rows = []
+    for mid in ordered:
+        row = _format_imagegen_model_row(mid, catalog[mid], widths)
+        if mid == current_model:
+            row += "  ← currently in use"
+        rows.append(row)
+
+    idx = _prompt_choice(
+        f"  Choose {backend['display']} model:",
+        rows,
+        default=0,
+    )
+
+    chosen = ordered[idx]
+    cur_cfg["model"] = chosen
+    _print_success(f"  Model set to: {chosen}")
+
+
+def _plugin_image_gen_catalog(plugin_name: str):
+    """Return ``(catalog_dict, default_model_id)`` for a plugin provider.
+
+    ``catalog_dict`` is shaped like the legacy ``FAL_MODELS`` table —
+    ``{model_id: {"display", "speed", "strengths", "price", ...}}`` —
+    so the existing picker code paths work without change. Returns
+    ``({}, None)`` if the provider isn't registered or has no models.
+    """
+    try:
+        from agent.image_gen_registry import get_provider
+        from anakot_cli.plugins import _ensure_plugins_discovered
+
+        _ensure_plugins_discovered()
+        provider = get_provider(plugin_name)
+    except Exception:
+        return {}, None
+    if provider is None:
+        return {}, None
+    try:
+        models = provider.list_models() or []
+        default = provider.default_model()
+    except Exception:
+        return {}, None
+    catalog = {m["id"]: m for m in models if isinstance(m, dict) and "id" in m}
+    return catalog, default
+
+
+def _configure_imagegen_model_for_plugin(plugin_name: str, config: dict) -> None:
+    """Prompt the user to pick a model for a plugin-registered backend.
+
+    Writes selection to ``image_gen.model``. Mirrors
+    :func:`_configure_imagegen_model` but sources its catalog from the
+    plugin registry instead of :data:`IMAGEGEN_BACKENDS`.
+    """
+    catalog, default_model = _plugin_image_gen_catalog(plugin_name)
+    if not catalog:
+        return
+
+    cur_cfg = config.setdefault("image_gen", {})
+    if not isinstance(cur_cfg, dict):
+        cur_cfg = {}
+        config["image_gen"] = cur_cfg
+    current_model = cur_cfg.get("model") or default_model
+    if current_model not in catalog:
+        current_model = default_model
+
+    model_ids = list(catalog.keys())
+    ordered = [current_model] + [m for m in model_ids if m != current_model]
+
+    widths = {
+        "model": max(len(m) for m in model_ids),
+        "speed": max((len(catalog[m].get("speed", "")) for m in model_ids), default=6),
+        "strengths": max((len(catalog[m].get("strengths", "")) for m in model_ids), default=0),
+    }
+
+    print()
+    header = (
+        f"  {'Model':<{widths['model']}}  "
+        f"{'Speed':<{widths['speed']}}  "
+        f"{'Strengths':<{widths['strengths']}}  "
+        f"Price"
+    )
+    print(color(header, Colors.CYAN))
+
+    rows = []
+    for mid in ordered:
+        row = _format_imagegen_model_row(mid, catalog[mid], widths)
+        if mid == current_model:
+            row += "  ← currently in use"
+        rows.append(row)
+
+    idx = _prompt_choice(
+        f"  Choose {plugin_name} model:",
+        rows,
+        default=0,
+    )
+
+    chosen = ordered[idx]
+    cur_cfg["model"] = chosen
+    _print_success(f"  Model set to: {chosen}")
+
+
+def _select_plugin_image_gen_provider(plugin_name: str, config: dict) -> None:
+    """Persist a plugin-backed image generation provider selection."""
+    img_cfg = config.setdefault("image_gen", {})
+    if not isinstance(img_cfg, dict):
+        img_cfg = {}
+        config["image_gen"] = img_cfg
+    img_cfg["provider"] = plugin_name
+    img_cfg["use_gateway"] = False
+    _print_success(f"  image_gen.provider set to: {plugin_name}")
+    _configure_imagegen_model_for_plugin(plugin_name, config)
+
+
+# ─── Video Generation Model Pickers ───────────────────────────────────────────
+
+
+def _plugin_video_gen_catalog(plugin_name: str):
+    """Return ``(catalog_dict, default_model_id)`` for a video gen plugin.
+
+    Mirrors :func:`_plugin_image_gen_catalog`. Returns ``({}, None)`` when
+    the plugin isn't registered or has no models.
+    """
+    try:
+        from agent.video_gen_registry import get_provider
+        from anakot_cli.plugins import _ensure_plugins_discovered
+
+        _ensure_plugins_discovered()
+        provider = get_provider(plugin_name)
+    except Exception:
+        return {}, None
+    if provider is None:
+        return {}, None
+    try:
+        models = provider.list_models() or []
+        default = provider.default_model()
+    except Exception:
+        return {}, None
+    catalog = {m["id"]: m for m in models if isinstance(m, dict) and "id" in m}
+    return catalog, default
+
+
+def _configure_videogen_model_for_plugin(plugin_name: str, config: dict) -> None:
+    """Prompt for a video gen model from a plugin's catalog.
+
+    Mirrors :func:`_configure_imagegen_model_for_plugin`. Writes the
+    selection to ``video_gen.model``.
+    """
+    catalog, default_model = _plugin_video_gen_catalog(plugin_name)
+    if not catalog:
+        return
+
+    cur_cfg = config.setdefault("video_gen", {})
+    if not isinstance(cur_cfg, dict):
+        cur_cfg = {}
+        config["video_gen"] = cur_cfg
+    current_model = cur_cfg.get("model") or default_model
+    if current_model not in catalog:
+        current_model = default_model
+
+    model_ids = list(catalog.keys())
+    ordered = [current_model] + [m for m in model_ids if m != current_model]
+
+    widths = {
+        "model": max(len(m) for m in model_ids),
+        "speed": max((len(catalog[m].get("speed", "")) for m in model_ids), default=6),
+        "strengths": max((len(catalog[m].get("strengths", "")) for m in model_ids), default=0),
+    }
+
+    print()
+    header = (
+        f"  {'Model':<{widths['model']}}  "
+        f"{'Speed':<{widths['speed']}}  "
+        f"{'Strengths':<{widths['strengths']}}  "
+        f"Price"
+    )
+    print(color(header, Colors.CYAN))
+
+    rows = []
+    for mid in ordered:
+        meta = catalog[mid]
+        row = (
+            f"  {mid:<{widths['model']}}  "
+            f"{meta.get('speed', ''):<{widths['speed']}}  "
+            f"{meta.get('strengths', ''):<{widths['strengths']}}  "
+            f"{meta.get('price', '')}"
+        )
+        if mid == current_model:
+            row += "  ← currently in use"
+        rows.append(row)
+
+    idx = _prompt_choice(
+        f"  Choose {plugin_name} model:",
+        rows,
+        default=0,
+    )
+
+    chosen = ordered[idx]
+    cur_cfg["model"] = chosen
+    _print_success(f"  Model set to: {chosen}")
+
+
+def _select_plugin_video_gen_provider(plugin_name: str, config: dict, *, use_gateway: bool = False) -> None:
+    """Persist a plugin-backed video generation provider selection."""
+    vid_cfg = config.setdefault("video_gen", {})
+    if not isinstance(vid_cfg, dict):
+        vid_cfg = {}
+        config["video_gen"] = vid_cfg
+    vid_cfg["provider"] = plugin_name
+    vid_cfg["use_gateway"] = use_gateway
+    _print_success(f"  video_gen.provider set to: {plugin_name}")
+    _configure_videogen_model_for_plugin(plugin_name, config)
+
+
+def _write_provider_config(provider: dict, config: dict, *, managed_feature) -> None:
+    """Persist the provider/backend config keys for a selected provider.
+
+    This is the pure, non-interactive core of :func:`_configure_provider` —
+    it writes ``tts.provider`` / ``browser.cloud_provider`` / ``web.backend``
+    and the ``use_gateway`` flags based on the provider's markers, but does
+    NOT prompt for env vars, run post-setup hooks, gate on callmemo auth, or run
+    interactive model pickers. Both the CLI configurator and the desktop GUI
+    ``PUT .../provider`` endpoint call through here so there is one code path.
+    """
+    # Set TTS provider in config if applicable
+    if provider.get("tts_provider"):
+        tts_cfg = config.setdefault("tts", {})
+        tts_cfg["provider"] = provider["tts_provider"]
+        tts_cfg["use_gateway"] = bool(managed_feature)
+
+    # Set browser cloud provider in config if applicable
+    if "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        browser_cfg = config.setdefault("browser", {})
+        if bp:
+            browser_cfg["cloud_provider"] = bp
+        browser_cfg["use_gateway"] = bool(managed_feature)
+
+    # Set web search backend in config if applicable
+    if provider.get("web_backend"):
+        web_cfg = config.setdefault("web", {})
+        web_cfg["backend"] = provider["web_backend"]
+        web_cfg["use_gateway"] = bool(managed_feature)
+
+    # For tools without a specific config key (e.g. image_gen), still
+    # track use_gateway so the runtime knows the user's intent.
+    if managed_feature and managed_feature not in {"web", "tts", "browser"}:
+        config.setdefault(managed_feature, {})["use_gateway"] = True
+    elif not managed_feature:
+        # User picked a non-gateway provider — find which category this
+        # belongs to and clear use_gateway if it was previously set.
+        for cat_key, cat in TOOL_CATEGORIES.items():
+            if provider in cat.get("providers", []):
+                section = config.get(cat_key)
+                if isinstance(section, dict) and section.get("use_gateway"):
+                    section["use_gateway"] = False
+                break
+
+
+def apply_provider_selection(ts_key: str, provider_name: str, config: dict) -> None:
+    """Non-interactively persist a provider selection for a toolset.
+
+    Resolves ``provider_name`` within ``ts_key``'s category (matching the
+    rows the GUI/CLI picker shows via :func:`_visible_providers`) and writes
+    the corresponding backend/provider config keys. Unlike
+    :func:`_configure_provider`, this does NOT prompt for API keys, run
+    post-setup hooks, gate on callmemo Portal auth, or run interactive model
+    pickers — those are handled separately (env endpoints, post-setup
+    endpoints, the model picker) in the desktop GUI.
+
+    Raises ``KeyError`` if the toolset has no category or the provider name
+    is not found among the visible providers.
+    """
+    cat = TOOL_CATEGORIES.get(ts_key)
+    if cat is None:
+        raise KeyError(f"Toolset has no configurable category: {ts_key}")
+
+    providers = _visible_providers(cat, config, force_fresh=True)
+    provider = next((p for p in providers if p.get("name") == provider_name), None)
+    if provider is None:
+        raise KeyError(f"Unknown provider {provider_name!r} for toolset {ts_key!r}")
+
+    managed_feature = provider.get("managed_nous_feature")
+    _write_provider_config(provider, config, managed_feature=managed_feature)
+
+    # Plugin-registered image/video gen backends record the provider name in
+    # their own config section. Write that here (without the interactive
+    # model picker the CLI runs afterwards — model choice is a separate GUI
+    # flow).
+    plugin_name = provider.get("image_gen_plugin_name")
+    if plugin_name:
+        img_cfg = config.setdefault("image_gen", {})
+        if not isinstance(img_cfg, dict):
+            img_cfg = {}
+            config["image_gen"] = img_cfg
+        img_cfg["provider"] = plugin_name
+        img_cfg["use_gateway"] = bool(managed_feature)
+
+    video_plugin = provider.get("video_gen_plugin_name")
+    if video_plugin:
+        vid_cfg = config.setdefault("video_gen", {})
+        if not isinstance(vid_cfg, dict):
+            vid_cfg = {}
+            config["video_gen"] = vid_cfg
+        vid_cfg["provider"] = video_plugin
+        vid_cfg["use_gateway"] = bool(managed_feature)
+
+    # In-tree FAL imagegen backend: keep image_gen.provider on the legacy
+    # path (mirrors _configure_provider).
+    if provider.get("imagegen_backend"):
+        img_cfg = config.setdefault("image_gen", {})
+        if isinstance(img_cfg, dict) and img_cfg.get("provider") not in {None, "", "fal"}:
+            img_cfg["provider"] = "fal"
+
+
+def _configure_provider(
+    provider: dict,
+    config: dict,
+    *,
+    force_fresh: bool = True,
+):
+    """Configure a single provider - prompt for API keys and set config."""
+    env_vars = provider.get("env_vars", [])
+    managed_feature = provider.get("managed_nous_feature")
+
+    # callmemo-managed Tool Gateway backends are always listed (see
+    # _visible_providers), but only *activate* once the user has paid callmemo
+    # Portal access. Selecting one runs an inline Portal login when needed —
+    # auth + entitlement only, no inference-provider switch and no bulk
+    # "enable all tools" prompt (that lives in `anakot model`).
+    if managed_feature:
+        from anakot_cli.callmemo_subscription import (
+            MANAGED_FEATURE_COVERAGE_CATEGORY,
+            ensure_callmemo_portal_access,
+        )
+
+        if not ensure_callmemo_portal_access(
+            capability=f"{provider.get('name', 'the callmemo Tool Gateway')}",
+            coverage_category=MANAGED_FEATURE_COVERAGE_CATEGORY.get(managed_feature),
+        ):
+            _print_warning(
+                "  Not enabled — callmemo Portal access is required for this backend."
+            )
+            return
+
+    # Pure pre-auth UX rows (requires_nous_auth without a managed gateway
+    # feature) keep the old gate. Managed rows are handled by the inline
+    # login above, so don't double-check them here.
+    if provider.get("requires_nous_auth") and not managed_feature:
+        features = get_callmemo_subscription_features(config, force_fresh=force_fresh)
+        entitled = bool(
+            features.account_info and features.account_info.paid_service_access is True
+        )
+        if not features.nous_auth_present or not entitled:
+            message = format_callmemo_portal_entitlement_message(
+                features.account_info,
+                capability=f"{provider.get('name', 'callmemo Subscription')}",
+            )
+            _print_warning(
+                f"  {message or 'callmemo Subscription is only available after logging into callmemo Portal.'}"
+            )
+            return
+
+    # Set TTS provider in config if applicable
+    if provider.get("tts_provider"):
+        tts_cfg = config.setdefault("tts", {})
+        tts_cfg["provider"] = provider["tts_provider"]
+        tts_cfg["use_gateway"] = bool(managed_feature)
+
+    # Set browser cloud provider in config if applicable
+    if "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        if bp == "local":
+            _print_success("  Browser set to local mode")
+        elif bp:
+            _print_success(f"  Browser cloud provider set to: {bp}")
+
+    # Set web search backend in config if applicable
+    if provider.get("web_backend"):
+        _print_success(f"  Web backend set to: {provider['web_backend']}")
+
+    # Persist the provider/backend config keys + use_gateway flags. Shared
+    # with the GUI provider-select endpoint via apply_provider_selection so
+    # there is a single source of truth for these writes.
+    _write_provider_config(provider, config, managed_feature=managed_feature)
+
+    if not env_vars:
+        if provider.get("post_setup"):
+            _run_post_setup(provider["post_setup"])
+        _print_success(f"  {provider['name']} - no configuration needed!")
+        if managed_feature:
+            _print_info("  Requests for this tool will be billed to your callmemo subscription.")
+        # Plugin-registered image_gen provider: write image_gen.provider
+        # and route model selection to the plugin's own catalog.
+        plugin_name = provider.get("image_gen_plugin_name")
+        if plugin_name:
+            _select_plugin_image_gen_provider(plugin_name, config)
+            return
+        # Plugin-registered video_gen provider — same flow, different
+        # registry.
+        video_plugin = provider.get("video_gen_plugin_name")
+        if video_plugin:
+            _select_plugin_video_gen_provider(video_plugin, config, use_gateway=bool(managed_feature))
+            return
+        # Imagegen backends prompt for model selection after backend pick.
+        backend = provider.get("imagegen_backend")
+        if backend:
+            _configure_imagegen_model(backend, config)
+            # In-tree FAL is the only non-plugin backend today. Keep
+            # image_gen.provider clear so the dispatch shim falls through
+            # to the legacy FAL path.
+            img_cfg = config.setdefault("image_gen", {})
+            if isinstance(img_cfg, dict) and img_cfg.get("provider") not in {None, "", "fal"}:
+                img_cfg["provider"] = "fal"
+        return
+
+    # Prompt for each required env var
+    all_configured = True
+    # If this BYOK provider lives in a category that ALSO has a
+    # callmemo-managed sibling, show a single dim hint so users know
+    # they can avoid the key entirely via a Portal subscription.
+    # Suppressed when the user is already authed to callmemo.
+    _show_portal_hint = False
+    if env_vars and not managed_feature and not provider.get("requires_nous_auth"):
+        try:
+            _has_managed_sibling = False
+            for _cat_key, _cat in TOOL_CATEGORIES.items():
+                _providers = _cat.get("providers", [])
+                if provider in _providers and any(
+                    sib.get("managed_nous_feature") for sib in _providers
+                ):
+                    _has_managed_sibling = True
+                    break
+            if _has_managed_sibling:
+                _features = get_callmemo_subscription_features(
+                    config,
+                    force_fresh=force_fresh,
+                )
+                _show_portal_hint = not _features.nous_auth_present
+        except Exception:
+            _show_portal_hint = False
+
+    if _show_portal_hint:
+        _print_info("  Available through callmemo Portal subscription.")
+
+    for var in env_vars:
+        existing = get_env_value(var["key"])
+        if existing:
+            _print_success(f"  {var['key']}: already configured")
+            # Don't ask to update - this is a new enable flow.
+            # Reconfigure is handled separately.
+        else:
+            url = var.get("url", "")
+            if url:
+                _print_info(f"  Get yours at: {url}")
+
+            default_val = var.get("default", "")
+            if default_val:
+                value = _prompt(f"    {var.get('prompt', var['key'])}", default_val)
+            else:
+                value = _prompt(f"    {var.get('prompt', var['key'])}", password=True)
+
+            if value:
+                save_env_value(var["key"], value)
+                _print_success("    Saved")
+            else:
+                _print_warning("    Skipped")
+                all_configured = False
+
+    # Run post-setup hooks if needed
+    if provider.get("post_setup") and all_configured:
+        _run_post_setup(provider["post_setup"])
+
+    if all_configured:
+        _print_success(f"  {provider['name']} configured!")
+        plugin_name = provider.get("image_gen_plugin_name")
+        if plugin_name:
+            _select_plugin_image_gen_provider(plugin_name, config)
+            return
+        video_plugin = provider.get("video_gen_plugin_name")
+        if video_plugin:
+            _select_plugin_video_gen_provider(video_plugin, config, use_gateway=bool(managed_feature))
+            return
+        # Imagegen backends prompt for model selection after env vars are in.
+        backend = provider.get("imagegen_backend")
+        if backend:
+            _configure_imagegen_model(backend, config)
+            img_cfg = config.setdefault("image_gen", {})
+            if isinstance(img_cfg, dict) and img_cfg.get("provider") not in {None, "", "fal"}:
+                img_cfg["provider"] = "fal"
+
+
+def _configure_simple_requirements(ts_key: str):
+    """Simple fallback for toolsets that just need env vars (no provider selection)."""
+    if ts_key == "vision":
+        if _toolset_has_keys("vision"):
+            return
+        print()
+        print(color("  Vision / Image Analysis requires a multimodal backend:", Colors.YELLOW))
+        choices = [
+            "OpenRouter — uses Gemini",
+            "OpenAI-compatible endpoint — base URL, API key, and vision model",
+            "Skip",
+        ]
+        idx = _prompt_choice("  Configure vision backend", choices, 2)
+        if idx == 0:
+            _print_info("  Get key at: https://openrouter.ai/keys")
+            value = _prompt("    OPENROUTER_API_KEY", password=True)
+            if value and value.strip():
+                save_env_value("OPENROUTER_API_KEY", value.strip())
+                _print_success("    Saved")
+            else:
+                _print_warning("    Skipped")
+        elif idx == 1:
+            base_url = _prompt("    OPENAI_BASE_URL (blank for OpenAI)").strip() or "https://api.openai.com/v1"
+            is_native_openai = base_url_hostname(base_url) == "api.openai.com"
+            key_label = "    OPENAI_API_KEY" if is_native_openai else "    API key"
+            api_key = _prompt(key_label, password=True)
+            if api_key and api_key.strip():
+                save_env_value("OPENAI_API_KEY", api_key.strip())
+                # Save vision base URL to config (not .env — only secrets go there)
+                _cfg = load_config()
+                _aux = _cfg.setdefault("auxiliary", {}).setdefault("vision", {})
+                _aux["base_url"] = base_url
+                save_config(_cfg)
+                if is_native_openai:
+                    save_env_value("AUXILIARY_VISION_MODEL", "gpt-4o-mini")
+                _print_success("    Saved")
+            else:
+                _print_warning("    Skipped")
+        return
+
+    requirements = TOOLSET_ENV_REQUIREMENTS.get(ts_key, [])
+    if not requirements:
+        return
+
+    missing = [(var, url) for var, url in requirements if not get_env_value(var)]
+    if not missing:
+        return
+
+    ts_label = next((l for k, l, _ in _get_effective_configurable_toolsets() if k == ts_key), ts_key)
+    print()
+    print(color(f"  {ts_label} requires configuration:", Colors.YELLOW))
+
+    for var, url in missing:
+        if url:
+            _print_info(f"  Get key at: {url}")
+        value = _prompt(f"    {var}", password=True)
+        if value and value.strip():
+            save_env_value(var, value.strip())
+            _print_success("    Saved")
+        else:
+            _print_warning("    Skipped")
+
+
+def _reconfigure_tool(
+    config: dict,
+    *,
+    force_fresh: bool = True,
+):
+    """Let user reconfigure an existing tool's provider or API key."""
+    # Build list of configurable tools that are currently set up
+    configurable = []
+    for ts_key, ts_label, _ in _get_effective_configurable_toolsets():
+        cat = TOOL_CATEGORIES.get(ts_key)
+        reqs = TOOLSET_ENV_REQUIREMENTS.get(ts_key)
+        if cat or reqs:
+            if (
+                _toolset_has_keys(ts_key, config, force_fresh=force_fresh)
+                or _toolset_enabled_for_reconfigure(ts_key, config)
+            ):
+                configurable.append((ts_key, ts_label))
+
+    if not configurable:
+        _print_info("No configured tools to reconfigure.")
+        return
+
+    choices = [label for _, label in configurable]
+    choices.append("Cancel")
+
+    idx = _prompt_choice("  Which tool would you like to reconfigure?", choices, len(choices) - 1)
+
+    if idx >= len(configurable):
+        return  # Cancel
+
+    ts_key, ts_label = configurable[idx]
+    cat = TOOL_CATEGORIES.get(ts_key)
+
+    if cat:
+        _configure_tool_category_for_reconfig(
+            ts_key,
+            cat,
+            config,
+            force_fresh=force_fresh,
+        )
+    else:
+        _reconfigure_simple_requirements(ts_key)
+
+    save_config(config)
+
+
+def _toolset_enabled_for_reconfigure(ts_key: str, config: dict) -> bool:
+    """Return True if a configurable toolset is enabled anywhere.
+
+    Reconfigure must include enabled-but-unconfigured categories so users can
+    finish provider/API-key setup without disabling and re-enabling the toolset.
+    """
+    for platform in PLATFORMS:
+        if not _toolset_allowed_for_platform(ts_key, platform):
+            continue
+        try:
+            enabled = _get_platform_tools(
+                config,
+                platform,
+                include_default_mcp_servers=False,
+            )
+        except Exception:
+            continue
+        if ts_key in enabled:
+            return True
+    return False
+
+
 def _configure_tool_category_for_reconfig(
     ts_key: str,
     cat: dict,
@@ -2258,6 +3143,12 @@ def _configure_tool_category_for_reconfig(
     icon = cat.get("icon", "")
     name = cat["name"]
     providers = _visible_providers(cat, config, force_fresh=force_fresh)
+    hidden_nous_message = _hidden_nous_gateway_message(
+        cat,
+        config,
+        f"the callmemo Subscription provider for {name}",
+        force_fresh=force_fresh,
+    )
 
     if len(providers) == 1:
         provider = providers[0]
@@ -2312,21 +3203,41 @@ def _reconfigure_provider(
 ):
     """Reconfigure a provider - update API keys."""
     env_vars = provider.get("env_vars", [])
+    managed_feature = provider.get("managed_nous_feature")
 
     # Same inline callmemo Portal login + entitlement gate as _configure_provider:
     # managed Tool Gateway backends only activate with paid Portal access.
-
-    if not ensure_callmemo_portal_access(
-        capability=f"{provider.get('name', 'the callmemo Tool Gateway')}",
-        coverage_category=MANAGED_FEATURE_COVERAGE_CATEGORY.get(managed_feature),
-    ):
-        _print_warning(
-            "  Not enabled — callmemo Portal access is required for this backend."
+    if managed_feature:
+        from anakot_cli.callmemo_subscription import (
+            MANAGED_FEATURE_COVERAGE_CATEGORY,
+            ensure_callmemo_portal_access,
         )
-        return
+
+        if not ensure_callmemo_portal_access(
+            capability=f"{provider.get('name', 'the callmemo Tool Gateway')}",
+            coverage_category=MANAGED_FEATURE_COVERAGE_CATEGORY.get(managed_feature),
+        ):
+            _print_warning(
+                "  Not enabled — callmemo Portal access is required for this backend."
+            )
+            return
 
     # Pure pre-auth UX rows keep the old gate; managed rows already handled
     # by the inline login above.
+    if provider.get("requires_nous_auth") and not managed_feature:
+        features = get_callmemo_subscription_features(config, force_fresh=force_fresh)
+        entitled = bool(
+            features.account_info and features.account_info.paid_service_access is True
+        )
+        if not features.nous_auth_present or not entitled:
+            message = format_callmemo_portal_entitlement_message(
+                features.account_info,
+                capability=f"{provider.get('name', 'callmemo Subscription')}",
+            )
+            _print_warning(
+                f"  {message or 'callmemo Subscription is only available after logging into callmemo Portal.'}"
+            )
+            return
 
     if provider.get("tts_provider"):
         tts_cfg = config.setdefault("tts", {})
@@ -2370,7 +3281,8 @@ def _reconfigure_provider(
         if provider.get("post_setup"):
             _run_post_setup(provider["post_setup"])
         _print_success(f"  {provider['name']} - no configuration needed!")
-        _print_info("  Requests for this tool will be billed to your callmemo subscription.")
+        if managed_feature:
+            _print_info("  Requests for this tool will be billed to your callmemo subscription.")
         plugin_name = provider.get("image_gen_plugin_name")
         if plugin_name:
             _select_plugin_image_gen_provider(plugin_name, config)

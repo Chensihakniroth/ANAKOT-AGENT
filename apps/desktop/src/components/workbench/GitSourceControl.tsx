@@ -2,15 +2,17 @@ import { useEffect, useMemo, useCallback, useState, useRef } from 'react'
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
 import { $currentCwd } from '@/store/session'
 import { setCurrentSessionPreviewTarget } from '@/store/preview'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { setBottomPanelTab, setBottomPanelOpen } from '@/store/workbench'
 import {
-  $gitStatus, $gitLoading, $gitCommitMessage, $gitError,
+  $gitStatus, $gitLoading, $gitCommitMessage, $gitError, $gitBranches,
   changeWorkspace, triggerGitRefresh, gitStageFile, gitStageAllFiles, gitUnstageFile, gitDiscardChanges, gitCommit,
-  type GitFile
+  gitLoadBranches, gitCheckoutBranch, type GitFile
 } from '@/store/git'
 
 interface ContextMenuState {
@@ -35,10 +37,12 @@ export function GitSourceControl() {
   const t = translations as any
   const cwd = useStore($currentCwd)
   const status = useStore($gitStatus)
+  const branches = useStore($gitBranches)
   const error = useStore($gitError)
   const loading = useStore($gitLoading)
   const commitMessage = useStore($gitCommitMessage)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [checkoutConflict, setCheckoutConflict] = useState<{ branch: string, message: string } | null>(null)
 
   // Track the current git root in a ref so async callbacks always see the latest value
   const gitRootRef = useRef<string | null>(null)
@@ -209,11 +213,11 @@ export function GitSourceControl() {
         <Codicon name={statusInfo.icon} size="0.75rem" className={`shrink-0 ${statusInfo.color} w-4`} />
         <span className="flex-1 truncate text-foreground min-w-0" title={file.path}>{file.path.split('/').pop()}</span>
         <span className="text-[0.6rem] uppercase text-muted-foreground shrink-0">{file.status}</span>
-        {/* Hover actions - always visible for testing */}
-        <div className="flex items-center gap-1 bg-white/10 px-1">
+        {/* Hover actions */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 pr-1">
           {type === 'staged' && (
              <button
-               className="rounded-sm p-1 text-muted-foreground hover:text-foreground border border-red-500"
+               className="rounded-sm p-1 text-muted-foreground hover:text-foreground focus:outline-none"
                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline unstage click, file:', file.path); handleUnstage(file.path) }}
                title="Unstage"
                type="button"
@@ -224,7 +228,7 @@ export function GitSourceControl() {
           {type === 'changes' && (
             <>
               <button
-                className="rounded-sm p-1 text-muted-foreground hover:text-foreground border border-green-500"
+                className="rounded-sm p-1 text-muted-foreground hover:text-foreground focus:outline-none"
                 onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline stage click, file:', file.path); handleStage(file.path) }}
                 title="Stage"
                 type="button"
@@ -232,7 +236,7 @@ export function GitSourceControl() {
                 <Codicon name="add" size="0.625rem" />
               </button>
               <button
-                className="rounded-sm p-1 text-muted-foreground hover:text-destructive border border-orange-500"
+                className="rounded-sm p-1 text-muted-foreground hover:text-destructive focus:outline-none"
                 onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline discard click, file:', file.path); handleDiscard(file.path) }}
                 title="Discard"
                 type="button"
@@ -255,10 +259,44 @@ export function GitSourceControl() {
           {t.gitSourceControl || 'Source Control'}
         </span>
         {status.branch && (
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2 py-1">
-            <Codicon name="git-branch" size="0.75rem" className="text-foreground" />
-            <span className="max-w-24 truncate text-xs font-medium text-foreground">{status.branch}</span>
-          </div>
+          <DropdownMenu onOpenChange={(open) => {
+            if (open && cwd.trim()) void gitLoadBranches(cwd)
+          }}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2 py-1 hover:bg-(--ui-control-hover-background)"
+              >
+                <Codicon name="git-branch" size="0.75rem" className="text-foreground" />
+                <span className="max-w-24 truncate text-xs font-medium text-foreground">{status.branch}</span>
+                <Codicon name="chevron-down" size="0.75rem" className="text-muted-foreground ml-0.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-[200px] overflow-y-auto">
+              {branches.length === 0 ? (
+                <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading branches...</div>
+              ) : (
+                branches.map((b) => (
+                  <DropdownMenuItem
+                    key={b.name}
+                    className="flex items-center gap-2 text-xs"
+                    onClick={async () => {
+                      if (!b.current && cwd.trim()) {
+                        const res = await gitCheckoutBranch(cwd, b.name)
+                        if (!res.ok && res.error && (res.error.toLowerCase().includes('overwrite') || res.error.toLowerCase().includes('commit') || res.error.toLowerCase().includes('stash'))) {
+                          setCheckoutConflict({ branch: b.name, message: res.error })
+                          $gitError.set(null)
+                        }
+                      }
+                    }}
+                  >
+                    <Codicon name={b.current ? 'check' : 'blank'} size="0.75rem" className={b.current ? 'text-foreground' : 'invisible'} />
+                    <span className="truncate max-w-48">{b.name}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
@@ -452,6 +490,25 @@ export function GitSourceControl() {
           </div>
         </>
       )}
+            {/* Checkout Conflict Dialog */}
+      <Dialog open={!!checkoutConflict} onOpenChange={(open) => !open && setCheckoutConflict(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Checkout Failed</DialogTitle>
+            <DialogDescription className="space-y-2 pt-2 text-sm text-foreground">
+              <p>
+                Cannot switch to <strong>{checkoutConflict?.branch}</strong> because you have uncommitted changes that would be overwritten.
+              </p>
+              <p>
+                Please stash or commit your changes before switching branches to protect your data.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setCheckoutConflict(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

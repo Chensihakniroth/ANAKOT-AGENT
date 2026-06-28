@@ -38,6 +38,7 @@ export const $gitError = atom<string | null>(null)
 export const $gitCommits = atom<GitCommit[]>([])
 export const $gitLoading = atom(false)
 export const $gitCommitMessage = atom('')
+export const $gitBranches = atom<{name: string, current: boolean}[]>([])
 
 // Normalize a path for safe IPC transport.
 // Windows backslashes can be lost during IPC serialization,
@@ -61,11 +62,11 @@ function setBusy(cwd: string, value: boolean) {
   else busyMap.delete(cwd)
 }
 
-function startPolling(cwd: string, intervalMs = 15000) {
+function startPolling(cwd: string, intervalMs = 60000) {
   stopPolling()
   if (!cwd.trim()) return
   lastRefreshCwd = cwd
-  // Poll at the given interval — default 15s is a fallback safety net.
+  // Poll at the given interval — default 60s is a fallback safety net.
   // The primary mechanism is the OS-level file watcher (see main process).
   refreshTimer = setInterval(() => {
     if (lastRefreshCwd && !isBusy(lastRefreshCwd)) {
@@ -81,27 +82,41 @@ function stopPolling() {
   }
 }
 
+let isListenerRegistered = false
+
 /**
  * Call this when cwd changes from the UI.
  * Stops old polling, refreshes status for new cwd, starts fallback polling.
  */
 export function changeWorkspace(cwd: string) {
+  if (!isListenerRegistered && typeof window !== 'undefined' && window.anakotDesktop?.onGitChanged) {
+    isListenerRegistered = true
+    window.anakotDesktop.onGitChanged(() => {
+      triggerGitRefresh()
+    })
+  }
+
   setBusy(cwd, false)
   busyMap.delete(lastRefreshCwd)
   stopPolling()
   if (cwd.trim()) {
     void refreshGitStatus(cwd)
     // Fallback polling: only fires if file watcher misses something.
-    // Longer interval (15s) since watcher is the primary mechanism.
-    startPolling(cwd, 15000)
+    // Longer interval (60s) since watcher is the primary mechanism.
+    startPolling(cwd, 60000)
   }
 }
+
+let refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 /** Manually trigger a status refresh (e.g. after a file save or file-watcher event) */
 export function triggerGitRefresh(cwd?: string) {
   const target = cwd || lastRefreshCwd
   if (target && !isBusy(target)) {
-    void refreshGitStatus(target, { silent: true })
+    if (refreshDebounceTimer) clearTimeout(refreshDebounceTimer)
+    refreshDebounceTimer = setTimeout(() => {
+      void refreshGitStatus(target, { silent: true })
+    }, 500)
   }
 }
 
@@ -179,6 +194,45 @@ export async function refreshGitStatus(cwd: string, options?: { silent?: boolean
     })
   } finally {
     $gitLoading.set(false)
+  }
+}
+
+export async function gitLoadBranches(cwd: string) {
+  if (!cwd.trim()) return
+  const safePath = toIpcSafePath(cwd.trim())
+  try {
+    const result = await window.anakotDesktop?.gitBranches?.(safePath)
+    if (result && result.ok && result.branches) {
+      $gitBranches.set(result.branches)
+    } else {
+      $gitError.set(result?.error || 'Failed to load branches')
+    }
+  } catch (e) {
+    $gitError.set(e instanceof Error ? e.message : 'Failed to load branches')
+  }
+}
+
+export async function gitCheckoutBranch(cwd: string, branch: string): Promise<{ ok: boolean, error?: string }> {
+  if (!cwd.trim() || !branch.trim()) return { ok: false, error: 'invalid arguments' }
+  const safePath = toIpcSafePath(cwd.trim())
+  $gitError.set(null)
+  setBusy(cwd, true)
+  try {
+    const result = await window.anakotDesktop?.gitCheckout?.(safePath, branch)
+    if (result && result.ok) {
+      void triggerGitRefresh(cwd)
+      void gitLoadBranches(cwd)
+      return { ok: true }
+    } else {
+      $gitError.set(result?.error || 'Failed to checkout branch')
+      return { ok: false, error: result?.error || 'Failed to checkout branch' }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to checkout branch'
+    $gitError.set(msg)
+    return { ok: false, error: msg }
+  } finally {
+    setBusy(cwd, false)
   }
 }
 

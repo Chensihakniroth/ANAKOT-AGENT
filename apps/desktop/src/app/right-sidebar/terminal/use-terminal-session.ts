@@ -6,7 +6,10 @@ import { Terminal } from '@xterm/xterm'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 
+import { useStore } from '@nanostores/react'
+
 import { triggerHaptic } from '@/lib/haptics'
+import { $terminalSettings } from '@/store/terminal-settings'
 import { useTheme } from '@/themes/context'
 
 import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel } from './selection'
@@ -305,6 +308,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     const themeBg = host.parentElement ? resolveThemeBackground(host.parentElement) : '#002b36'
     // Also resolve foreground from theme context for contrast
     const themeFg = themeCtx.theme.colors.foreground || '#839496'
+    const settings = $terminalSettings.get()
 
     console.log('[terminal] theme bg resolved:', themeBg, 'from theme:', themeCtx.themeName, 'mode:', themeCtx.resolvedMode)
 
@@ -312,12 +316,13 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       allowProposedApi: true,
       allowTransparency: true,
       convertEol: true,
-      cursorBlink: true,
-      fontFamily: "'SF Mono', 'Menlo', 'Cascadia Code', 'JetBrains Mono', monospace",
-      fontSize: 11,
-      lineHeight: 1.12,
+      cursorBlink: settings.cursorBlink,
+      cursorStyle: settings.cursorStyle,
+      fontFamily: settings.fontFamily,
+      fontSize: settings.fontSize,
+      letterSpacing: settings.letterSpacing,
       macOptionIsMeta: true,
-      scrollback: 1000,
+      scrollback: settings.scrollback,
       theme: {
         background: themeBg,
         foreground: themeFg,
@@ -579,6 +584,30 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       selectionLabelRef.current = ''
     }
   }, [shell, cwd])  // <-- single dependency array, handles both shell switch AND cwd change
+
+  // Live settings update: subscribe to $terminalSettings
+  const settings = useStore($terminalSettings)
+  
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    
+    // We can update most xterm options on the fly
+    term.options.fontFamily = settings.fontFamily
+    term.options.fontSize = settings.fontSize
+    term.options.cursorStyle = settings.cursorStyle
+    term.options.cursorBlink = settings.cursorBlink
+    term.options.scrollback = settings.scrollback
+    term.options.letterSpacing = settings.letterSpacing
+    
+    // xterm.js doesn't auto-refit when font size changes, so we force a fit
+    // after giving the DOM a frame to settle
+    requestAnimationFrame(() => {
+      // The fit addon is stored on the instance but not exposed as a property.
+      // Easiest is to fire a resize event to the window so our ResizeObserver catches it.
+      window.dispatchEvent(new Event('resize'))
+    })
+  }, [settings])
 
   // Live theme-switch update: when the theme context changes, re-resolve the background
   // color from the container and update xterm.js theme options (no PTY restart needed).

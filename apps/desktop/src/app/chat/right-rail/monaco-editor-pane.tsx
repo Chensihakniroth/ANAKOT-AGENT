@@ -1,6 +1,7 @@
 // MONACO_GUTTER_FIX_v3_20260623b
 import { Editor, type BeforeMount, type OnMount } from '@monaco-editor/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLspClient } from './use-lsp-client'
 
 import { useTheme } from '@/themes/context'
 
@@ -8,6 +9,7 @@ interface MonacoEditorPaneProps {
   value: string
   language: string
   readOnly?: boolean
+  filePath?: string
   onChange?: (value: string) => void
   onMount?: () => void
 }
@@ -126,7 +128,7 @@ function resolveEditorBackground(): string {
 // (StrictMode or React re-renders can cause double-mounts)
 let globalEditorLock = false
 
-export function MonacoEditorPane({ value, language, readOnly = true, onChange, onMount }: MonacoEditorPaneProps) {
+export function MonacoEditorPane({ value, language, readOnly = true, filePath, onChange, onMount }: MonacoEditorPaneProps) {
   const themeCtx = useTheme()
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -137,6 +139,9 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
 
   const mountCountRef = useRef(0)
   const monacoRef = useRef<any>(null)
+
+  // Initialize LSP
+  const lspClient = useLspClient(ready ? monacoRef.current : null, monacoLanguage, filePath)
 
   // Re-define and re-applying Monaco themes whenever the theme changes.
   // handleBeforeMount only runs once, so we need this effect to update
@@ -241,8 +246,18 @@ export function MonacoEditorPane({ value, language, readOnly = true, onChange, o
   const handleChange = useCallback((newValue: string | undefined) => {
     if (newValue !== undefined) {
       onChange?.(newValue)
+      if (lspClient && filePath) {
+        lspClient.updateDocument(`file:///${filePath.replace(/\\/g, '/')}`, newValue, 2)
+      }
     }
-  }, [onChange])
+  }, [onChange, lspClient, filePath])
+
+  // Sync value changes from outside
+  useEffect(() => {
+    if (lspClient && filePath && ready && value) {
+      lspClient.updateDocument(`file:///${filePath.replace(/\\/g, '/')}`, value, 2)
+    }
+  }, [value, lspClient, filePath, ready])
 
   return (
     <div ref={containerRef} className="relative h-full w-full" style={{ backgroundColor: 'var(--ui-bg-editor)' }}>

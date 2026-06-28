@@ -63,6 +63,8 @@ declare global {
       gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
       gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
+      gitBranches?: (cwd: string) => Promise<{ ok: boolean; branches: Array<{ name: string; current: boolean }>; error?: string }>
+      gitCheckout?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>
       gitSubscribe?: (cwd: string) => Promise<{ ok: boolean; root?: string; error?: string }>
       gitUnsubscribe?: (cwd: string) => Promise<{ ok: boolean; error?: string }>
       onGitChanged?: (callback: (data: { root: string }) => void) => () => void
@@ -98,6 +100,15 @@ declare global {
       uninstall: {
         summary: () => Promise<DesktopUninstallSummary>
         run: (mode: DesktopUninstallMode) => Promise<DesktopUninstallResult>
+      }
+      lsp: {
+        start: (language: string, rootPath: string) => Promise<AnakotLspStartResult>
+        send: (id: string, message: object) => Promise<{ ok: boolean; error?: string }>
+        stop: (id: string) => Promise<{ ok: boolean }>
+        available: () => Promise<string[]>
+        list: () => Promise<AnakotLspServerInfo[]>
+        onMessage: (id: string, callback: (msg: object) => void) => () => void
+        onExit: (id: string, callback: (payload: { code: number | null }) => void) => () => void
       }
     }
   }
@@ -433,4 +444,14 @@ export interface AnakotSelectPathsOptions {
 export interface BackendExit {
   code: number | null
   signal: string | null
+}
+
+export type AnakotLspStartResult = 
+  | { id: string; language: string; error?: never }
+  | { error: string; id?: never; language?: never }
+
+export interface AnakotLspServerInfo {
+  language: string
+  cmd: string
+  installed: boolean
 }

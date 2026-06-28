@@ -60,6 +60,14 @@ const {
   resolveReadableFileForIpc,
   resolveTimeoutMs
 } = require('./hardening.cjs')
+const {
+  startLsp,
+  sendLspMessage,
+  stopLsp,
+  stopAllLsp,
+  getAvailableLanguageServers,
+  listLanguageServers
+} = require('./lsp-manager.cjs')
 
 let nodePty = null
 
@@ -5366,6 +5374,52 @@ function disposeTerminalSession(id) {
   return true
 }
 
+// ── LSP (Language Server Protocol) IPC handlers ─────────────────
+// Follows the same session-based pattern as terminal IPC above.
+// The renderer starts a language server, sends JSON-RPC messages,
+// and receives responses via event channels.
+
+ipcMain.handle('anakot:lsp:start', (event, { language, rootPath }) => {
+  const senderContents = event.sender
+  const result = startLsp(
+    language,
+    rootPath,
+    // onMessage: forward JSON-RPC messages from server → renderer
+    (msg) => {
+      try {
+        senderContents.send(`anakot:lsp:${result.id}:message`, msg)
+      } catch {
+        // Window may be closed
+      }
+    },
+    // onExit: notify renderer
+    (code) => {
+      try {
+        senderContents.send(`anakot:lsp:${result.id}:exit`, { code })
+      } catch {
+        // Window may be closed
+      }
+    }
+  )
+  return result
+})
+
+ipcMain.handle('anakot:lsp:send', (_event, { id, message }) => {
+  return sendLspMessage(id, message)
+})
+
+ipcMain.handle('anakot:lsp:stop', (_event, { id }) => {
+  return stopLsp(id)
+})
+
+ipcMain.handle('anakot:lsp:available', () => {
+  return getAvailableLanguageServers()
+})
+
+ipcMain.handle('anakot:lsp:list', () => {
+  return listLanguageServers()
+})
+
 ipcMain.handle('anakot:fs:readDir', async (_event, dirPath) => {
   const resolved = path.resolve(String(dirPath || ''))
 
@@ -5529,9 +5583,13 @@ function startGitWatcher(gitRoot) {
     const rootWatcher = fs.watch(gitRoot, { persistent: false, recursive: true }, (eventType, filename) => {
       if (!filename) return
       const name = String(filename)
-      // Skip .git directory events (handled above) and lock files
-      if (name === '.git' || name.endsWith('lock')) return
-      // Only care about top-level additions/deletions (untracked files)
+      // Skip .git directory events (handled above), lock files, and heavy temp folders
+      if (
+        name === '.git' || 
+        name.startsWith(`.git${path.sep}`) || 
+        name.startsWith('.git/') ||
+        name.endsWith('lock')
+      ) return
       debouncedNotify()
     })
     watchers.push(rootWatcher)
@@ -5608,7 +5666,7 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
     const git = args => runGit(args, { cwd: root }).then(r => r.stdout.trimEnd())
     const [branch, statusStr] = await Promise.all([
       git(['rev-parse', '--abbrev-ref', 'HEAD']),
-      git(['status', '--porcelain'])
+      git(['--no-optional-locks', 'status', '--porcelain'])
     ])
 
     if (!statusStr) return { root, files: [], branch }
@@ -5793,6 +5851,41 @@ ipcMain.handle('anakot:git:log', async (_event, { cwd, limit = 20 }) => {
     return { ok: true, commits }
   } catch (error) {
     return { ok: false, error: error?.message || 'git log failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:branches', async (_event, cwd) => {
+  try {
+    const validated = await validateGitCwd(cwd)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await runGit(['branch', '--format=%(refname:short)|%(HEAD)'], { cwd: validated.root })
+    if (!result.ok) {
+      const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+      return { ok: false, error: errorOutput || 'git branch failed' }
+    }
+    const stdout = result.stdout || ''
+    const branches = stdout.split('\n').filter(Boolean).map(line => {
+      const [name, isHead] = line.split('|')
+      return { name: name.trim(), current: isHead.trim() === '*' }
+    })
+    return { ok: true, branches }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git branch failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:checkout', async (_event, { cwd, branch }) => {
+  try {
+    const validated = await validateGitCwd(cwd)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await runGit(['checkout', branch], { cwd: validated.root })
+    if (!result.ok) {
+      const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+      return { ok: false, error: errorOutput || 'git checkout failed' }
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git checkout failed' }
   }
 })
 
@@ -6181,6 +6274,7 @@ app.on('before-quit', () => {
   }
   flushDesktopLogBufferSync()
   closePreviewWatchers()
+  stopAllLsp()
 
   // Dispose live PTY sessions before the environment tears down.
   // Without this, node-pty's ThreadSafeFunction::CallJS callback fires
