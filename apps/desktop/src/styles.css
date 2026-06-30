@@ -1269,3 +1269,13 @@ canvas {
 .xterm-viewport {
   scrollbar-width: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * Plugin page overrides — desktop-native restyle
+ *
+ * Desktop-native CSS overrides are injected as <style> tags by usePlugins.ts
+ * immediately after each plugin's own CSS <link>. This ensures our rules
+ * win by cascade order (the plugin's standalone-dashboard CSS loads first
+ * for structure, then we override visually).
+ * --------------------------------------------------------------------------- */
+

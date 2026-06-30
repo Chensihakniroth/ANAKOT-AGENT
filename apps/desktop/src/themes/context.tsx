@@ -289,6 +289,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(MODE_KEY, next)
   }, [])
 
+  // Sync theme from backend config (config.yaml display.theme) — survives localStorage clears
+  const backendTheme = useBackendThemeName()
+  useSyncThemeFromBackend(backendTheme, setTheme)
+
   // The light/dark toggle (Shift+X by default) is owned by the keybind runtime
   // (`appearance.toggleMode`) so it shows up in the hotkey map and is rebindable.
 
@@ -309,4 +313,26 @@ export function useSyncThemeFromBackend(backendThemeName: string | undefined, se
       setTheme(backendThemeName)
     }
   }, [backendThemeName, setTheme])
+}
+
+/** Read display.theme from the backend config so the theme survives localStorage clears. */
+function useBackendThemeName(): string | undefined {
+  const [theme, setTheme] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const { getAnakotConfig } = await import('@/anakot')
+        const cfg = await getAnakotConfig()
+        if (!cancelled && cfg.display?.theme && typeof cfg.display.theme === 'string') {
+          setTheme(cfg.display.theme)
+        }
+      } catch {
+        // Config read failed — fall back to localStorage
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+  return theme
 }

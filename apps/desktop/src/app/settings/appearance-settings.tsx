@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
+import type { AnakotGateway } from '@/anakot'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
@@ -389,11 +390,19 @@ function BackgroundImageSettings() {
   )
 }
 
-export function AppearanceSettings() {
+export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null }) {
   const { t, isSavingLocale } = useI18n()
   const { themeName, mode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
   const a = t.settings.appearance
+
+  // Persist theme to config.yaml so it survives app restarts (localStorage may be cleared in dev)
+  const applyTheme = useCallback((name: string) => {
+    setTheme(name)
+    if (gateway) {
+      gateway.request('config.set', { key: 'display.theme', value: name }).catch(() => {})
+    }
+  }, [gateway, setTheme])
 
   const modeOptions = MODE_OPTIONS.map(({ id, icon }) => ({ icon, id, label: t.settings.modeOptions[id].label }))
 
@@ -447,7 +456,7 @@ export function AppearanceSettings() {
                       key={theme.name}
                       onClick={() => {
                         triggerHaptic('crisp')
-                        setTheme(theme.name)
+                        applyTheme(theme.name)
                       }}
                       type="button"
                     >

@@ -208,7 +208,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
 
         <OverlayMain className="px-0 pb-0 pt-[calc(var(--titlebar-height)+1rem)]">
           {activeView === 'config:appearance' ? (
-            <AppearanceSettings />
+            <AppearanceSettings gateway={gateway} />
           ) : activeView === 'config:terminal' ? (
             <TerminalSettings />
           ) : activeView === 'about' ? (

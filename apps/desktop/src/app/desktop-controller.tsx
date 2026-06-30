@@ -86,7 +86,7 @@ import { ModelVisibilityOverlay } from './model-visibility-overlay'
 import { RightSidebarPane } from './right-sidebar'
 import { TerminalTab } from './right-sidebar/terminal'
 import { $terminalTakeover } from './right-sidebar/store'
-import { NEW_CHAT_ROUTE, routeSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
+import { NEW_CHAT_ROUTE, registerPluginPaths, routeSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
 import { useContextSuggestions } from './session/hooks/use-context-suggestions'
 import { useCwdActions } from './session/hooks/use-cwd-actions'
 import { useAnakotConfig } from './session/hooks/use-anakot-config'
@@ -116,6 +116,12 @@ const MessagingView = lazy(async () => ({ default: (await import('./messaging'))
 const ProfilesView = lazy(async () => ({ default: (await import('./profiles')).ProfilesView }))
 const SettingsView = lazy(async () => ({ default: (await import('./settings')).SettingsView }))
 const SkillsView = lazy(async () => ({ default: (await import('./skills')).SkillsView }))
+const PluginsView = lazy(async () => ({ default: (await import('./plugins/PluginsView')).PluginsView }))
+const PluginPageView = lazy(async () => ({ default: (await import('./plugins/PluginPageView')).PluginPageView }))
+
+// Re-export usePlugins at module scope so we can use it in the controller
+// to register plugin paths early.
+import { usePlugins } from './plugins/usePlugins'
 
 // Rows a session refresh must preserve even if the aggregator omits them:
 // in-flight first turns (message_count 0), pinned rows aged off the page, and
@@ -156,6 +162,15 @@ export function DesktopController() {
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
 
+  // Load plugin manifests early and register their routes so navigating
+  // to /kanban, /achievements, etc. is recognised by the router.
+  const { manifests: pluginManifests, plugins: registeredPlugins } = usePlugins()
+  useEffect(() => {
+    if (pluginManifests.length > 0) {
+      registerPluginPaths(pluginManifests.map(m => m.tab.path))
+    }
+  }, [pluginManifests])
+
   const routedSessionId = routeSessionId(location.pathname)
   const routeToken = `${location.pathname}:${location.search}:${location.hash}`
   const routeTokenRef = useRef(routeToken)
@@ -177,6 +192,8 @@ export function DesktopController() {
     profilesOpen,
     settingsOpen,
     skillsOpen,
+    pluginsOpen,
+    pluginPageOpen,
     toggleCommandCenter
   } = useOverlayRouting()
 
@@ -726,6 +743,22 @@ export function DesktopController() {
         <Suspense fallback={null}>
           <OverlayModal onClose={closeOverlayToPreviousRoute} title="Artifacts">
             <ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {pluginsOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Plugins">
+            <PluginsView />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {pluginPageOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute}>
+            <PluginPageView onClose={closeOverlayToPreviousRoute} />
           </OverlayModal>
         </Suspense>
       )}

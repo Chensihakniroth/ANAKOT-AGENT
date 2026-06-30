@@ -478,6 +478,8 @@ const STREAMABLE_MEDIA_EXTS = new Set([
   '.webm'
 ])
 
+const PLUGIN_PROTOCOL = 'anakot-plugin'
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: MEDIA_PROTOCOL,
@@ -486,6 +488,15 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       stream: true,
       supportFetchAPI: true
+    }
+  },
+  {
+    scheme: PLUGIN_PROTOCOL,
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      corsEnabled: true
     }
   }
 ])
@@ -512,6 +523,32 @@ function registerMediaProtocol() {
       bypassCustomProtocolHandlers: true,
       headers: request.headers
     })
+  })
+}
+
+function registerPluginProtocol() {
+  protocol.handle(PLUGIN_PROTOCOL, async request => {
+    try {
+      const url = new URL(request.url)
+      const pluginName = url.hostname
+      const pluginFile = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
+      
+      if (!connectionPromise) {
+        return new Response('Backend not ready', { status: 503 })
+      }
+      
+      const conn = await connectionPromise
+      const baseUrl = conn.baseUrl || `http://127.0.0.1:${conn.port}`
+      const targetUrl = new URL(`/dashboard-plugins/${pluginName}/${pluginFile}`, baseUrl)
+      
+      return electronNet.fetch(targetUrl.toString(), {
+        bypassCustomProtocolHandlers: true,
+        headers: request.headers
+      })
+    } catch (error) {
+      console.error(`[anakot-plugin] Failed to load ${request.url}:`, error)
+      return new Response('Plugin asset not found', { status: 404 })
+    }
   })
 }
 
@@ -5675,7 +5712,7 @@ ipcMain.handle('anakot:git:status', async (_event, cwd) => {
     const git = args => runGit(args, { cwd: root }).then(r => r.stdout.trimEnd())
     const [branch, statusStr] = await Promise.all([
       git(['rev-parse', '--abbrev-ref', 'HEAD']),
-      git(['--no-optional-locks', 'status', '--porcelain'])
+      git(['--no-optional-locks', 'status', '--porcelain', '-uall'])
     ])
 
     if (!statusStr) return { root, files: [], branch }
@@ -6234,6 +6271,7 @@ app.whenReady().then(() => {
   }
   installMediaPermissions()
   registerMediaProtocol()
+  registerPluginProtocol()
   ensureWslWindowsFonts()
   configureSpellChecker()
   registerPowerResumeListeners()

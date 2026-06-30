@@ -163,9 +163,11 @@
 }
 .anakot-kanban-dot-triage   { background: #b47dd6; }  /* lilac — fresh/unspecified */
 .anakot-kanban-dot-todo     { background: var(--color-muted-foreground); }
+.anakot-kanban-dot-scheduled { background: #b08ad9; }  /* soft purple — time-based */
 .anakot-kanban-dot-ready    { background: #d4b348; }  /* amber */
 .anakot-kanban-dot-running  { background: #3fb97d; }  /* green */
 .anakot-kanban-dot-blocked  { background: var(--color-destructive, #d14a4a); }
+.anakot-kanban-dot-review   { background: #e0a458; }  /* warm orange — awaiting review */
 .anakot-kanban-dot-done     { background: #4a8cd1; }  /* blue */
 .anakot-kanban-dot-archived { background: var(--color-border); }
 

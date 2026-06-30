@@ -19,8 +19,10 @@ export function useOverlayRouting() {
   const skillsOpen = currentView === 'skills'
   const messagingOpen = currentView === 'messaging'
   const artifactsOpen = currentView === 'artifacts'
+  const pluginsOpen = currentView === 'plugins'
+  const pluginPageOpen = currentView === 'plugin-page'
   const chatOpen = currentView === 'chat'
-  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen
+  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen || pluginsOpen || pluginPageOpen
 
   // Overlay routes (settings/command-center/agents) stash the underlying path
   // so closing them returns there instead of bouncing to /.
@@ -42,10 +44,13 @@ export function useOverlayRouting() {
     [navigate]
   )
 
-  const closeOverlayToPreviousRoute = useCallback(
-    () => navigate(returnPathRef.current || NEW_CHAT_ROUTE, { replace: true }),
-    [navigate]
-  )
+  const closeOverlayToPreviousRoute = useCallback(() => {
+    let target = returnPathRef.current || NEW_CHAT_ROUTE
+    if (target === location.pathname || target.startsWith(location.pathname + '?') || target.startsWith(location.pathname + '#')) {
+      target = NEW_CHAT_ROUTE
+    }
+    navigate(target, { replace: true })
+  }, [location.pathname, navigate])
 
   const toggleCommandCenter = useCallback(() => {
     if (commandCenterOpen) {
@@ -72,6 +77,8 @@ export function useOverlayRouting() {
     profilesOpen,
     settingsOpen,
     skillsOpen,
+    pluginsOpen,
+    pluginPageOpen,
     toggleCommandCenter
   }
 }

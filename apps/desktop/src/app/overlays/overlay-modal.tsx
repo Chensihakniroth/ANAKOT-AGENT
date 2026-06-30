@@ -17,8 +17,8 @@ export function OverlayModal({ children, onClose, title }: OverlayModalProps) {
             <span className="text-sm font-medium">{title}</span>
           </div>
         )}
-        {/* Content */}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        {/* Content — overflow-hidden so HTML5 drag ghost isn't clipped */}
+        <div className="min-h-0 flex-1 overflow-hidden p-4">
           {children}
         </div>
       </div>

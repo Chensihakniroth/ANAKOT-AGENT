@@ -8205,6 +8205,28 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5032, str(e))
 
 
+@method("dashboard.plugins.list")
+def _(rid, params: dict) -> dict:
+    try:
+        from anakot_cli.web_server import _get_dashboard_plugins
+        from anakot_cli.config import load_config, cfg_get
+
+        plugins = _get_dashboard_plugins()
+        config = load_config()
+        hidden: list = cfg_get(config, "dashboard", "hidden_plugins", default=[]) or []
+
+        return _ok(
+            rid,
+            [
+                {k: v for k, v in p.items() if not k.startswith("_")}
+                for p in plugins
+                if p["name"] not in hidden
+            ]
+        )
+    except Exception as e:
+        return _err(rid, 5033, str(e))
+
+
 @method("config.show")
 def _(rid, params: dict) -> dict:
     try:

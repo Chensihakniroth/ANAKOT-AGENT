@@ -294,6 +294,16 @@ export function ConfigSettings({
     } catch {
       // Config save below will still persist to disk; RPC failure is non-fatal.
     }
+    // Apply personality: use config.set with key=personality so the backend resolves
+    // the personality prompt from agent.personalities and writes BOTH display.personality
+    // AND agent.system_prompt to config.yaml (gateway re-reads on next message).
+    console.log('[personality] setting personality to:', value)
+    try {
+      const result = await gateway.request('config.set', { key: 'personality', value: value || 'none' })
+      console.log('[personality] config.set result:', result)
+    } catch (err) {
+      console.error('[personality] config.set error:', err)
+    }
   }
 
   const sectionFields = useMemo(() => {

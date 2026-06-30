@@ -172,6 +172,7 @@ export interface AnakotConfig {
   display?: {
     personality?: string
     skin?: string
+    theme?: string
   }
   terminal?: {
     cwd?: string
