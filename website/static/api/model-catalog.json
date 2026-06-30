@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-06-04T23:57:51Z",
+  "updated_at": "2026-06-30T12:37:06Z",
   "metadata": {
     "source": "anakot-agent repo",
     "docs": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/reference/model-catalog"
@@ -127,6 +127,22 @@
         {
           "id": "inclusionai/ring-2.6-1t:free",
           "description": "free"
+        },
+        {
+          "id": "qwen/qwen3-coder:free",
+          "description": ""
+        },
+        {
+          "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "description": ""
+        },
+        {
+          "id": "google/lyria-3-pro-preview",
+          "description": ""
+        },
+        {
+          "id": "google/lyria-3-clip-preview",
+          "description": ""
         }
       ]
     },
