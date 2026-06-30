@@ -16,7 +16,7 @@ export interface TerminalSettings {
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
 export const TERMINAL_DEFAULTS: Readonly<TerminalSettings> = {
-  fontFamily: "'JetBrains Mono', 'Cascadia Code', 'SF Mono', 'Menlo', monospace",
+  fontFamily: "'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'Cascadia Code', 'JetBrains Mono', monospace",
   fontSize: 11,
   cursorStyle: 'block',
   cursorBlink: true,
@@ -27,6 +27,8 @@ export const TERMINAL_DEFAULTS: Readonly<TerminalSettings> = {
 // ── Curated font list ────────────────────────────────────────────────────────
 
 export const TERMINAL_FONT_OPTIONS = [
+  { label: 'JetBrainsMono Nerd Font', value: "'JetBrainsMono Nerd Font', monospace" },
+  { label: 'FiraCode Nerd Font', value: "'FiraCode Nerd Font', monospace" },
   { label: 'JetBrains Mono', value: "'JetBrains Mono', monospace" },
   { label: 'Fira Code', value: "'Fira Code', monospace" },
   { label: 'Cascadia Code', value: "'Cascadia Code', monospace" },

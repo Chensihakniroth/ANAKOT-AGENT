@@ -1,7 +1,7 @@
 # Anakot Agent ☤
 
 <p align="center">
-  <a href="https://anakot-agent.callmemo.ai/docs/"><img src="https://img.shields.io/badge/Docs-anakot--agent.callmemo.ai-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/"><img src="https://img.shields.io/badge/Docs-anakot--agent.callmemo.ai-FFD700?style=for-the-badge" alt="Documentation"></a>
   <a href="https://discord.gg/callmemo"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/callmemo/anakot-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
   <a href="https://callmemo.ai"><img src="https://img.shields.io/badge/Built%20by-callmemo-blueviolet?style=for-the-badge" alt="Built by callmemo"></a>
@@ -27,7 +27,7 @@ Anakot isn't just a chatbot—it's an autonomous operator that manages local fil
 ### Quick Install (Linux, macOS, WSL2)
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+curl -fsSL https://github.com/Chensihakniroth/ANAKOT-AGENT/install.sh | bash
 ```
 
 ### Windows Setup
@@ -41,15 +41,15 @@ Native Windows is supported via the setup script in this repository. Open PowerS
 
 ## 📖 Documentation
 
-Full documentation, including installation guides, API references, and developer tutorials, is available at **[anakot-agent.callmemo.ai/docs](https://anakot-agent.callmemo.ai/docs/)**.
+Full documentation, including installation guides, API references, and developer tutorials, is available at **[anakot-agent.callmemo.ai/docs](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/)**.
 
 | Section | Description |
 |---------|-------------|
-| [Quickstart](https://anakot-agent.callmemo.ai/docs/getting-started/quickstart) | Install → setup → first conversation in 2 minutes |
-| [CLI Usage](https://anakot-agent.callmemo.ai/docs/user-guide/cli) | Commands, keybindings, personalities, sessions |
-| [Configuration](https://anakot-agent.callmemo.ai/docs/user-guide/configuration) | Config file, providers, models, all options |
-| [Local AI Guide](https://anakot-agent.callmemo.ai/docs/user-guide/features/local-ai) | Running Anakot with Ollama and LM Studio |
-| [Security](https://anakot-agent.callmemo.ai/docs/user-guide/security) | Command approval, DM pairing, container isolation |
+| [Quickstart](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/getting-started/quickstart) | Install → setup → first conversation in 2 minutes |
+| [CLI Usage](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/cli) | Commands, keybindings, personalities, sessions |
+| [Configuration](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/configuration) | Config file, providers, models, all options |
+| [Local AI Guide](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/features/local-ai) | Running Anakot with Ollama and LM Studio |
+| [Security](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/security) | Command approval, DM pairing, container isolation |
 
 ---
 

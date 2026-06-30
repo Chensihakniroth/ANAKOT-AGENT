@@ -47,33 +47,44 @@ Pick the row that matches your goal:
 ---
 
 ## 1. Install Anakot Agent
-### With the Anakot Desktop installer on macOS or Windows (recommended)
-To easily install the command-line and desktop applications, [download the Anakot Desktop installer](https://anakot-agent.callmemo.ai/desktop) from our website and run it.
 
-### Without Anakot Desktop:
-For a command-line only install without Anakot Desktop, run:
-
-#### Linux / macOS / WSL2 / Android (Termux)
+### Option A: Clone from GitHub (Recommended)
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
 ```
 
-#### Windows (native)
+Then set up the environment:
 
-Run in powershell:
+#### Linux / macOS / WSL2
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+pip install -r requirements.txt
+```
+
+#### Windows (PowerShell)
 ```powershell
-iex (irm https://anakot-agent.callmemo.ai/install.ps1) 
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -e .
+pip install -r requirements.txt
 ```
 
-:::tip Android / Termux
-If you're installing on a phone, see the dedicated [Termux guide](./termux.md) for the tested manual path, supported extras, and current Android-specific limitations.
-:::
-
-After it finishes, reload your shell:
-
+#### Android (Termux)
 ```bash
-source ~/.bashrc   # or source ~/.zshrc
+pkg install python nodejs git
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+pip install -r requirements.txt
 ```
+
+### Option B: Download a Desktop Release
+1. Go to [GitHub Releases](https://github.com/Chensihakniroth/ANAKOT-AGENT/releases)
+2. Download the latest installer for your platform
+3. Run it
 
 For detailed installation options, prerequisites, and troubleshooting, see the [Installation guide](./installation.md).
 
@@ -85,47 +96,20 @@ The single most important setup step. Use `anakot model` to walk through the cho
 anakot model
 ```
 
-:::tip Easiest path: callmemo Portal
-One subscription covers 300+ models plus the [Tool Gateway](../user-guide/features/tool-gateway.md) (web search, image generation, TTS, cloud browser). On a fresh install:
-
-```bash
-anakot setup --portal
-```
-
-That logs you in, sets callmemo as your provider, and turns on the Tool Gateway in one command.
+:::tip
+During setup you'll be prompted to choose an LLM provider. You can use any provider — OpenRouter, Anthropic, OpenAI, Google, etc. Have your API key ready.
 :::
 
 Good defaults:
 
 | Provider | What it is | How to set up |
 |----------|-----------|---------------|
-| **callmemo Portal** | Subscription-based, zero-config | OAuth login via `anakot model` |
-| **OpenAI Codex** | ChatGPT OAuth, uses Codex models | Device code auth via `anakot model` |
-| **Anthropic** | Claude models directly — Max plan + extra usage credits (OAuth), or API key for pay-per-token | `anakot model` → OAuth login (requires Max + extra credits), or an Anthropic API key |
 | **OpenRouter** | Multi-provider routing across many models | Enter your API key |
-| **Z.AI** | GLM / Zhipu-hosted models | Set `GLM_API_KEY` / `ZAI_API_KEY` (also accepts `Z_AI_API_KEY`) |
-| **Kimi / Moonshot** | Moonshot-hosted coding and chat models | Set `KIMI_API_KEY` (or the Kimi-Coding-specific `KIMI_CODING_API_KEY`) |
-| **Kimi / Moonshot China** | China-region Moonshot endpoint | Set `KIMI_CN_API_KEY` |
-| **Arcee AI** | Trinity models | Set `ARCEEAI_API_KEY` |
-| **GMI Cloud** | Multi-model direct API | Set `GMI_API_KEY` |
-| **MiniMax (OAuth)** | MiniMax frontier model via browser OAuth — no API key needed (model name in `anakot_cli/models.py` may change between releases) | `anakot model` → MiniMax (OAuth) |
-| **MiniMax** | International MiniMax endpoint | Set `MINIMAX_API_KEY` |
-| **MiniMax China** | China-region MiniMax endpoint | Set `MINIMAX_CN_API_KEY` |
-| **Alibaba Cloud** | Qwen models via DashScope | Set `DASHSCOPE_API_KEY` (Qwen Coding Plan also accepts `ALIBABA_CODING_PLAN_API_KEY`) |
-| **Hugging Face** | 20+ open models via unified router (Qwen, DeepSeek, Kimi, etc.) | Set `HF_TOKEN` |
-| **AWS Bedrock** | Claude, Nova, Llama, DeepSeek via native Converse API | IAM role or `aws configure` ([guide](../guides/aws-bedrock.md)) |
-| **Azure Foundry** | Azure AI Foundry-hosted models | Set `AZURE_FOUNDRY_API_KEY` + `AZURE_FOUNDRY_BASE_URL` |
+| **Anthropic** | Claude models directly | `anakot model` → OAuth login, or an Anthropic API key |
+| **OpenAI** | GPT models | `OPENAI_API_KEY` |
 | **Google AI Studio** | Gemini models via direct API | Set `GOOGLE_API_KEY` / `GEMINI_API_KEY` |
-| **Google Gemini (OAuth)** | Gemini via the `google-gemini-cli` OAuth flow — no key needed | `anakot model` → Google Gemini (OAuth) |
-| **xAI** | Grok models via direct API | Set `XAI_API_KEY` |
-| **xAI Grok OAuth** | SuperGrok / Premium+ subscription, no API key needed | `anakot model` → xAI Grok OAuth |
-| **NovitaAI** | Multi-model API gateway | Set `NOVITA_API_KEY` |
-| **StepFun** | Step Plan models | Set `STEPFUN_API_KEY` |
-| **Xiaomi MiMo** | Xiaomi-hosted models | Set `XIAOMI_API_KEY` |
-| **Tencent TokenHub** | Tencent-hosted models | Set `TOKENHUB_API_KEY` |
-| **Ollama Cloud** | Managed Ollama-hosted models | Set `OLLAMA_API_KEY` |
-| **LM Studio** | Local desktop app exposing an OpenAI-compatible API | Set `LM_API_KEY` (and `LM_BASE_URL` if non-default) |
-| **Qwen OAuth** | Qwen Portal browser OAuth — no API key needed | `anakot model` → Qwen OAuth |
+| **Google Gemini (OAuth)** | Gemini via OAuth flow — no key needed | `anakot model` → Google Gemini (OAuth) |
+| **xAI** | Grok models | Set `XAI_API_KEY` |
 | **Kilo Code** | KiloCode-hosted models | Set `KILOCODE_API_KEY` |
 | **OpenCode Zen** | Pay-as-you-go access to curated models | Set `OPENCODE_ZEN_API_KEY` |
 | **OpenCode Go** | $10/month subscription for open models | Set `OPENCODE_GO_API_KEY` |

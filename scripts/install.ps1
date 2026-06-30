@@ -5,7 +5,7 @@
 # Uses uv for fast Python provisioning and package management.
 #
 # Usage:
-#   iex (irm https://anakot-agent.callmemo.ai/install.ps1)
+#   iex (irm https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1)
 #
 # Or download and run with options:
 #   .\install.ps1 -NoVenv -SkipSetup
@@ -92,8 +92,8 @@ try {
 # Configuration
 # ============================================================================
 
-$RepoUrlSsh = "git@github.com:callmemo/anakot-agent.git"
-$RepoUrlHttps = "https://github.com/callmemo/anakot-agent.git"
+$RepoUrlSsh = "git@github.com:Chensihakniroth/ANAKOT-AGENT.git"
+$RepoUrlHttps = "https://github.com:Chensihakniroth/ANAKOT-AGENT.git"
 $PythonVersion = "3.11"
 $NodeVersion = "22"
 
@@ -160,7 +160,7 @@ function Write-Banner {
     Write-Host "+---------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host "|             * Anakot Agent Installer                    |" -ForegroundColor Magenta
     Write-Host "+---------------------------------------------------------+" -ForegroundColor Magenta
-    Write-Host "|  An open source AI agent by callmemo.              |" -ForegroundColor Magenta
+    Write-Host "|  An open source AI agent for everyone.            |" -ForegroundColor Magenta
     Write-Host "+---------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host ""
 }
@@ -1255,13 +1255,13 @@ function Install-Repository {
                 # for.  GitHub supports archive URLs for commits, tags, and
                 # branches; we honour Commit > Tag > Branch.
                 if ($Commit) {
-                    $zipUrl = "https://github.com/callmemo/anakot-agent/archive/$Commit.zip"
+                    $zipUrl = "https://github.com/Chensihakniroth/ANAKOT-AGENT/archive/$Commit.zip"
                     $zipLabel = $Commit
                 } elseif ($Tag) {
-                    $zipUrl = "https://github.com/callmemo/anakot-agent/archive/refs/tags/$Tag.zip"
+                    $zipUrl = "https://github.com/Chensihakniroth/ANAKOT-AGENT/archive/refs/tags/$Tag.zip"
                     $zipLabel = $Tag
                 } else {
-                    $zipUrl = "https://github.com/callmemo/anakot-agent/archive/refs/heads/$Branch.zip"
+                    $zipUrl = "https://github.com/Chensihakniroth/ANAKOT-AGENT/archive/refs/heads/$Branch.zip"
                     $zipLabel = $Branch
                 }
                 $zipPath = "$env:TEMP\anakot-agent-$zipLabel.zip"
@@ -3011,7 +3011,7 @@ try {
     Write-Err "Installation failed: $_"
     Write-Host ""
     Write-Info "If the error is unclear, try downloading and running the script directly:"
-    Write-Host "  Invoke-WebRequest -Uri 'https://anakot-agent.callmemo.ai/install.ps1' -OutFile install.ps1" -ForegroundColor Yellow
+    Write-Host "  Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1' -OutFile install.ps1" -ForegroundColor Yellow
     Write-Host "  .\install.ps1" -ForegroundColor Yellow
     Write-Host ""
 }

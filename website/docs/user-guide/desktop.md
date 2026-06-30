@@ -73,7 +73,7 @@ The app also surfaces the broader Anakot management surface so you don't have to
 
 The app checks for updates in the background and offers a one-click update when one is ready.
 
-The [manual update process](https://anakot-agent.callmemo.ai/docs/getting-started/updating) also works with the GUI.
+The [manual update process](https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/website/docs/getting-started/updating) also works with the GUI.
 
 ## Uninstalling
 

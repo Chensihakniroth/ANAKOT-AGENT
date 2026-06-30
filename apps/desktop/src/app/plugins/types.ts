@@ -29,6 +29,8 @@ export interface PluginManifest {
    */
   integrity?: string;
   source: string;
+  /** "remote" plugins come from the gateway; "local" plugins are built into the desktop app. */
+  kind?: 'remote' | 'local';
 }
 
 export interface RegisteredPlugin {

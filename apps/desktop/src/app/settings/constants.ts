@@ -347,6 +347,9 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
     targetRatio: 'Compression Target',
     protectLastN: 'Protected Recent Messages'
   },
+  obsidian: {
+    vaultPath: 'Obsidian Vault Path'
+  },
   delegation: {
     model: 'Subagent Model',
     provider: 'Subagent Provider',
@@ -414,6 +417,9 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   updates: {
     nonInteractiveLocalChanges:
       'When Anakot updates itself from the app (no terminal prompt), keep local source edits (stash) or throw them away (discard). Terminal updates always ask.'
+  },
+  obsidian: {
+    vaultPath: 'Path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory for markdown notes and their [[WikiLink]] connections.'
   }
 })
 
@@ -511,6 +517,12 @@ export const SECTIONS: DesktopConfigSection[] = [
     label: 'Terminal',
     icon: Terminal,
     keys: []
+  },
+  {
+    id: 'obsidian',
+    label: 'Knowledge Graph',
+    icon: Sparkles,
+    keys: ['obsidian.vault_path']
   },
   {
     id: 'advanced',

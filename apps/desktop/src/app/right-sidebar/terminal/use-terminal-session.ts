@@ -634,7 +634,20 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
 
   return {
     addSelectionToChat,
-    clear: () => termRef.current?.clear(),
+    clear: () => {
+      const term = termRef.current
+      if (!term) return
+      // Send the clear command to the shell so OhMyPosh re-renders properly
+      const id = sessionIdRef.current
+      if (id) {
+        const isWindowsShell = shellNameRef.current.includes('powershell')
+          || shellNameRef.current.includes('pwsh')
+          || shellNameRef.current.includes('cmd')
+        void window.anakotDesktop?.terminal?.write(id, isWindowsShell ? 'cls\r' : 'clear\r')
+      }
+      // Also clear xterm's visual buffer/scrollback
+      term.clear()
+    },
     hostRef,
     selection,
     selectionStyle,

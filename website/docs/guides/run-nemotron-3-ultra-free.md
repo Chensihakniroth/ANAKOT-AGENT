@@ -20,7 +20,7 @@ The simplest path: a one-click installer with a guided, point-and-click setup. N
 
 ### 1. Download and install
 
-[Download the Anakot Desktop installer](https://anakot-agent.callmemo.ai/desktop) for macOS or Windows, then open it. On first launch it finishes setting itself up (usually under a minute).
+[Download the Anakot Desktop installer](https://github.com/Chensihakniroth/ANAKOT-AGENT/releases) for macOS or Windows, then open it. On first launch it finishes setting itself up (usually under a minute).
 
 ### 2. Connect callmemo Portal
 
@@ -49,16 +49,16 @@ Prefer the terminal?
 On macOS/Linux/WSL2/Android, run
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.sh | bash
 ```
 
 On Windows, run
 
 ```powershell
-iex (irm https://anakot-agent.callmemo.ai/install.ps1)
+iex (irm https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1)
 ```
 
-Prefer to review first? Download [`install.sh`](https://anakot-agent.callmemo.ai/install.sh), inspect it, then run it.
+Prefer to review first? Download [`install.sh`](https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.sh), inspect it, then run it.
 
 After it finishes, reload your shell:
 

@@ -2113,7 +2113,7 @@ DEFAULT_CONFIG = {
     # The default URL is served by the docs site GitHub Pages deploy.
     "model_catalog": {
         "enabled": True,
-        "url": "https://anakot-agent.callmemo.ai/docs/api/model-catalog.json",
+        "url": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/api/model-catalog.json",
         # Disk cache TTL in hours.  Beyond this, the CLI refetches on the
         # next /model or `anakot model` invocation; network failures
         # silently fall back to the stale cache.
@@ -2418,6 +2418,12 @@ DEFAULT_CONFIG = {
     "paste_collapse_threshold_fallback": 5,
     "paste_collapse_char_threshold": 2000,
 
+
+    # Obsidian Knowledge Graph — path to the user's Obsidian vault directory.
+    # Used by the desktop Knowledge Graph panel to visualize note connections.
+    "obsidian": {
+        "vault_path": "",
+    },
 
     # Config schema version - bump this when adding new required fields
     "_config_version": 27,

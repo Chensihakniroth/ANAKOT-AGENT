@@ -68,7 +68,7 @@ anakot memory setup        # select "honcho" — runs the Honcho-specific post-s
 
 The legacy `anakot honcho setup` command still works (it now redirects to `anakot memory setup`), but is only registered after Honcho is selected as the active memory provider.
 
-**Config:** `$ANAKOT_HOME/honcho.json` (profile-local) or `~/.honcho/config.json` (global). Resolution order: `$ANAKOT_HOME/honcho.json` > `~/.anakot/honcho.json` > `~/.honcho/config.json`. See the [config reference](https://github.com/callmemo/anakot-agent/blob/main/plugins/memory/honcho/README.md) and the [Honcho integration guide](https://docs.honcho.dev/v3/guides/integrations/anakot).
+**Config:** `$ANAKOT_HOME/honcho.json` (profile-local) or `~/.honcho/config.json` (global). Resolution order: `$ANAKOT_HOME/honcho.json` > `~/.anakot/honcho.json` > `~/.honcho/config.json`. See the [config reference](https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/plugins/memory/honcho/README.md) and the [Honcho integration guide](https://docs.honcho.dev/v3/guides/integrations/anakot).
 
 <details>
 <summary>Full config reference</summary>
@@ -255,7 +255,7 @@ See the [Honcho page](./honcho.md#observation-directional-vs-unified) for the fu
 
 </details>
 
-See the [config reference](https://github.com/callmemo/anakot-agent/blob/main/plugins/memory/honcho/README.md) and [Honcho integration guide](https://docs.honcho.dev/v3/guides/integrations/anakot).
+See the [config reference](https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/plugins/memory/honcho/README.md) and [Honcho integration guide](https://docs.honcho.dev/v3/guides/integrations/anakot).
 
 
 ---
@@ -366,7 +366,7 @@ The setup wizard installs dependencies automatically and only installs what's ne
 | `retain_assistant_prefix` | `Assistant` | Label used before assistant turns in auto-retained transcripts |
 | `recall_tags` | — | Tags to filter on recall |
 
-See [plugin README](https://github.com/callmemo/anakot-agent/blob/main/plugins/memory/hindsight/README.md) for the full configuration reference.
+See [plugin README](https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/plugins/memory/hindsight/README.md) for the full configuration reference.
 
 ---
 

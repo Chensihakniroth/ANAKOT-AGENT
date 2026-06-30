@@ -3,7 +3,7 @@
   "updated_at": "2026-06-04T23:57:51Z",
   "metadata": {
     "source": "anakot-agent repo",
-    "docs": "https://anakot-agent.callmemo.ai/docs/reference/model-catalog"
+    "docs": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/reference/model-catalog"
   },
   "providers": {
     "openrouter": {

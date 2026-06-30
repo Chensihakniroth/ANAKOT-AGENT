@@ -955,6 +955,8 @@ export interface Translations {
     allSetTitle: string
     availableTitle: string
     availableBody: string
+    packagedUpdateBody: string
+    packagedUpdateButton: string
     updateNow: string
     maybeLater: string
     moreChanges: (count: number) => string

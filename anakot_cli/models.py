@@ -2218,7 +2218,7 @@ def get_curated_callmemo_model_ids() -> list[str]:
     """
     # Try remote manifest first
     try:
-        url = "https://anakot-agent.callmemo.ai/docs/api/model-catalog.json"
+        url = "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/api/model-catalog.json"
         req = urllib.request.Request(url, headers={"User-Agent": _ANAKOT_USER_AGENT})
         with urllib.request.urlopen(req, timeout=5.0) as resp:
             data = json.loads(resp.read().decode())

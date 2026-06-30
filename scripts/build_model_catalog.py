@@ -16,8 +16,7 @@ Usage::
 
 Output: ``website/static/api/model-catalog.json``
 
-Live URL (after ``deploy-site.yml`` runs on merge to main):
-``https://anakot-agent.callmemo.ai/docs/api/model-catalog.json``
+Live URL: https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/website/static/api/model-catalog.json
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ def build_catalog() -> dict:
         "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "metadata": {
             "source": "anakot-agent repo",
-            "docs": "https://anakot-agent.callmemo.ai/docs/reference/model-catalog",
+            "docs": "https://github.com/Chensihakniroth/ANAKOT-AGENT/blob/main/website/docs/reference/model-catalog.md",
         },
         "providers": {
             "openrouter": {

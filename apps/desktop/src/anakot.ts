@@ -34,6 +34,7 @@ import type {
   ProfilesResponse,
   SessionMessagesResponse,
   SessionSearchResponse,
+  SessionStoreStats,
   SkillInfo,
   StatusResponse,
   ToolsetConfig,
@@ -93,6 +94,7 @@ export type {
   SessionRuntimeInfo,
   SessionSearchResponse,
   SessionSearchResult,
+  SessionStoreStats,
   SkillInfo,
   StaleAuxAssignment,
   StatusResponse,
@@ -132,16 +134,17 @@ export async function listSessions(
   limit = 40,
   minMessages = 0,
   archived: 'exclude' | 'include' | 'only' = 'exclude',
-  order: 'created' | 'recent' = 'recent'
+  order: 'created' | 'recent' = 'recent',
+  offset = 0
 ): Promise<PaginatedSessions> {
   const result = await window.anakotDesktop.api<PaginatedSessions>({
-    path: `/api/sessions?limit=${limit}&offset=0&min_messages=${Math.max(0, minMessages)}&archived=${archived}&order=${order}`
+    path: `/api/sessions?limit=${limit}&offset=${offset}&min_messages=${Math.max(0, minMessages)}&archived=${archived}&order=${order}`
   })
 
   return {
     ...result,
     sessions: result.sessions.slice(0, limit),
-    offset: 0
+    offset
   }
 }
 
@@ -218,6 +221,41 @@ export function renameSession(
     path: `/api/sessions/${encodeURIComponent(id)}`,
     method: 'PATCH',
     body: { title, ...(profile ? { profile } : {}) }
+  })
+}
+
+export function getSessionStats(): Promise<SessionStoreStats> {
+  return window.anakotDesktop.api<SessionStoreStats>({
+    path: '/api/sessions/stats'
+  })
+}
+
+export function getEmptySessionsCount(): Promise<{ count: number }> {
+  return window.anakotDesktop.api<{ count: number }>({
+    path: '/api/sessions/empty/count'
+  })
+}
+
+export function deleteEmptySessions(): Promise<{ ok: boolean; deleted: number }> {
+  return window.anakotDesktop.api<{ ok: boolean; deleted: number }>({
+    path: '/api/sessions/empty',
+    method: 'DELETE'
+  })
+}
+
+export function bulkDeleteSessions(ids: string[]): Promise<{ ok: boolean; deleted: number }> {
+  return window.anakotDesktop.api<{ ok: boolean; deleted: number }>({
+    path: '/api/sessions/bulk-delete',
+    method: 'POST',
+    body: { ids }
+  })
+}
+
+export function pruneSessions(olderThanDays: number, source?: string): Promise<{ ok: boolean; removed: number }> {
+  return window.anakotDesktop.api<{ ok: boolean; removed: number }>({
+    path: '/api/sessions/prune',
+    method: 'POST',
+    body: { older_than_days: olderThanDays, source }
   })
 }
 

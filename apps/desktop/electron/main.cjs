@@ -1377,7 +1377,12 @@ async function checkUpdates() {
   const updateRoot = resolveUpdateRoot()
   let { branch } = readDesktopUpdateConfig()
   const gitDir = path.join(updateRoot, '.git')
+
   if (!directoryExists(gitDir)) {
+    // Packaged install — no local .git. Fall back to GitHub API check using install-stamp.
+    if (IS_PACKAGED && INSTALL_STAMP?.commit) {
+      return checkUpdatesPackaged(branch || INSTALL_STAMP.branch || 'main')
+    }
     return {
       supported: false,
       reason: 'not-a-git-checkout',
@@ -1423,6 +1428,82 @@ async function checkUpdates() {
     dirty: dirtyStr.length > 0,
     anakotRoot: updateRoot,
     fetchedAt: Date.now()
+  }
+}
+
+// Check updates for packaged installs via GitHub API
+async function checkUpdatesPackaged(branch) {
+  const GITHUB_API = 'https://api.github.com/repos/Chensihakniroth/ANAKOT-AGENT'
+  const RELEASES_URL = 'https://github.com/Chensihakniroth/ANAKOT-AGENT/releases'
+
+  try {
+    // Get latest commit on the tracked branch from GitHub
+    const response = await fetch(`${GITHUB_API}/commits/${branch}`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json' },
+      signal: AbortSignal.timeout(10_000)
+    })
+
+    if (!response.ok) {
+      return {
+        supported: true,
+        branch,
+        error: 'api-failed',
+        message: `GitHub API returned ${response.status}.`,
+        anakotRoot: INSTALL_STAMP?.path ?? null,
+        fetchedAt: Date.now()
+      }
+    }
+
+    const latestCommit = await response.json()
+    const latestSha = latestCommit.sha
+
+    // Compare: get commits between installed and latest
+    const compareResponse = await fetch(
+      `${GITHUB_API}/compare/${installedSha}...${latestSha}`,
+      {
+        headers: { 'Accept': 'application/vnd.github.v3+json' },
+        signal: AbortSignal.timeout(10_000)
+      }
+    )
+
+    if (!compareResponse.ok) {
+      // If compare fails (e.g. force-push), fall back to just checking if SHAs differ
+      const behind = installedSha && installedSha !== latestSha ? 1 : 0
+      return {
+        supported: true,
+        branch,
+        behind,
+        currentSha: installedSha,
+        targetSha: latestSha,
+        commits: behind > 0 ? [] : [],
+        anakotRoot: INSTALL_STAMP?.path ?? null,
+        fetchedAt: Date.now()
+      }
+    }
+
+    const compare = await compareResponse.json()
+    const behind = compare.behind_by ?? 0
+
+    return {
+      supported: true,
+      branch,
+      behind,
+      currentSha: installedSha,
+      targetSha: latestSha,
+      commits: [], // Packaged installs don't show commit changelog
+      packaged: true,
+      anakotRoot: INSTALL_STAMP?.path ?? null,
+      fetchedAt: Date.now()
+    }
+  } catch (error) {
+    return {
+      supported: true,
+      branch,
+      error: 'check-failed',
+      message: error instanceof Error ? error.message : String(error),
+      anakotRoot: INSTALL_STAMP?.path ?? null,
+      fetchedAt: Date.now()
+    }
   }
 }
 
@@ -1612,6 +1693,24 @@ async function releaseBackendLock(updateRoot, tag) {
 // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
 // only this apply action changed.
 async function applyUpdates(opts = {}) {
+  // Packaged install with no local git checkout — can't self-update via git.
+  // Open the GitHub releases page so the user can download the new version.
+  if (IS_PACKAGED) {
+    const updateRoot = resolveUpdateRoot()
+    const gitDir = path.join(updateRoot, '.git')
+    if (!directoryExists(gitDir)) {
+      const { shell } = require('electron')
+      const RELEASES_URL = 'https://github.com/Chensihakniroth/ANAKOT-AGENT/releases'
+      await shell.openExternal(RELEASES_URL)
+      emitUpdateProgress({
+        stage: 'manual',
+        message: 'Opened GitHub releases in browser — download the latest version to update.',
+        percent: null
+      })
+      return { ok: true, manual: true, command: RELEASES_URL, packaged: true, anakotRoot: updateRoot }
+    }
+  }
+
   if (updateInFlight) {
     throw new Error('An update is already in progress.')
   }
@@ -6069,6 +6168,96 @@ ipcMain.handle('anakot:version', async () => ({
   platform: process.platform,
   anakotRoot: resolveUpdateRoot()
 }))
+
+// ===========================================================================
+// Obsidian Knowledge Graph — vault path and scanner
+// ===========================================================================
+
+ipcMain.handle('anakot:obsidian:getVaultPath', async () => {
+  try {
+    // 1. Check environment variable first
+    let vaultPath = process.env.OBSIDIAN_VAULT_PATH || ''
+
+    // 2. Fall back to config file obsidian.vault_path
+    if (!vaultPath) {
+      try {
+        const fs = require('node:fs')
+        const path = require('node:path')
+        const os = require('node:os')
+        const configPath = path.join(os.homedir(), '.anakot', 'config.yaml')
+        if (fs.existsSync(configPath)) {
+          const yaml = fs.readFileSync(configPath, 'utf-8')
+          const match = yaml.match(/^obsidian:\s*[\s\S]*?vault_path:\s*["']?([^"\n]+?)["']?\s*$/m)
+          if (match) vaultPath = match[1].trim()
+        }
+      } catch {
+        // ignore config read errors
+      }
+    }
+
+    return { ok: true, path: vaultPath }
+  } catch {
+    return { ok: false, path: '' }
+  }
+})
+
+ipcMain.handle('anakot:obsidian:scanVault', (_event, rootPath) => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  if (!rootPath || !fs.existsSync(rootPath)) {
+    return { ok: false, error: 'vault path not found', graph: { nodes: [], links: [] } }
+  }
+
+  const nodes = []
+  const links = []
+  const linkCounts = new Map()
+
+  function scanDir(dir, group) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) {
+        path.join(dir, entry.name) // reference
+        scanDir(path.join(dir, entry.name), entry.name)
+        continue
+      }
+      if (!entry.name.endsWith('.md')) continue
+
+      const filePath = path.join(dir, entry.name)
+      const id = entry.name.replace(/\.md$/, '')
+      const content = fs.readFileSync(filePath, 'utf-8')
+
+      let name = id
+      const fmMatch = content.match(/^---\s*\n[\s\S]*?title:\s*(?:["\x27]([^"\x27]+)["\x27]|([^\n]+))\n[\s\S]*?---/)
+      if (fmMatch) name = (fmMatch[1] || fmMatch[2] || id).trim()
+
+      const linkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g
+      let match
+      const targets = new Set()
+      while ((match = linkRegex.exec(content)) !== null) {
+        const target = match[1].trim()
+        targets.add(target)
+        linkCounts.set(target, (linkCounts.get(target) || 0) + 1)
+      }
+
+      nodes.push({ id, name, path: filePath, group: group || 'root', size: 0 })
+
+      for (const target of targets) {
+        links.push({ source: id, target })
+      }
+    }
+  }
+
+  scanDir(rootPath, '')
+
+  for (const node of nodes) {
+    const outgoing = links.filter(l => l.source === node.id).length
+    const incoming = linkCounts.get(node.id) || 0
+    node.size = Math.max(4, Math.min(20, (outgoing + incoming) * 2))
+  }
+
+  return { ok: true, rootPath, graph: { nodes, links } }
+})
 
 // ===========================================================================
 // Uninstall — remove the Chat GUI (and optionally the agent / user data).

@@ -13,7 +13,7 @@ If you haven't installed Anakot Agent yet, begin with the [Installation guide](/
 :::
 
 :::tip First-time provider setup
-First-time users almost always want `anakot setup --portal` — one OAuth covers a model plus the four Tool Gateway tools (search/image/TTS/browser). See [callmemo Portal](/integrations/callmemo-portal).
+When you run `anakot setup`, you'll be prompted to choose an LLM provider. Have your API key ready for OpenRouter, Anthropic, OpenAI, Google, or any other supported provider.
 :::
 
 ## How to Use This Page
@@ -100,13 +100,11 @@ page is for built-in Anakot core development, not the usual user/custom-tool pat
 
 ### "I want to train models"
 
-Use reinforcement learning to fine-tune model behavior with Anakot Agent's RL training pipeline (powered by [Atropos](https://github.com/callmemo/atropos)).
+Use reinforcement learning to fine-tune model behavior with Anakot Agent's RL training pipeline.
 
 1. [Quickstart](/getting-started/quickstart)
 2. [Configuration](/user-guide/configuration)
-3. [Atropos RL Environments](https://github.com/callmemo/atropos) (external)
-4. [Provider Routing](/user-guide/features/provider-routing)
-5. [Architecture](/developer-guide/architecture)
+3. [Architecture](/developer-guide/architecture)
 
 :::tip
 RL training works best when you already understand the basics of how Anakot Agent handles conversations and tool calls. Run through the Beginner path first if you're new.

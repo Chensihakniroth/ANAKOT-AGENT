@@ -110,6 +110,18 @@ declare global {
         onMessage: (id: string, callback: (msg: object) => void) => () => void
         onExit: (id: string, callback: (payload: { code: number | null }) => void) => () => void
       }
+
+      // Obsidian Knowledge Graph
+      getObsidianVaultPath: () => Promise<{ ok: boolean; path: string }>
+      scanObsidianVault: (rootPath: string) => Promise<{
+        ok: boolean
+        rootPath?: string
+        error?: string
+        graph: {
+          nodes: Array<{ id: string; name: string; path: string; group: string; size: number }>
+          links: Array<{ source: string; target: string }>
+        }
+      }>
     }
   }
 }
@@ -177,6 +189,7 @@ export interface DesktopUpdateStatus {
   commits?: DesktopUpdateCommit[]
   dirty?: boolean
   fetchedAt?: number
+  packaged?: boolean
 }
 
 export type DesktopUpdateDirtyStrategy = 'abort' | 'stash' | 'force'

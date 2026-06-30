@@ -101,7 +101,7 @@ Follow these patterns from the Hermes docs:
 - **Hermes upstream docs:** https://hermes-agent.nousresearch.com/docs/
 - **Anakot GitHub:** https://github.com/callmemo/anakot-agent
 - **Anakot Obsidian vault:** `C:\Users\Niroth\Documents\Obsidian Vault\Anakot Agent\`
-- ⚠️ `https://anakot-agent.callmemo.ai/docs` is NOT a real URL — never reference it
+- ⚠️ `https://github.com/Chensihakniroth/ANAKOT-AGENT/docs` is NOT a real URL — never reference it
 
 ## Maintenance
 

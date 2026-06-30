@@ -214,7 +214,7 @@ If you've worked through this guide and the issue persists:
 
 1. Run the job with `anakot cron run <job_id>` (fires on next gateway tick) and watch for errors in the chat output
 2. Check `~/.anakot/logs/agent.log` for scheduler messages and `~/.anakot/logs/errors.log` for warnings
-3. Open an issue at [github.com/callmemo/anakot-agent](https://github.com/callmemo/anakot-agent) with:
+3. Open an issue at [github.com/callmemo/anakot-agent](https://github.com/Chensihakniroth/ANAKOT-AGENT) with:
    - The job ID and schedule
    - The delivery target
    - What you expected vs. what happened

@@ -362,6 +362,11 @@ async def auth_middleware(request: Request, call_next):
 
 # Manual overrides for fields that need select options or custom types
 _SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "obsidian.vault_path": {
+        "type": "text",
+        "description": "Path to your Obsidian vault folder for the Knowledge Graph panel",
+        "category": "general",
+    },
     "model": {
         "type": "string",
         "description": "Default model (e.g. anthropic/claude-sonnet-4.6)",
@@ -1904,6 +1909,26 @@ async def get_config():
     return {k: v for k, v in config.items() if not k.startswith("_")}
 
 
+@app.post("/api/obsidian/validate-path")
+async def validate_obsidian_path(body: dict):
+    """Validate that a path exists and contains markdown files."""
+    import os
+    vault_path = body.get("path", "")
+    if not vault_path:
+        return {"ok": False, "valid": False, "error": "No path provided"}
+    if not os.path.isdir(vault_path):
+        return {"ok": False, "valid": False, "error": "Path does not exist or is not a directory"}
+    # Count markdown files
+    md_count = 0
+    for root, dirs, files in os.walk(vault_path):
+        # Skip hidden directories
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for f in files:
+            if f.endswith(".md"):
+                md_count += 1
+    return {"ok": True, "valid": True, "count": md_count}
+
+
 @app.get("/api/config/defaults")
 async def get_defaults():
     return DEFAULT_CONFIG
@@ -2642,7 +2667,7 @@ _PLATFORM_OVERRIDES: dict[str, dict[str, Any]] = {
     "email": {
         "name": "Email",
         "description": "Talk to Anakot through an IMAP/SMTP mailbox.",
-        "docs_url": "https://anakot-agent.callmemo.ai/docs/user-guide/messaging/",
+        "docs_url": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/messaging/",
         "env_vars": (
             "EMAIL_ADDRESS",
             "EMAIL_PASSWORD",
@@ -2740,7 +2765,7 @@ _PLATFORM_OVERRIDES: dict[str, dict[str, Any]] = {
     "api_server": {
         "name": "API server",
         "description": "Expose Anakot as an OpenAI-compatible HTTP API for tools like Open WebUI.",
-        "docs_url": "https://anakot-agent.callmemo.ai/docs/user-guide/messaging/",
+        "docs_url": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/messaging/",
         "env_vars": (
             "API_SERVER_ENABLED",
             "API_SERVER_KEY",
@@ -2753,7 +2778,7 @@ _PLATFORM_OVERRIDES: dict[str, dict[str, Any]] = {
     "webhook": {
         "name": "Webhooks",
         "description": "Receive events from GitHub, GitLab, and other webhook sources.",
-        "docs_url": "https://anakot-agent.callmemo.ai/docs/user-guide/messaging/webhooks/",
+        "docs_url": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/messaging/webhooks/",
         "env_vars": ("WEBHOOK_ENABLED", "WEBHOOK_PORT", "WEBHOOK_SECRET"),
         "required_env": (),
     },
@@ -3800,7 +3825,7 @@ _OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
         # lands back on the loopback listener — no code to copy/paste.
         "flow": "loopback",
         "cli_command": "anakot auth add xai-oauth",
-        "docs_url": "https://anakot-agent.callmemo.ai/docs/guides/xai-grok-oauth",
+        "docs_url": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/guides/xai-grok-oauth",
         "status_fn": None,  # dispatched via auth.get_xai_oauth_auth_status
     },
     # ── Anthropic / Claude entries sit at the bottom: the API-key path

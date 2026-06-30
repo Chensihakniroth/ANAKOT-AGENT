@@ -33,7 +33,7 @@ def test_agent_json_matches_official_registry_required_fields():
     assert data["name"] == "Anakot Agent"
     assert data["description"]
     assert data["repository"] == "https://github.com/callmemo/anakot-agent"
-    assert data["website"].startswith("https://anakot-agent.callmemo.ai/")
+    assert data["website"].startswith("https://github.com/Chensihakniroth/ANAKOT-AGENT/")
     assert data["authors"] == ["callmemo"]
     assert data["license"] == "MIT"
     assert set(data["distribution"]) <= ALLOWED_DISTRIBUTIONS

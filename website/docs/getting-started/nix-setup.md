@@ -66,7 +66,7 @@ The `full` variant adds ~700 MB to the closure. If you only need messaging platf
 <summary><strong>Building from a local clone</strong></summary>
 
 ```bash
-git clone https://github.com/callmemo/anakot-agent.git
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
 cd anakot-agent
 nix build
 ./result/bin/anakot setup

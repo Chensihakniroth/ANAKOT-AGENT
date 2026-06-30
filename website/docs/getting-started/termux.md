@@ -41,20 +41,16 @@ That does not stop Anakot from working well as a phone-native CLI agent — it j
 
 ---
 
-## Option 1: One-line installer
-
-Anakot now ships a Termux-aware installer path:
+## Quick Install
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+pkg install python nodejs git
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate
+pip install -e '.[termux]' -c constraints-termux.txt
 ```
-
-On Termux, the installer automatically:
-- uses `pkg` for system packages
-- creates the venv with `python -m venv`
-- attempts the broad `.[termux-all]` extra first and falls back to the smaller `.[termux]` extra (then a base install) — the curl installer matches this order automatically
-- links `anakot` into `$PREFIX/bin` so it stays on your Termux PATH
-- skips the untested browser / WhatsApp bootstrap
 
 If you want the explicit commands or need to debug a failed install, use the manual path below.
 
@@ -80,7 +76,7 @@ Why these packages?
 ### 2. Clone Anakot
 
 ```bash
-git clone https://github.com/callmemo/anakot-agent.git
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
 cd anakot-agent
 ```
 

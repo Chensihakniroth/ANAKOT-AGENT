@@ -149,9 +149,9 @@ anakot webhook subscribe pr-review \
   --deliver github_comment
 ```
 
-Full automation templates gallery: [anakot-agent.callmemo.ai/docs/guides/automation-templates](https://anakot-agent.callmemo.ai/docs/guides/automation-templates)
+Full automation templates gallery: [anakot-agent.callmemo.ai/docs/guides/automation-templates](https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/guides/automation-templates)
 
-Documentation: [anakot-agent.callmemo.ai](https://anakot-agent.callmemo.ai)
+Documentation: [anakot-agent.callmemo.ai](https://github.com/Chensihakniroth/ANAKOT-AGENT)
 
 GitHub: [github.com/callmemo/anakot-agent](https://github.com/callmemo/anakot-agent)
 

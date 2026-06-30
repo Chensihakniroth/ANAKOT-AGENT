@@ -11,10 +11,15 @@ import {
   getLogs,
   getStatus,
   getUsageAnalytics,
+  getSessionStats,
+  getEmptySessionsCount,
+  deleteEmptySessions,
+  bulkDeleteSessions,
+  pruneSessions,
   restartGateway,
-  updateAnakot
+  updateAnakot,
 } from '@/anakot'
-import type { ActionStatusResponse, AnalyticsResponse, StatusResponse } from '@/anakot'
+import type { ActionStatusResponse, AnalyticsResponse, StatusResponse, SessionStoreStats } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { Activity, AlertCircle, BarChart3, Pin } from '@/lib/icons'
@@ -132,6 +137,27 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
   const [usageLoading, setUsageLoading] = useState(false)
   const [usageError, setUsageError] = useState('')
   const usageRequestRef = useRef(0)
+
+  // Sessions section: stats, bulk select, bulk delete, prune
+  const [sessionStats, setSessionStats] = useState<SessionStoreStats | null>(null)
+  const [emptyCount, setEmptyCount] = useState(0)
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set())
+  const lastSelectedIndexRef = useRef<number | null>(null)
+
+  const refreshSessionStats = useCallback(async () => {
+    const [stats, empty] = await Promise.all([
+      getSessionStats().catch(() => null),
+      getEmptySessionsCount().catch(() => ({ count: 0 })),
+    ])
+    setSessionStats(stats)
+    setEmptyCount(empty.count)
+  }, [])
+
+  useEffect(() => {
+    if (section === 'sessions' && !sessionStats) {
+      void refreshSessionStats()
+    }
+  }, [section, sessionStats, refreshSessionStats])
 
   const debouncedQuery = useDebouncedValue(query.trim(), 180)
 
@@ -264,6 +290,51 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
     [cc, refreshSystem]
   )
 
+  // Bulk session actions
+  const handleBulkDelete = useCallback(async () => {
+    const ids = [...selectedSessionIds]
+    if (!ids.length) return
+    await bulkDeleteSessions(ids)
+    setSelectedSessionIds(new Set())
+    lastSelectedIndexRef.current = null
+    void refreshSessionStats()
+  }, [selectedSessionIds, refreshSessionStats])
+
+  const handleDeleteEmpty = useCallback(async () => {
+    await deleteEmptySessions()
+    void refreshSessionStats()
+  }, [refreshSessionStats])
+
+  const handlePrune = useCallback(async (days: number) => {
+    await pruneSessions(days)
+    void refreshSessionStats()
+  }, [refreshSessionStats])
+
+  const handleToggleSelect = useCallback((id: string, index: number, shiftKey: boolean) => {
+    setSelectedSessionIds(prev => {
+      const next = new Set(prev)
+      if (shiftKey && lastSelectedIndexRef.current !== null) {
+        const ids = filteredSessions.map(s => s.id)
+        const from = Math.min(lastSelectedIndexRef.current, index)
+        const to = Math.max(lastSelectedIndexRef.current, index)
+        for (let i = from; i <= to; i++) next.add(ids[i])
+      } else if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      lastSelectedIndexRef.current = index
+      return next
+    })
+  }, [filteredSessions])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedSessionIds(prev => {
+      if (prev.size === filteredSessions.length) return new Set()
+      return new Set(filteredSessions.map(s => s.id))
+    })
+  }, [filteredSessions])
+
   return (
     <OverlayView closeLabel={cc.close} onClose={onClose}>
       <OverlaySplitLayout>
@@ -310,16 +381,91 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
 
           {section === 'sessions' ? (
             <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* Stats bar */}
+              {sessionStats && (
+                <div className="flex items-center gap-3 border-b border-(--ui-stroke-secondary) pb-2 text-[0.6875rem] text-(--ui-text-tertiary)">
+                  <span>{sessionStats.total} total</span>
+                  <span className="text-(--ui-stroke-secondary)">·</span>
+                  <span>{sessionStats.messages} messages</span>
+                  <span className="text-(--ui-stroke-secondary)">·</span>
+                  <span>{sessionStats.active_store} active</span>
+                  {emptyCount > 0 && (
+                    <>
+                      <span className="text-(--ui-stroke-secondary)">·</span>
+                      <span className="text-amber-500">{emptyCount} empty</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Bulk action bar */}
+              {selectedSessionIds.size > 0 && (
+                <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) py-1.5">
+                  <span className="text-[0.6875rem] text-(--ui-text-tertiary)">{selectedSessionIds.size} selected</span>
+                  <Button
+                    size="xs"
+                    variant="text"
+                    className="gap-1 text-destructive"
+                    onClick={() => { if (window.confirm(`Delete ${selectedSessionIds.size} selected sessions?`)) void handleBulkDelete() }}
+                  >
+                    <IconTrash className="size-3" />
+                    Delete selected
+                  </Button>
+                  <Button size="xs" variant="text" onClick={() => setSelectedSessionIds(new Set())}>
+                    Clear selection
+                  </Button>
+                </div>
+              )}
+
+              {/* Toolbar: select all + delete empty + prune */}
+              <div className="flex items-center gap-1.5 py-1.5">
+                <Button size="xs" variant="text" onClick={handleSelectAll}>
+                  {selectedSessionIds.size === filteredSessions.length && filteredSessions.length > 0 ? 'Deselect all' : 'Select all'}
+                </Button>
+                {emptyCount > 0 && (
+                  <Button
+                    size="xs"
+                    variant="text"
+                    className="gap-1 text-destructive"
+                    onClick={() => { if (window.confirm(`Delete ${emptyCount} empty sessions?`)) void handleDeleteEmpty() }}
+                  >
+                    <IconTrash className="size-3" />
+                    Delete empty ({emptyCount})
+                  </Button>
+                )}
+                <Button
+                  size="xs"
+                  variant="text"
+                  onClick={() => {
+                    const days = prompt('Prune sessions older than (days):', '90')
+                    if (days) void handlePrune(parseInt(days, 10))
+                  }}
+                >
+                  Prune old sessions
+                </Button>
+              </div>
+
               {!sessionListHasResults ? (
                 <EmptyPanel description={debouncedQuery ? cc.noResults : cc.noSessions} />
               ) : (
                 <ul>
-                  {filteredSessions.map(session => {
+                  {filteredSessions.map((session, index) => {
                     const pinId = sessionPinId(session)
                     const pinned = pinnedSessionIds.includes(pinId)
+                    const isSelected = selectedSessionIds.has(session.id)
 
                     return (
-                      <li className="group flex items-center gap-2 py-2" key={session.id}>
+                      <li
+                        className={`group flex items-center gap-2 py-2 ${isSelected ? 'bg-primary/[0.06] rounded-md' : ''}`}
+                        key={session.id}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          className="ml-2 shrink-0"
+                          onChange={() => handleToggleSelect(session.id, index, false)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleToggleSelect(session.id, index, e.shiftKey) }}
+                        />
                         <button
                           className="min-w-0 flex-1 text-left"
                           onClick={() => onOpenSession(session.id)}

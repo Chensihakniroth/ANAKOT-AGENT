@@ -1354,6 +1354,8 @@ export const ja = defineLocale({
     allSetTitle: '準備完了',
     availableTitle: '新しい更新が利用可能',
     availableBody: '新しいバージョンの Anakot をインストールする準備ができています。',
+    packagedUpdateBody: '新しいバージョンが利用可能です。GitHub から最新バージョンをダウンロードして更新してください。',
+    packagedUpdateButton: 'GitHub からダウンロード',
     updateNow: '今すぐ更新',
     maybeLater: '後で',
     moreChanges: count => `さらに ${count} 件の変更が含まれています。`,

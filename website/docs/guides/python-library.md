@@ -15,19 +15,19 @@ Anakot isn't just a CLI tool. You can import `AIAgent` directly and use it progr
 Install Anakot directly from the repository:
 
 ```bash
-pip install git+https://github.com/callmemo/anakot-agent.git
+pip install git+https://github.com/Chensihakniroth/ANAKOT-AGENT.git
 ```
 
 Or with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv pip install git+https://github.com/callmemo/anakot-agent.git
+uv pip install git+https://github.com/Chensihakniroth/ANAKOT-AGENT.git
 ```
 
 You can also pin it in your `requirements.txt`:
 
 ```text
-anakot-agent @ git+https://github.com/callmemo/anakot-agent.git
+anakot-agent @ git+https://github.com/Chensihakniroth/ANAKOT-AGENT.git
 ```
 
 :::tip

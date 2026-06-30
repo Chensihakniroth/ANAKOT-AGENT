@@ -17,12 +17,12 @@ If you prefer a real POSIX environment (for the dashboard's embedded terminal, `
 
 ## Quick install
 
-[Download the Anakot Desktop installer](https://anakot-agent.callmemo.ai/desktop) from our website and run it.
+[Download the Anakot Desktop installer](https://github.com/Chensihakniroth/ANAKOT-AGENT/releases) from our website and run it.
 
 Or, for a command-line only install, open **PowerShell** (or Windows Terminal) and run:
 
 ```powershell
-iex (irm https://anakot-agent.callmemo.ai/install.ps1)
+iex (irm https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1)
 ```
 
 No admin rights required. The installer goes to `%LOCALAPPDATA%\anakot\` and adds `anakot` to your **User PATH** — open a new terminal after it finishes.
@@ -30,7 +30,7 @@ No admin rights required. The installer goes to `%LOCALAPPDATA%\anakot\` and add
 **Installer options** (requires the scriptblock form to pass parameters):
 
 ```powershell
-& ([scriptblock]::Create((irm https://anakot-agent.callmemo.ai/install.ps1))) -NoVenv -SkipSetup -Branch main
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1))) -NoVenv -SkipSetup -Branch main
 ```
 
 | Parameter     | Default                              | Purpose                                                    |

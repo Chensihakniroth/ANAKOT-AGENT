@@ -16,8 +16,7 @@ Quick answers and fixes for the most common questions and issues.
 
 Anakot Agent works with any OpenAI-compatible API. Supported providers include:
 
-- **[OpenRouter](https://openrouter.ai/)** — access hundreds of models through one API key (recommended for flexibility)
-- **[callmemo Portal](/integrations/callmemo-portal)** — callmemo's subscription gateway — 300+ models plus web/image/TTS/browser through one OAuth login (recommended for newcomers)
+- **[OpenRouter](https://openrouter.ai/)** — access hundreds of models through one API key (recommended)
 - **OpenAI** — GPT-5.4, GPT-5-codex, GPT-4.1, GPT-4o, etc.
 - **Anthropic** — Claude models (direct API, OAuth via `anakot auth add anthropic`, OpenRouter, or any compatible proxy)
 - **Google** — Gemini models (direct API via `gemini` provider, the `google-gemini-cli` OAuth provider, OpenRouter, or compatible proxy)
@@ -30,10 +29,14 @@ Set your provider with `anakot model` or by editing `~/.anakot/.env`. See the [E
 
 ### Does it work on Windows?
 
-**Not natively.** Anakot Agent requires a Unix-like environment. On Windows, install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run Anakot from inside it. The standard install command works perfectly in WSL2:
+**Not natively.** Anakot Agent requires a Unix-like environment. On Windows, install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run Anakot from inside it:
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate
+pip install -e .
 ```
 
 ### I run Anakot in WSL2. What's the best way to control my normal Windows Chrome?
@@ -56,12 +59,17 @@ See:
 
 ### Does it work on Android / Termux?
 
-Yes — Anakot now has a tested Termux install path for Android phones.
+Yes — Anakot has a tested Termux install path for Android phones.
 
 Quick install:
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+pkg install python nodejs git
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate
+pip install -e '.[termux]' -c constraints-termux.txt
 ```
 
 For the fully explicit manual steps, supported extras, and current limitations, see the [Termux guide](../getting-started/termux.md).
@@ -224,8 +232,12 @@ source ~/.bashrc
 # Don't use sudo with the installer — it installs to ~/.local/bin
 # If you previously installed with sudo, clean up:
 sudo rm /usr/local/bin/anakot
-# Then re-run the standard installer
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+# Then re-install from the repo
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate
+pip install -e .
 ```
 
 ---
@@ -751,7 +763,12 @@ Skills with very long descriptions are truncated to 40 characters in the Telegra
 
 1. Install Anakot Agent on the new machine:
    ```bash
-   curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+   git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+   cd ANAKOT-AGENT
+   python -m venv venv
+   source venv/bin/activate
+   pip install -e .
+   cd ~
    ```
 
 2. On the **source machine**, create a full backup:
@@ -855,6 +872,6 @@ If using OpenRouter, make sure your API key has credits. A 400 from OpenRouter o
 
 If your issue isn't covered here:
 
-1. **Search existing issues:** [GitHub Issues](https://github.com/callmemo/anakot-agent/issues)
+1. **Search existing issues:** [GitHub Issues](https://github.com/Chensihakniroth/ANAKOT-AGENT/issues)
 2. **Ask the community:** [callmemo Discord](https://discord.gg/nousresearch)
 3. **File a bug report:** Include your OS, Python version (`python3 --version`), Anakot version (`anakot --version`), and the full error message

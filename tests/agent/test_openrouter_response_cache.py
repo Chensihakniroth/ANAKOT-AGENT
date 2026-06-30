@@ -18,7 +18,7 @@ class TestBuildOrHeaders:
         from agent.auxiliary_client import build_or_headers
 
         headers = build_or_headers(or_config={"response_cache": False})
-        assert headers["HTTP-Referer"] == "https://anakot-agent.callmemo.ai"
+        assert headers["HTTP-Referer"] == "https://github.com/Chensihakniroth/ANAKOT-AGENT"
         assert headers["X-Title"] == "Anakot Agent"
         assert headers["X-OpenRouter-Categories"] == "productivity,cli-agent"
 

@@ -7,7 +7,7 @@ const config: Config = {
   tagline: 'The self-improving AI agent',
   favicon: 'img/favicon.ico',
 
-  url: 'https://anakot-agent.callmemo.ai',
+  url: 'https://github.com/Chensihakniroth/ANAKOT-AGENT',
   baseUrl: '/docs/',
 
   organizationName: 'callmemo',
@@ -114,7 +114,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://anakot-agent.callmemo.ai/desktop',
+          href: 'https://github.com/Chensihakniroth/ANAKOT-AGENT/desktop',
           label: 'Download',
           position: 'left',
         },
@@ -123,7 +123,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://anakot-agent.callmemo.ai',
+          href: 'https://github.com/Chensihakniroth/ANAKOT-AGENT',
           label: 'Home',
           position: 'right',
         },
@@ -162,7 +162,7 @@ const config: Config = {
         {
           title: 'More',
           items: [
-            { label: 'Desktop Download', href: 'https://anakot-agent.callmemo.ai/desktop' },
+            { label: 'Desktop Download', href: 'https://github.com/Chensihakniroth/ANAKOT-AGENT/desktop' },
             { label: 'GitHub', href: 'https://github.com/callmemo/anakot-agent' },
             { label: 'callmemo', href: 'https://callmemo.ai' },
           ],

@@ -201,7 +201,7 @@ def build_parser(parent_subparsers: argparse._SubParsersAction) -> argparse.Argu
             "Durable SQLite-backed task board shared across Anakot profiles. "
             "Tasks are claimed atomically, can depend on other tasks, and "
             "are executed by a named profile in an isolated workspace. "
-            "See https://anakot-agent.callmemo.ai/docs/user-guide/features/kanban "
+            "See https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/features/kanban "
             "or docs/anakot-kanban-v1-spec.pdf for the full design."
         ),
     )

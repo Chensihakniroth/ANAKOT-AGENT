@@ -553,6 +553,14 @@ export interface SessionSearchResponse {
   results: SessionSearchResult[]
 }
 
+export interface SessionStoreStats {
+  total: number
+  active_store: number
+  archived: number
+  messages: number
+  by_source: Record<string, number>
+}
+
 export interface LogsResponse {
   file: string
   lines: string[]

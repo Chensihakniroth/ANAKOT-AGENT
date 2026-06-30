@@ -4,7 +4,7 @@
   "version": "0.16.0",
   "description": "Self-improving open-source AI agent by callmemo with ACP editor integration, persistent memory, skills, and rich tool support.",
   "repository": "https://github.com/callmemo/anakot-agent",
-  "website": "https://anakot-agent.callmemo.ai/docs/user-guide/features/acp",
+  "website": "https://github.com/Chensihakniroth/ANAKOT-AGENT/docs/user-guide/features/acp",
   "authors": ["callmemo"],
   "license": "MIT",
   "distribution": {

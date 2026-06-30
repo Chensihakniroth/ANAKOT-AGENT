@@ -174,5 +174,9 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
       ipcRenderer.on(channel, listener)
       return () => ipcRenderer.removeListener(channel, listener)
     }
-  }
+  },
+
+  // Obsidian Knowledge Graph
+  getObsidianVaultPath: () => ipcRenderer.invoke('anakot:obsidian:getVaultPath'),
+  scanObsidianVault: rootPath => ipcRenderer.invoke('anakot:obsidian:scanVault', rootPath),
 })

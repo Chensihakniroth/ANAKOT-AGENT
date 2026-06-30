@@ -867,9 +867,9 @@ def _perform_uninstall(
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():
-            print(color("  iex (irm https://anakot-agent.callmemo.ai/install.ps1)", Colors.DIM))
+            print(color("  iex (irm https://github.com/Chensihakniroth/ANAKOT-AGENT/install.ps1)", Colors.DIM))
         else:
-            print(color("  curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash", Colors.DIM))
+            print(color("  curl -fsSL https://github.com/Chensihakniroth/ANAKOT-AGENT/install.sh | bash", Colors.DIM))
         print()
 
     if _is_windows():

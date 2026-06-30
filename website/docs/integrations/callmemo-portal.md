@@ -260,7 +260,7 @@ The Portal proxies through OpenRouter, so any model that OpenRouter supports is 
 /model anthropic/claude-opus-4.6
 ```
 
-If a model is genuinely missing, [open an issue](https://github.com/callmemo/anakot-agent/issues) — we surface the Portal's catalog to Anakot and gaps usually mean a routing config we can update.
+If a model is genuinely missing, [open an issue](https://github.com/Chensihakniroth/ANAKOT-AGENT/issues) — we surface the Portal's catalog to Anakot and gaps usually mean a routing config we can update.
 
 ### Bills not appearing on my Portal account
 

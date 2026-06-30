@@ -9,52 +9,100 @@ description: "Install Anakot Agent on Linux, macOS, WSL2, native Windows, or And
 Get Anakot Agent up and running in under two minutes!
 
 ## Quick Install
-### With the Anakot Desktop installer on macOS or Windows (recommended)
-To easily install the command-line and desktop applications, [download the Anakot Desktop installer](https://anakot-agent.callmemo.ai/desktop) from our website and run it.
 
-### Without Anakot Desktop:
-For a command-line only install without Anakot Desktop, run:
+### Option 1: Clone from GitHub (Recommended)
 
-#### Linux / macOS / WSL2 / Android (Termux)
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
 ```
 
-#### Windows (native)
+Then follow the platform-specific setup:
 
-Run in powershell:
+#### Linux / macOS / WSL2
+
+```bash
+# Install Python 3.11+ if not present, then:
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+pip install -r requirements.txt
+
+# For desktop app:
+cd apps/desktop
+npm install
+npm run dev
+```
+
+#### Windows (PowerShell)
+
 ```powershell
-iex (irm https://anakot-agent.callmemo.ai/install.ps1) 
+# Install Python 3.11+ if not present, then:
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -e .
+pip install -r requirements.txt
+
+# For desktop app:
+cd apps/desktop
+npm install
+npm run dev
 ```
 
-If you want to install & run Anakot Desktop after a command-line only install, simply run
+#### Android (Termux)
+
 ```bash
-anakot desktop
+pkg install python nodejs git
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+pip install -r requirements.txt
 ```
 
-### What the Installer Does
+### Option 2: Download a Release (Desktop App)
 
-The installer handles everything automatically — all dependencies (Python, Node.js, ripgrep, ffmpeg), the repo clone, virtual environment, global `anakot` command setup, and LLM provider configuration. By the end, you're ready to chat.
+1. Go to [GitHub Releases](https://github.com/Chensihakniroth/ANAKOT-AGENT/releases)
+2. Download the latest release for your platform:
+   - Windows: `Anakot-Setup-x.x.x.exe`
+   - macOS: `Anakot-Setup-x.x.x.dmg`
+   - Linux: `Anakot-Setup-x.x.x.AppImage`
+3. Run the installer / app
 
-#### Install Layout
+---
 
-Where the installer puts things depends on whether you're installing as a normal user or as root:
+## Prerequisites
 
-| Installer | Code lives at | `anakot` binary | Data directory |
+| Dependency | Version | Required For | Install |
 |---|---|---|---|
-| pip install | Python site-packages | `~/.local/bin/anakot` (console_scripts) | `~/.anakot/` |
-| Per-user (git installer) | `~/.anakot/anakot-agent/` | `~/.local/bin/anakot` (symlink) | `~/.anakot/` |
-| Root-mode (`sudo curl … \| sudo bash`) | `/usr/local/lib/anakot-agent/` | `/usr/local/bin/anakot` | `/root/.anakot/` (or `$ANAKOT_HOME`) |
+| **Python** | 3.11+ | Core agent | [python.org](https://python.org) |
+| **Node.js** | v22+ | Desktop app, browser automation | [nodejs.org](https://nodejs.org) or `nvm` |
+| **Git** | any | Installation, updates | `apt/brew install git` |
+| **uv** | any | Fast Python package management | `pip install uv` (optional) |
+| **ripgrep** | any | Fast file search | `apt/brew install ripgrep` (optional) |
+| **ffmpeg** | any | Audio format conversion for TTS | `apt/brew install ffmpeg` (optional) |
 
-The root-mode **FHS layout** (`/usr/local/lib/…`, `/usr/local/bin/anakot`) matches where other system-wide developer tools land on Linux. It's useful for shared-machine deployments where one system install should serve every user. Per-user config (auth, skills, sessions) still lives under each user's `~/.anakot/` or explicit `ANAKOT_HOME`.
+:::info
+You do **not** need Node.js if you only want the CLI agent. Install Python 3.11+ and Git, then clone and run.
+:::
 
-### After Installation
+---
 
-Reload your shell and start chatting:
+## After Installation
+
+### CLI Agent
 
 ```bash
-source ~/.bashrc   # or: source ~/.zshrc
-anakot             # Start chatting!
+source venv/bin/activate  # or .\venv\Scripts\Activate.ps1 on Windows
+anakot                     # Start chatting!
+```
+
+### Desktop App
+
+```bash
+cd apps/desktop
+npm run dev
 ```
 
 To reconfigure individual settings later, use the dedicated commands:
@@ -67,91 +115,33 @@ anakot config set     # Set individual config values
 anakot setup          # Or run the full setup wizard to configure everything at once
 ```
 
-:::tip Fastest path: callmemo Portal
-One subscription covers 300+ models plus the [Tool Gateway](/user-guide/features/tool-gateway) (web search, image generation, TTS, cloud browser). Skip the per-tool key juggling:
+---
 
+## Updates
+
+### Source Install (git clone)
 ```bash
-anakot setup --portal
+cd ANAKOT-AGENT
+git pull origin main
+pip install -e .        # Reinstall if dependencies changed
 ```
 
-That logs you in, sets callmemo as your provider, and turns on the Tool Gateway in one command.
-:::
-
----
-
-## Prerequisites
-
-**Installer:** On non-Windows platforms, the only prerequisite is **Git**. The installer automatically handles everything else:
-
-- **uv** (fast Python package manager)
-- **Python 3.11** (via uv, no sudo needed)
-- **Node.js v22** (for browser automation and WhatsApp bridge)
-- **ripgrep** (fast file search)
-- **ffmpeg** (audio format conversion for TTS)
-
-:::info
-You do **not** need to install Python, Node.js, ripgrep, or ffmpeg manually. The installer detects what's missing and installs it for you. Just make sure `git` is available (`git --version`).
-:::
-
-:::tip Nix users
-If you use Nix (on NixOS, macOS, or Linux), there's a dedicated setup path with a Nix flake, declarative NixOS module, and optional container mode. See the **[Nix & NixOS Setup](./nix-setup.md)** guide.
-:::
-
----
-
-## Manual / Developer Installation
-
-If you want to clone the repo and install from source — for contributing, running from a specific branch, or having full control over the virtual environment — see the [Development Setup](../developer-guide/contributing.md#development-setup) section in the Contributing guide.
-
----
-
-## Non-Sudo / System Service User Installs
-
-Running Anakot as a dedicated unprivileged user (e.g. a `anakot` systemd service account, or any user without `sudo` access) is supported. The only thing on the install path that genuinely needs root is Playwright's `--with-deps` step, which `apt`-installs shared libraries (`libnss3`, `libxkbcommon`, etc.) used by Chromium. The installer detects whether sudo is available and gracefully degrades when it isn't — it will install the Chromium binary into the service user's own Playwright cache and print the exact command an administrator needs to run separately.
-
-**Recommended split (Debian/Ubuntu):**
-
-1. **One time, as an admin user with sudo**, install the system libraries Chromium needs:
-   ```bash
-   sudo npx playwright install-deps chromium
-   ```
-   (You can run this from anywhere — `npx` will fetch Playwright on the fly.)
-
-2. **As the unprivileged service user**, run the regular installer. It will detect the missing sudo, skip `--with-deps`, and install Chromium into the user's local Playwright cache:
-   ```bash
-   curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
-   ```
-
-   If you want to skip the Playwright step entirely — for example because you're running headless and don't need browser automation — pass `--skip-browser`:
-   ```bash
-   curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash -s -- --skip-browser
-   ```
-
-3. **Make `anakot` available to the service user's shells.** The installer writes the launcher to `~/.local/bin/anakot`. System service accounts often have a minimal PATH that doesn't include `~/.local/bin`. Either add it to the user's environment, or symlink the launcher into a system location:
-   ```bash
-   # Option A — add to the service user's profile
-   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-
-   # Option B — symlink system-wide (run as an admin)
-   sudo ln -s /home/anakot/.anakot/anakot-agent/venv/bin/anakot /usr/local/bin/anakot
-   ```
-
-4. **Verify:** `anakot doctor` should now run cleanly. If you get `ModuleNotFoundError: No module named 'dotenv'`, you're invoking the repo source `anakot` file (`~/.anakot/anakot-agent/anakot`) with system Python instead of the venv launcher (`~/.anakot/anakot-agent/venv/bin/anakot`) — fix step 3.
-
-The same pattern works on Arch (the installer uses pacman with the same sudo-detection logic), Fedora/RHEL, and openSUSE — those distros don't support `--with-deps` at all, so an administrator always installs the system libraries separately. The relevant `dnf`/`zypper` commands are printed by the installer.
+### Packaged Install (Desktop App)
+The desktop app checks GitHub for updates every 30 minutes. When a new version is available:
+- The version indicator in the bottom-right shows `v{x.x.x} (+{N})`
+- Click it to open the Update dialog
+- Click **Download from GitHub** to get the latest release
 
 ---
 
 ## Troubleshooting
 
 | Problem | Solution |
-|---------|----------|
-| `anakot: command not found` | Reload your shell (`source ~/.bashrc`) or check PATH |
-| `API key not set` | Run `anakot model` to configure your provider, or `anakot config set OPENROUTER_API_KEY your_key` |
+|---|---|
+| `anakot: command not found` | Run `source venv/bin/activate` or check PATH |
+| `API key not set` | Run `anakot model` to configure your provider |
+| `ModuleNotFoundError` | Run `pip install -e .` from the project root |
+| Desktop app won't start | Run `npm install && npm run build` in `apps/desktop/` |
 | Missing config after update | Run `anakot config check` then `anakot config migrate` |
 
 For more diagnostics, run `anakot doctor` — it will tell you exactly what's missing and how to fix it.
-
-## Install method auto-detection
-
-Anakot auto-detects whether it was installed via `pip`, the git installer, Homebrew, or NixOS, and `anakot update` prints the matching update command for that path. There's no env var to set — the detection is based on the install layout (Python site-packages, `~/.anakot/anakot-agent/`, Homebrew prefix, or Nix store path). `anakot doctor` also surfaces the detected method under its environment summary.

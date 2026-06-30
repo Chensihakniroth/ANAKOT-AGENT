@@ -36,7 +36,7 @@ The self-improving AI agent built by [callmemo](https://callmemo.ai). The only a
     Get Started →
   </Link>
   <a
-    href="https://anakot-agent.callmemo.ai/desktop"
+    href="https://github.com/Chensihakniroth/ANAKOT-AGENT/releases"
     style={{
       display: "inline-block",
       padding: "0.6rem 1.2rem",
@@ -48,7 +48,7 @@ The self-improving AI agent built by [callmemo](https://callmemo.ai). The only a
     Download Desktop
   </a>
   <a
-    href="https://github.com/callmemo/anakot-agent"
+    href="https://github.com/Chensihakniroth/ANAKOT-AGENT"
     style={{
       display: "inline-block",
       padding: "0.6rem 1.2rem",
@@ -63,32 +63,27 @@ The self-improving AI agent built by [callmemo](https://callmemo.ai). The only a
 
 ## Install
 
-### Windows or macOS
-
-To easily install the command-line and desktop applications, [download the Anakot Desktop installer](https://anakot-agent.callmemo.ai/desktop) from our website and run it.
-
-### Without Anakot Desktop:
-
-For a command-line only install without Anakot Desktop, run:
-
-#### Linux / macOS / WSL2 / Android (Termux)
+### Quick Install (All Platforms)
 
 ```bash
-curl -fsSL https://anakot-agent.callmemo.ai/install.sh | bash
+git clone https://github.com/Chensihakniroth/ANAKOT-AGENT.git
+cd ANAKOT-AGENT
+python -m venv venv
+source venv/bin/activate   # Windows: .\venv\Scripts\Activate.ps1
+pip install -e .
+pip install -r requirements.txt
 ```
 
-#### Windows (native)
+### Desktop App
 
-Run in powershell:
+1. Go to [GitHub Releases](https://github.com/Chensihakniroth/ANAKOT-AGENT/releases)
+2. Download the latest installer for your platform (`.exe`, `.dmg`, or `.AppImage`)
+3. Run it
 
-```powershell
-iex (irm https://anakot-agent.callmemo.ai/install.ps1)
-```
-
-See the full **[Installation Guide](/getting-started/installation)** for what the installer does, the per-user vs root layout, and Windows-specific notes.
+See the full **[Installation Guide](/getting-started/installation)** for platform-specific setup, prerequisites, and troubleshooting.
 
 :::tip Fastest path to a working agent
-After installing, run `anakot setup --portal` — one OAuth covers a model plus all four Tool Gateway tools (web search, image generation, TTS, browser). See [callmemo Portal](/integrations/callmemo-portal).
+After installing, run `anakot setup` to configure your LLM provider and start chatting.
 :::
 
 ## What is Anakot Agent?

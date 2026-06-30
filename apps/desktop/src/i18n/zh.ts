@@ -1402,6 +1402,8 @@ export const zh: Translations = {
     allSetTitle: '已是最新',
     availableTitle: '有可用更新',
     availableBody: '新版 Anakot 已可安装。',
+    packagedUpdateBody: '有新版本可用。请从 GitHub 下载最新版本以更新已安装的应用。',
+    packagedUpdateButton: '从 GitHub 下载',
     updateNow: '立即更新',
     maybeLater: '稍后再说',
     moreChanges: count => `另有 ${count} 项更改。`,

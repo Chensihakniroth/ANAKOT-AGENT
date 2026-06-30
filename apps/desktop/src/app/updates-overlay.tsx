@@ -174,6 +174,24 @@ function IdleView({
     )
   }
 
+  // Packaged install — no commit log available
+  if (status?.packaged) {
+    return (
+      <div className="grid gap-5 px-6 pb-6 pt-7 pr-8">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <BrandMark className="size-16" />
+          <DialogTitle className="text-center text-xl">{u.availableTitle}</DialogTitle>
+          <DialogDescription className="text-center text-sm">
+            {u.packagedUpdateBody}
+          </DialogDescription>
+        </div>
+        <Button onClick={onInstall} size="sm">
+          {u.packagedUpdateButton}
+        </Button>
+      </div>
+    )
+  }
+
   const groups = buildCommitChangelog(commits)
   const shownItems = totalItems(groups)
   const remaining = Math.max(0, behind - shownItems)

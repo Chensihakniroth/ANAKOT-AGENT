@@ -1320,6 +1320,8 @@ export const zhHant = defineLocale({
     allSetTitle: '已是最新版本',
     availableTitle: '有可用更新',
     availableBody: '新版 Anakot 已可安裝。',
+    packagedUpdateBody: '有新版本可用。請從 GitHub 下載最新版本以更新已安裝的應用程式。',
+    packagedUpdateButton: '從 GitHub 下載',
     updateNow: '立即更新',
     maybeLater: '稍後再說',
     moreChanges: count => `另有 ${count} 項變更。`,

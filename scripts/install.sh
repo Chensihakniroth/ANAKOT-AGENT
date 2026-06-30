@@ -111,7 +111,7 @@ print_banner() {
     echo "┌─────────────────────────────────────────────────────────┐"
     echo "│          Anakot Agent Installer — TUI Edition           │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  An open source AI agent by callmemo.                   │"
+    echo "│  An open source AI agent for everyone.                 │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }

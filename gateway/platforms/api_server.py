@@ -1328,11 +1328,18 @@ class APIServerAdapter(BasePlatformAdapter):
         offset = self._parse_nonnegative_int(request.query.get("offset"), default=0, maximum=1_000_000)
         source = request.query.get("source") or None
         include_children = _coerce_request_bool(request.query.get("include_children"), default=False)
+        min_messages = self._parse_nonnegative_int(request.query.get("min_messages"), default=0, maximum=10_000)
+        archived_param = request.query.get("archived", "exclude")
+        archived_only = archived_param == "only"
+        include_archived = archived_param == "include" or archived_only
         sessions = db.list_sessions_rich(
             source=source,
             limit=limit,
             offset=offset,
             include_children=include_children,
+            min_message_count=min_messages,
+            include_archived=include_archived,
+            archived_only=archived_only,
             order_by_last_active=True,
         )
         return web.json_response({
@@ -1447,6 +1454,130 @@ class APIServerAdapter(BasePlatformAdapter):
             "session_id": session_id,
             "data": [self._message_response(m) for m in messages],
         })
+
+    async def _handle_session_stats(self, request: "web.Request") -> "web.Response":
+        """GET /api/sessions/stats — session-store statistics."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        total = db.session_count(include_archived=True)
+        active_store = db.session_count(include_archived=False)
+        archived = db.session_count(archived_only=True)
+        messages = db.message_count()
+        by_source: dict = {}
+        try:
+            for s in db.list_sessions_rich(limit=10000, include_archived=True):
+                src = str(s.get("source") or "cli")
+                by_source[src] = by_source.get(src, 0) + 1
+        except Exception:
+            pass
+        return web.json_response({
+            "total": total,
+            "active_store": active_store,
+            "archived": archived,
+            "messages": messages,
+            "by_source": by_source,
+        })
+
+    async def _handle_empty_sessions_count(self, request: "web.Request") -> "web.Response":
+        """GET /api/sessions/empty/count — count of empty, ended, non-archived sessions."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        return web.json_response({"count": db.count_empty_sessions()})
+
+    async def _handle_delete_empty_sessions(self, request: "web.Request") -> "web.Response":
+        """DELETE /api/sessions/empty — delete every empty, ended, non-archived session."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        try:
+            from anakot_cli.config import get_anakot_home
+            sessions_dir = get_anakot_home() / "sessions"
+            deleted = db.delete_empty_sessions(sessions_dir=sessions_dir if sessions_dir.exists() else None)
+        except Exception:
+            deleted = db.delete_empty_sessions()
+        return web.json_response({"ok": True, "deleted": deleted})
+
+    async def _handle_bulk_delete_sessions(self, request: "web.Request") -> "web.Response":
+        """POST /api/sessions/bulk-delete — delete multiple sessions by ID."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        body, err = await self._read_json_body(request)
+        if err:
+            return err
+        ids = body.get("ids", [])
+        if not isinstance(ids, list) or not ids:
+            return web.json_response(_openai_error("ids must be a non-empty list", code="invalid_ids"), status=400)
+        if len(ids) > 500:
+            return web.json_response(_openai_error("ids must contain at most 500 entries", code="too_many_ids"), status=400)
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        try:
+            from anakot_cli.config import get_anakot_home
+            sessions_dir = get_anakot_home() / "sessions"
+            deleted = db.delete_sessions(ids, sessions_dir=sessions_dir if sessions_dir.exists() else None)
+        except Exception:
+            deleted = db.delete_sessions(ids)
+        return web.json_response({"ok": True, "deleted": deleted})
+
+    async def _handle_prune_sessions(self, request: "web.Request") -> "web.Response":
+        """POST /api/sessions/prune — delete ended sessions older than N days."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        body, err = await self._read_json_body(request)
+        if err:
+            return err
+        older_than_days = body.get("older_than_days")
+        if older_than_days is None or int(older_than_days) < 1:
+            return web.json_response(_openai_error("older_than_days must be >= 1", code="invalid_older_than_days"), status=400)
+        source = body.get("source") or None
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        try:
+            from anakot_cli.config import get_anakot_home
+            sessions_dir = get_anakot_home() / "sessions"
+            removed = db.prune_sessions(
+                older_than_days=int(older_than_days),
+                source=source,
+                sessions_dir=sessions_dir if sessions_dir.exists() else None,
+            )
+        except Exception:
+            removed = db.prune_sessions(older_than_days=int(older_than_days), source=source)
+        return web.json_response({"ok": True, "removed": removed})
+
+    async def _handle_search_sessions(self, request: "web.Request") -> "web.Response":
+        """GET /api/sessions/search?q=...&limit=N — FTS5 search across sessions."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+        q = request.query.get("q", "").strip()
+        if not q:
+            return web.json_response({"results": []})
+        limit = self._parse_nonnegative_int(request.query.get("limit"), default=20, maximum=100)
+        db = self._ensure_session_db()
+        if db is None:
+            return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
+        try:
+            from tools.session_search_tool import search_sessions_tool
+            results = search_sessions_tool(db, q, limit=limit)
+            return web.json_response({"results": results})
+        except Exception as exc:
+            logger.warning("Session search failed for %r: %s", q, exc)
+            return web.json_response({"results": []})
 
     async def _handle_fork_session(self, request: "web.Request") -> "web.Response":
         """POST /api/sessions/{session_id}/fork — branch via current SessionDB primitives."""
@@ -4115,6 +4246,13 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_patch("/api/sessions/{session_id}", self._handle_patch_session)
             self._app.router.add_delete("/api/sessions/{session_id}", self._handle_delete_session)
             self._app.router.add_get("/api/sessions/{session_id}/messages", self._handle_session_messages)
+            # Session management endpoints (for desktop sessions page)
+            self._app.router.add_get("/api/sessions/stats", self._handle_session_stats)
+            self._app.router.add_get("/api/sessions/empty/count", self._handle_empty_sessions_count)
+            self._app.router.add_delete("/api/sessions/empty", self._handle_delete_empty_sessions)
+            self._app.router.add_post("/api/sessions/bulk-delete", self._handle_bulk_delete_sessions)
+            self._app.router.add_post("/api/sessions/prune", self._handle_prune_sessions)
+            self._app.router.add_get("/api/sessions/search", self._handle_search_sessions)
             self._app.router.add_post("/api/sessions/{session_id}/fork", self._handle_fork_session)
             self._app.router.add_post("/api/sessions/{session_id}/chat", self._handle_session_chat)
             self._app.router.add_post("/api/sessions/{session_id}/chat/stream", self._handle_session_chat_stream)

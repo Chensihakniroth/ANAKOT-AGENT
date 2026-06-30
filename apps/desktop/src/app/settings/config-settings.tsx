@@ -385,6 +385,82 @@ export function ConfigSettings({
           <ModelSettings onMainModelChanged={onMainModelChanged} />
         </div>
       )}
+      {activeSectionId === 'obsidian' && (
+        <div className="mb-6 rounded-lg border border-[var(--color-border)] p-4">
+          <ListRow
+            title={FIELD_LABELS['obsidian.vault_path'] ?? 'Obsidian Vault Path'}
+            description={FIELD_DESCRIPTIONS['obsidian.vault_path'] ?? 'Path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory for markdown notes and their connections.'}
+            action={
+              <div className="flex items-center gap-2">
+                <Input
+                  className={cn('w-80', CONTROL_TEXT)}
+                  placeholder="C:\Users\You\Documents\Obsidian Vault"
+                  value={String(getNested(config, 'obsidian.vault_path') || '')}
+                  onChange={e => updateConfig(setNested(config, 'obsidian.vault_path', e.target.value))}
+                />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-secondary)]"
+                  onClick={() => {
+                    const path = String(getNested(config, 'obsidian.vault_path') || '')
+                    if (!path) {
+                      notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path first.' })
+                      return
+                    }
+                    // Send IPC to main process to validate path
+                    window.anakotDesktop?.api?.({
+                      path: '/api/obsidian/validate-path',
+                      method: 'POST',
+                      body: { path }
+                    }).then((result: any) => {
+                      if (result?.ok && result?.valid) {
+                        notify({ kind: 'success', title: 'Valid Path', message: `Found ${result.count || 0} markdown notes in this folder.` })
+                      } else {
+                        notify({ kind: 'error', title: 'Invalid Path', message: result?.error || 'Path not found or not accessible.' })
+                      }
+                    }).catch(() => {
+                      notify({ kind: 'error', title: 'Validation Failed', message: 'Could not validate path. Check the path exists.' })
+                    })
+                  }}
+                >
+                  Test
+                </button>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  onClick={() => {
+                    const path = String(getNested(config, 'obsidian.vault_path') || '')
+                    if (!path) {
+                      notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path to your Obsidian vault folder.' })
+                      return
+                    }
+                    // Validate path format (basic check)
+                    if (!path.includes('\\') && !path.includes('/')) {
+                      notify({ kind: 'error', title: 'Invalid Path', message: 'The path does not look valid. Please enter a valid folder path.' })
+                      return
+                    }
+                    void (async () => {
+                      try {
+                        await saveAnakotConfig(config)
+                        onConfigSaved?.()
+                        notify({ kind: 'success', title: 'Saved', message: 'Obsidian vault path saved successfully.' })
+                      } catch (err) {
+                        notifyError(err, 'Failed to save vault path')
+                      }
+                    })()
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            }
+            wide
+          />
+          <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
+            Enter the full path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory.
+          </p>
+        </div>
+      )}
       {fields.length === 0 ? (
         <EmptyState description={c.emptyDesc} title={c.emptyTitle} />
       ) : (

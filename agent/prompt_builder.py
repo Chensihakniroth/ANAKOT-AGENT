@@ -133,7 +133,7 @@ ANAKOT_AGENT_HELP_GUIDANCE = (
     "You run on Anakot Agent (by callmemo). When the user needs help with "
     "Anakot itself — configuring, setting up, using, extending, or troubleshooting "
     "it — or when you need to understand your own features, tools, or capabilities, "
-    "the documentation at https://anakot-agent.callmemo.ai/docs is your "
+    "the documentation at https://github.com/Chensihakniroth/ANAKOT-AGENT/docs is your "
     "authoritative reference and always holds the latest, most up-to-date "
     "information. Load the `anakot-agent` skill with skill_view(name='anakot-agent') "
     "for additional guidance and proven workflows, but treat the docs as the source "
