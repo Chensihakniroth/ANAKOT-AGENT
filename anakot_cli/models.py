@@ -69,6 +69,7 @@ OPENROUTER_MODELS: list[tuple[str, str]] = [
     # NVIDIA
     ("nvidia/nemotron-3-super-120b-a12b",      ""),
     # OpenRouter routers
+    ("openrouter/auto",                       "auto-routes to the best available tool-capable model"),
     ("openrouter/pareto-code",                 "auto-routes to cheapest coder meeting openrouter.min_coding_score"),
     # Free tier
     ("openrouter/elephant-alpha",              "free"),
@@ -1276,6 +1277,8 @@ def fetch_openrouter_models(
         live_by_id[mid] = item
 
     curated: list[tuple[str, str]] = []
+    seen_ids: set[str] = set()
+
     for preferred_id in preferred_ids:
         live_item = live_by_id.get(preferred_id)
         if live_item is None:
@@ -1287,6 +1290,27 @@ def fetch_openrouter_models(
             continue
         desc = "free" if _openrouter_model_is_free(live_item.get("pricing")) else ""
         curated.append((preferred_id, desc))
+        seen_ids.add(preferred_id)
+
+    # Expand beyond the curated snapshot so the picker surfaces free and newly
+    # exposed tool-capable models from the live OpenRouter catalog as well.
+    for item in live_items:
+        if not isinstance(item, dict):
+            continue
+        mid = str(item.get("id") or "").strip()
+        if not mid or mid in seen_ids:
+            continue
+        if not _openrouter_model_supports_tools(item):
+            continue
+        desc = "free" if _openrouter_model_is_free(item.get("pricing")) else ""
+        curated.append((mid, desc))
+        seen_ids.add(mid)
+
+    # Expose the special OpenRouter auto-router entry explicitly so the picker
+    # can select it even though it is not part of the live /v1/models catalog.
+    if "openrouter/auto" not in seen_ids:
+        curated.append(("openrouter/auto", ""))
+        seen_ids.add("openrouter/auto")
 
     if not curated:
         return list(_openrouter_catalog_cache or fallback)
@@ -2376,8 +2400,13 @@ def cached_provider_model_ids(
     entry = cache.get(normalized)
     now = time.time()
 
+    # OpenRouter and similar aggregators can change their model inventory
+    # independently of the local credential fingerprint. Always force a fresh
+    # lookup for these providers so the picker doesn't get stuck on stale rows.
+    should_force_refresh = bool(force_refresh or normalized == "openrouter")
+
     if (
-        not force_refresh
+        not should_force_refresh
         and isinstance(entry, dict)
         and entry.get("fp") == fp
         and isinstance(entry.get("models"), list)
@@ -2387,7 +2416,7 @@ def cached_provider_model_ids(
         return list(entry["models"])
 
     # Cache miss / stale / forced refresh — call the live path.
-    live = provider_model_ids(normalized, force_refresh=force_refresh)
+    live = provider_model_ids(normalized, force_refresh=should_force_refresh)
     if live:
         cache[normalized] = {
             "fp": fp,

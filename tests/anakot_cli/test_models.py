@@ -77,6 +77,7 @@ class TestFetchOpenRouterModels:
             ("anthropic/claude-opus-4.8", "recommended"),
             ("qwen/qwen3.7-max", ""),
             ("nvidia/nemotron-3-super-120b-a12b:free", "free"),
+            ("openrouter/auto", ""),
         ]
 
     def test_falls_back_to_static_snapshot_on_fetch_failure(self, monkeypatch):
@@ -166,6 +167,89 @@ class TestFetchOpenRouterModels:
         ids = [mid for mid, _ in models]
         assert "anthropic/claude-opus-4.8" in ids
         assert "qwen/qwen3.7-max" in ids
+
+    def test_includes_openrouter_auto_option(self, monkeypatch):
+        """The special OpenRouter auto-routing model should be exposed in the picker."""
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return (
+                    b'{"data":['
+                    b'{"id":"anthropic/claude-opus-4.8","pricing":{"prompt":"0.000015","completion":"0.000075"},'
+                    b'"supported_parameters":["tools"]}'
+                    b']}'
+                )
+
+        monkeypatch.setattr(_models_mod, "_openrouter_catalog_cache", None)
+        monkeypatch.setattr(_models_mod, "OPENROUTER_MODELS", [("anthropic/claude-opus-4.8", "")])
+        monkeypatch.setattr(
+            "anakot_cli.model_catalog.get_curated_openrouter_models",
+            lambda: [],
+        )
+        with patch("anakot_cli.models.urllib.request.urlopen", return_value=_Resp()):
+            models = fetch_openrouter_models(force_refresh=True)
+
+        ids = [mid for mid, _ in models]
+        assert "openrouter/auto" in ids
+
+    def test_includes_free_tool_models_that_are_not_in_curated_snapshot(self, monkeypatch):
+        """Free, tool-capable models from the live catalog should appear even when they are not in the curated snapshot."""
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return (
+                    b'{"data":['
+                    b'{"id":"anthropic/claude-opus-4.8","pricing":{"prompt":"0.000015","completion":"0.000075"},'
+                    b'"supported_parameters":["tools"]},'
+                    b'{"id":"openrouter/elephant-alpha","pricing":{"prompt":"0","completion":"0"},'
+                    b'"supported_parameters":["tools"]}'
+                    b']}'
+                )
+
+        monkeypatch.setattr(_models_mod, "_openrouter_catalog_cache", None)
+        monkeypatch.setattr(_models_mod, "OPENROUTER_MODELS", [("anthropic/claude-opus-4.8", "")])
+        monkeypatch.setattr(
+            "anakot_cli.model_catalog.get_curated_openrouter_models",
+            lambda: [],
+        )
+        with patch("anakot_cli.models.urllib.request.urlopen", return_value=_Resp()):
+            models = fetch_openrouter_models(force_refresh=True)
+
+        ids = [mid for mid, _ in models]
+        assert "anthropic/claude-opus-4.8" in ids
+        assert "openrouter/elephant-alpha" in ids
+
+    def test_cached_provider_model_ids_refreshes_openrouter_catalog(self, monkeypatch):
+        """OpenRouter should bypass stale provider-model cache entries so the picker sees fresh models."""
+        calls = []
+
+        def fake_provider_model_ids(provider, force_refresh=False):
+            calls.append(force_refresh)
+            return ["fresh-openrouter-model"] if force_refresh else ["stale-openrouter-model"]
+
+        monkeypatch.setattr(_models_mod, "_load_provider_models_cache", lambda: {
+            "openrouter": {"fp": "fp", "at": 0, "models": ["stale-openrouter-model"]}
+        })
+        monkeypatch.setattr(_models_mod, "_save_provider_models_cache", lambda data: None)
+        monkeypatch.setattr(_models_mod, "_credential_fingerprint", lambda provider: "fp")
+        monkeypatch.setattr(_models_mod, "provider_model_ids", fake_provider_model_ids)
+
+        result = _models_mod.cached_provider_model_ids("openrouter")
+
+        assert result == ["fresh-openrouter-model"]
+        assert calls == [True]
 
 
 class TestOpenRouterToolSupportHelper:

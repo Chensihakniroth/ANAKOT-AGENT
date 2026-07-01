@@ -35,6 +35,34 @@ export interface VaultScanResult {
 const WIKI_LINK_REGEX = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g
 const FRONTMATTER_TITLE_REGEX = /^---\s*\n[\s\S]*?title:\s*["']?([^"'\n]+?)["']?\n[\s\S]*?---/
 
+export function normalizeObsidianLinkTarget(rawTarget: string): string {
+  if (!rawTarget) return ''
+  let target = rawTarget.trim()
+  if (!target) return ''
+
+  target = target.split('#')[0].trim()
+  target = target.split('|')[0].trim()
+  target = target.replace(/^\.\//, '').replace(/^\//, '')
+  target = target.replace(/\\/g, '/')
+  target = target.replace(/\.md$/i, '')
+  return target
+}
+
+export function resolveObsidianLinkTarget(rawTarget: string, knownIds: Iterable<string>): string | null {
+  const normalized = normalizeObsidianLinkTarget(rawTarget)
+  if (!normalized) return null
+
+  const known = Array.from(knownIds)
+  if (known.includes(normalized)) return normalized
+
+  const basename = normalized.split('/').pop() || normalized
+  const match = known.find(id => {
+    const normalizedId = id.split('/').pop() || id
+    return normalizedId === basename || id === basename
+  })
+  return match ?? null
+}
+
 /**
  * Synchronously scan a vault directory for notes and wikilinks.
  * Returns a graph data structure ready for force-directed rendering.
@@ -47,6 +75,7 @@ export function scanVault(rootPath: string, fs: any, path: any): VaultScanResult
 
     const nodes: GraphNode[] = []
     const links: GraphEdge[] = []
+    const noteEntries: Array<{ id: string; name: string; path: string; group: string; content: string }> = []
     const linkCounts = new Map<string, number>()
 
     function scanDir(dir: string, group: string) {
@@ -60,33 +89,41 @@ export function scanVault(rootPath: string, fs: any, path: any): VaultScanResult
         if (!entry.name.endsWith('.md')) continue
 
         const filePath = path.join(dir, entry.name)
-        const id = entry.name.replace(/\.md$/, '')
+        const relativePath = path.relative(rootPath, filePath).replace(/\\/g, '/')
+        const id = relativePath.replace(/\.md$/i, '')
         const content = fs.readFileSync(filePath, 'utf-8')
 
         // Extract title from YAML frontmatter
-        let name = id
+        let name = id.split('/').pop() || id
         const fmMatch = content.match(FRONTMATTER_TITLE_REGEX)
         if (fmMatch) name = fmMatch[1].trim()
 
-        // Extract wikilinks
-        const targets = new Set<string>()
-        let match: RegExpExecArray | null
-        WIKI_LINK_REGEX.lastIndex = 0
-        while ((match = WIKI_LINK_REGEX.exec(content)) !== null) {
-          const target = match[1].trim()
-          targets.add(target)
-          linkCounts.set(target, (linkCounts.get(target) || 0) + 1)
-        }
-
-        nodes.push({ id, name, path: filePath, group: group || 'root', size: 0 })
-
-        for (const target of targets) {
-          links.push({ source: id, target })
-        }
+        noteEntries.push({ id, name, path: filePath, group: group || 'root', content })
       }
     }
 
     scanDir(rootPath, '')
+
+    const noteIds = noteEntries.map(note => note.id)
+    for (const note of noteEntries) {
+      const targets = new Set<string>()
+      let match: RegExpExecArray | null
+      WIKI_LINK_REGEX.lastIndex = 0
+      while ((match = WIKI_LINK_REGEX.exec(note.content)) !== null) {
+        const target = normalizeObsidianLinkTarget(match[1])
+        if (!target) continue
+        const resolved = resolveObsidianLinkTarget(target, noteIds)
+        if (!resolved || resolved === note.id) continue
+        targets.add(resolved)
+        linkCounts.set(resolved, (linkCounts.get(resolved) || 0) + 1)
+      }
+
+      nodes.push({ id: note.id, name: note.name, path: note.path, group: note.group || 'root', size: 0 })
+
+      for (const target of targets) {
+        links.push({ source: note.id, target })
+      }
+    }
 
     // Calculate node sizes based on total connections
     for (const node of nodes) {

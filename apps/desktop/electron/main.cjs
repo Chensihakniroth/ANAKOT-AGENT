@@ -6210,45 +6210,75 @@ ipcMain.handle('anakot:obsidian:scanVault', (_event, rootPath) => {
 
   const nodes = []
   const links = []
+  const noteEntries = []
   const linkCounts = new Map()
+
+  function normalizeObsidianLinkTarget(rawTarget) {
+    let target = String(rawTarget || '').trim()
+    if (!target) return ''
+    target = target.split('#')[0].trim()
+    target = target.split('|')[0].trim()
+    target = target.replace(/^\.\//, '').replace(/^\//, '')
+    target = target.replace(/\\/g, '/')
+    target = target.replace(/\.md$/i, '')
+    return target
+  }
+
+  function resolveObsidianLinkTarget(rawTarget, knownIds) {
+    const normalized = normalizeObsidianLinkTarget(rawTarget)
+    if (!normalized) return null
+    if (knownIds.includes(normalized)) return normalized
+    const basename = normalized.split('/').pop() || normalized
+    const match = knownIds.find(id => {
+      const normalizedId = id.split('/').pop() || id
+      return normalizedId === basename || id === basename
+    })
+    return match || null
+  }
 
   function scanDir(dir, group) {
     const entries = fs.readdirSync(dir, { withFileTypes: true })
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue
       if (entry.isDirectory()) {
-        path.join(dir, entry.name) // reference
         scanDir(path.join(dir, entry.name), entry.name)
         continue
       }
       if (!entry.name.endsWith('.md')) continue
 
       const filePath = path.join(dir, entry.name)
-      const id = entry.name.replace(/\.md$/, '')
+      const relativePath = path.relative(rootPath, filePath).replace(/\\/g, '/')
+      const id = relativePath.replace(/\.md$/i, '')
       const content = fs.readFileSync(filePath, 'utf-8')
 
-      let name = id
+      let name = id.split('/').pop() || id
       const fmMatch = content.match(/^---\s*\n[\s\S]*?title:\s*(?:["\x27]([^"\x27]+)["\x27]|([^\n]+))\n[\s\S]*?---/)
       if (fmMatch) name = (fmMatch[1] || fmMatch[2] || id).trim()
 
-      const linkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g
-      let match
-      const targets = new Set()
-      while ((match = linkRegex.exec(content)) !== null) {
-        const target = match[1].trim()
-        targets.add(target)
-        linkCounts.set(target, (linkCounts.get(target) || 0) + 1)
-      }
-
-      nodes.push({ id, name, path: filePath, group: group || 'root', size: 0 })
-
-      for (const target of targets) {
-        links.push({ source: id, target })
-      }
+      noteEntries.push({ id, name, path: filePath, group: group || 'root', content })
     }
   }
 
   scanDir(rootPath, '')
+
+  const noteIds = noteEntries.map(note => note.id)
+  for (const note of noteEntries) {
+    const linkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g
+    let match
+    const targets = new Set()
+    while ((match = linkRegex.exec(note.content)) !== null) {
+      const target = resolveObsidianLinkTarget(match[1], noteIds)
+      if (!target || target === note.id) continue
+      targets.add(target)
+      linkCounts.set(target, (linkCounts.get(target) || 0) + 1)
+    }
+
+    nodes.push({ id: note.id, name: note.name, path: note.path, group: note.group || 'root', size: 0 })
+
+    for (const target of targets) {
+      links.push({ source: note.id, target })
+    }
+  }
 
   for (const node of nodes) {
     const outgoing = links.filter(l => l.source === node.id).length
