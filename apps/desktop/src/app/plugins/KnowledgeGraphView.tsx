@@ -37,15 +37,15 @@ interface GraphSettings {
 }
 
 const GROUP_COLORS: Record<string, string> = {
-  'Anakot Agent': '#0053fd',
-  'nile training': '#10b981',
-  'Daily Notes': '#f59e0b',
-  root: '#8b5cf6',
+  'Anakot Agent': '#00f0ff',
+  'nile training': '#ff2975',
+  'Daily Notes': '#f0e100',
+  root: '#b829f0',
 }
 
 const FALLBACK_COLORS = [
-  '#ec4899', '#06b6d4', '#84cc16', '#f97316',
-  '#6366f1', '#14b8a6', '#eab308', '#a855f7',
+  '#00f0ff', '#ff2975', '#b829f0', '#f0e100',
+  '#00ff87', '#ff6b35', '#39ff14', '#ff00ff',
 ]
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -58,11 +58,15 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
         onChange={e => onChange(e.target.checked)}
         className="sr-only peer"
       />
-      <span className={`relative inline-flex h-[18px] w-[32px] shrink-0 rounded-full border-2 transition-colors ${
-        value ? 'bg-[#8A2BE2] border-transparent' : 'bg-[var(--color-bg-tertiary)] border-[var(--color-border)]'
+      <span className={`relative inline-flex h-[18px] w-[32px] shrink-0 rounded-full border transition-all duration-300 ${
+        value
+          ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)]'
+          : 'bg-[var(--color-bg-tertiary)] border-[var(--color-border)]'
       }`}>
-        <span className={`pointer-events-none inline-block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${
-          value ? 'translate-x-[14px]' : 'translate-x-0'
+        <span className={`pointer-events-none inline-block h-[14px] w-[14px] rounded-full transition-all duration-300 shadow-sm ${
+          value
+            ? 'translate-x-[14px] bg-[var(--color-accent)]'
+            : 'translate-x-0 bg-[var(--color-text-tertiary)]/40'
         }`} />
       </span>
     </label>
@@ -75,7 +79,7 @@ function Slider({ value, min, max, step, onChange }: { value: number; min: numbe
     <input type="range" min={min} max={max} step={step ?? 1} value={value} onChange={e => onChange(Number(e.target.value))}
       className="h-1 w-full cursor-pointer appearance-none rounded-full outline-none"
       style={{
-        background: `linear-gradient(to right, #8A2BE2 0%, #8A2BE2 ${pct}%, #555 ${pct}%, #555 100%)`,
+        background: `linear-gradient(to right, var(--color-accent) 0%, var(--color-accent) ${pct}%, var(--color-bg-tertiary) ${pct}%, var(--color-bg-tertiary) 100%)`,
       }}
     />
   )
@@ -85,11 +89,11 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
   const [open, setOpen] = useState(defaultOpen)
   return (
     <details className="group" open={open}>
-      <summary className="flex w-full items-center gap-1.5 py-1.5 text-xs font-medium text-white list-none cursor-pointer" onClick={e => { e.preventDefault(); setOpen(!open) }}>
-        <ChevronDownIcon className={`h-3 w-3 transition-transform ${open ? '' : '-rotate-90'}`} strokeWidth={2} />
-        {title}
+      <summary className="flex w-full items-center gap-1.5 py-1.5 text-xs font-mono tracking-wider text-[var(--color-text-tertiary)] list-none cursor-pointer hover:text-[var(--color-text-primary)] transition-colors" onClick={e => { e.preventDefault(); setOpen(!open) }}>
+        <ChevronDownIcon className={`h-3 w-3 transition-transform duration-200 ${open ? 'text-[var(--color-accent)] rotate-0' : '-rotate-90 text-[var(--color-text-tertiary)]/50'}`} strokeWidth={2} />
+        {'> '}{title}
       </summary>
-      <div className="space-y-2 pb-2">{children}</div>
+      <div className="space-y-2 pb-2 pl-2 border-l border-[var(--color-border)]/50 ml-[5px]">{children}</div>
     </details>
   )
 }
@@ -98,6 +102,7 @@ export function KnowledgeGraphView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const fgRef = useRef<any>(null)
   const zoomedRef = useRef(false)
+  const mountedRef = useRef(true)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +112,7 @@ export function KnowledgeGraphView() {
   const [vaultPath, setVaultPath] = useState<string | null>(null)
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [appBgColor, setAppBgColor] = useState('#0f0f1a')
   const [settings, setSettings] = useState<GraphSettings>({
     showArrows: false,
     nodeSize: 4,
@@ -145,10 +151,18 @@ export function KnowledgeGraphView() {
   // Clean up Three.js resources on unmount
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (sphereGeomRef.current) sphereGeomRef.current.dispose()
       materialCacheRef.current.forEach(m => m.dispose())
       materialCacheRef.current.clear()
     }
+  }, [])
+
+  // Read app theme color for the Three.js WebGL background
+  useEffect(() => {
+    const el = document.documentElement
+    const bg = getComputedStyle(el).getPropertyValue('--color-bg-primary').trim()
+    if (bg) setAppBgColor(bg)
   }, [])
 
   const updateSize = useCallback(() => {
@@ -158,19 +172,20 @@ export function KnowledgeGraphView() {
     }
   }, [])
 
-  const getNodeColor = (node: GraphNode) => {
+  const getNodeColor = useCallback((node: GraphNode) => {
     return GROUP_COLORS[node.group] || FALLBACK_COLORS[node.id.charCodeAt(0) % FALLBACK_COLORS.length]
-  }
+  }, [])
 
   const scanVault = useCallback(async () => {
     if (!vaultPath) { setError('No vault path set'); return }
     setLoading(true); setError(null)
     try {
       const result = await window.anakotDesktop.scanObsidianVault(vaultPath)
+      if (!mountedRef.current) return
       if (result.ok) { setGraphData(result.graph); setError(null); setLastScanTime(new Date()); zoomedRef.current = false }
       else { setError(result.error || 'Unknown error'); setGraphData(null) }
-    } catch (e) { setError(String(e)); setGraphData(null) }
-    finally { setLoading(false) }
+    } catch (e) { if (mountedRef.current) { setError(String(e)); setGraphData(null) } }
+    finally { if (mountedRef.current) setLoading(false) }
   }, [vaultPath])
 
   // --- Graph Data Loading ---
@@ -179,8 +194,9 @@ export function KnowledgeGraphView() {
     updateSize()
     const container = containerRef.current
     if (!container) return
-    window.addEventListener('resize', updateSize)
-    return () => { window.removeEventListener('resize', updateSize) }
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(container)
+    return () => { observer.disconnect() }
   }, [updateSize])
 
   useEffect(() => {
@@ -247,8 +263,10 @@ export function KnowledgeGraphView() {
     fg.d3Force('z', forceZ(0).strength(settings.containmentStrength))
   }, [graphData])
 
-  // Reheat simulation only when user tweaks settings (safe because
-  // initialization is already complete by the time they interact)
+  // Reheat simulation only when user tweaks force-related settings (safe
+  // because initialization is already complete by the time they interact).
+  // Display-only settings (showArrows, labelsVisible, nodeSize, linkThickness)
+  // do NOT reheat — they're handled by ForceGraph3D props directly.
   useEffect(() => {
     const fg = fgRef.current
     if (!fg || !graphData) return
@@ -275,7 +293,15 @@ export function KnowledgeGraphView() {
     if (yForce) yForce.strength(settings.containmentStrength)
     const zForce = fg.d3Force('z')
     if (zForce) zForce.strength(settings.containmentStrength)
-  }, [settings])
+  }, [
+    settings.centreForce,
+    settings.repelForce,
+    settings.linkForce,
+    settings.linkDistance,
+    settings.d3AlphaDecay,
+    settings.d3VelocityDecay,
+    settings.containmentStrength,
+  ])
 
   // --- Helpers ---
 
@@ -307,8 +333,8 @@ export function KnowledgeGraphView() {
 
   const nodeLabelFn = useCallback((node: GraphNode) => `${node.name}`, [])
   const nodeValFn = useCallback((node: GraphNode) => node.size ?? 1, [])
-  const linkColorFn = useCallback(() => '#666', [])
-  const linkArrowColorFn = useCallback(() => '#888', [])
+  const linkColorFn = useCallback(() => 'rgba(128, 128, 128, 0.15)', [])
+  const linkArrowColorFn = useCallback(() => 'rgba(128, 128, 128, 0.3)', [])
 
   const forceGraphData = useMemo(() => ({
     nodes: graphData?.nodes ?? [],
@@ -325,123 +351,126 @@ export function KnowledgeGraphView() {
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.set(scale, scale, scale)
     return mesh
-  }, [settings.nodeSize, getSphereGeometry, getNodeMaterial])
+  }, [getSphereGeometry, getNodeMaterial, getNodeColor, settings.nodeSize])
 
   // --- Render States ---
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          <span>Loading knowledge graph...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center text-red-500">
-          <p>Error: {error}</p>
-          {vaultPath && (
-            <div className="mt-4">
-              <button onClick={handleRefresh} className="text-xs px-3 py-1 rounded bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)] transition-colors">Try Again</button>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  if (!graphData || graphData.nodes.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <span>No graph data available</span>
-          {vaultPath && <button onClick={handleRefresh} className="mt-2 text-xs px-3 py-1 rounded bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)] transition-colors">Scan Vault</button>}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div ref={containerRef} className="relative h-full w-full" style={{ width: '100%', height: '100%' }}>
-      {/* Top bar */}
-      <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
+      {/* Overlay: Loading — canvas preserved underneath */}
+      {loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <div className="h-10 w-10 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
+            <span className="text-sm text-[var(--color-text-secondary)] font-mono tracking-[0.15em] animate-pulse">SCANNING VAULT...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay: Error */}
+      {error && !loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="text-lg font-mono text-[var(--color-destructive)] mb-2 tracking-[0.2em]">⚠ SYSTEM ERROR</div>
+            <p className="text-sm text-[var(--color-destructive)]/80 font-mono">{error}</p>
+            {vaultPath && (
+              <div className="mt-5">
+                <button onClick={handleRefresh} className="text-xs px-4 py-2 rounded border border-[var(--color-destructive)]/50 text-[var(--color-destructive)] font-mono tracking-[0.1em] bg-[var(--color-destructive)]/10 hover:bg-[var(--color-destructive)]/20 transition-all">RETRY</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Overlay: Empty — no data, not loading, no error */}
+      {(!graphData || graphData.nodes.length === 0) && !loading && !error && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
+          <div className="text-center">
+            <span className="text-sm font-mono text-[var(--color-text-tertiary)]/70 tracking-[0.3em]">NO DATA</span>
+            {vaultPath && <button onClick={handleRefresh} className="mt-5 text-xs px-4 py-2 rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] font-mono tracking-[0.1em] bg-[var(--color-bg-secondary)] hover:bg-[var(--color-bg-tertiary)] transition-all">INITIALIZE SCAN</button>}
+          </div>
+        </div>
+      )}
+      {/* Top bar — Sci-fi HUD */}
+      <div className="absolute top-3 left-3 z-10 flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[var(--color-bg-primary)]/80 backdrop-blur-md border border-[var(--color-border)] shadow-sm">
         <button onClick={() => setShowSettings(s => !s)}
-          className={`p-1 rounded transition-colors ${showSettings ? 'bg-[var(--color-bg-tertiary)]' : 'hover:bg-[var(--color-bg-tertiary)]'}`}
+          className={`p-1.5 rounded-md transition-all ${
+            showSettings
+              ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]'
+              : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)]'
+          }`}
           title="Settings"
         >
-          <IconSettings className="h-4 w-4 text-white" strokeWidth={2} />
+          <IconSettings className="h-4 w-4" strokeWidth={2} />
         </button>
-        <button onClick={handleRefresh} className="text-xs px-2 py-1 rounded bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)] transition-colors text-white" title="Rescan vault">
-          <RefreshIcon className="h-3 w-3 mr-1" strokeWidth={2} />
-          Refresh
+        <div className="w-px h-4 bg-[var(--color-border)]" />
+        <button onClick={handleRefresh} className="text-xs px-2.5 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider" title="Rescan vault">
+          <RefreshIcon className="h-3 w-3 inline mr-1.5" strokeWidth={2} />
+          REFRESH
         </button>
-        <div className="flex items-center gap-2">
-          {lastScanTime && <span className="text-[10px] text-[var(--color-text-tertiary)]">{lastScanTime.toLocaleTimeString()}</span>}
-          <span className="text-[10px] text-[var(--color-text-tertiary)]">{graphData?.nodes.length ?? 0}n {graphData?.links.length ?? 0}e</span>
+        <div className="w-px h-4 bg-[var(--color-border)]" />
+        <div className="flex items-center gap-3 font-mono text-[10px]">
+          {lastScanTime && <span className="text-[var(--color-text-tertiary)]">{lastScanTime.toLocaleTimeString()}</span>}
+          <span className="text-[var(--color-text-secondary)]">{graphData?.nodes.length ?? 0}<span className="text-[var(--color-text-tertiary)]">N</span> <span className="text-[var(--color-accent)]">{graphData?.links.length ?? 0}<span className="text-[var(--color-text-tertiary)]">E</span></span></span>
         </div>
       </div>
 
-      {/* Settings panel */}
+      {/* Settings panel — Sci-fi interface */}
       {showSettings && (
-        <div className="absolute top-0 right-0 z-20 h-full w-[260px] overflow-y-auto border-l border-[var(--color-border)] bg-[#282828] p-3 shadow-xl">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-medium text-white">Settings</span>
-            <button onClick={() => setShowSettings(false)} className="text-[var(--color-text-tertiary)] hover:text-white">
+        <div className="absolute top-0 right-0 z-20 h-full w-[260px] overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-bg-primary)] backdrop-blur-2xl p-4 shadow-2xl shadow-black/20">
+          <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+            <span className="text-sm font-mono tracking-[0.2em] text-[var(--color-text-secondary)]">CONTROLS</span>
+            <button onClick={() => setShowSettings(false)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
               <CloseIcon className="h-4 w-4" strokeWidth={2} />
             </button>
           </div>
 
           <Section title="Display">
             <div className="flex items-center justify-between">
-              <span className="text-white">Labels</span>
+              <span className="text-[var(--color-text-primary)]">Labels</span>
               <Toggle value={settings.labelsVisible} onChange={v => setSettings(s => ({ ...s, labelsVisible: v }))} />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-white">Arrows</span>
+              <span className="text-[var(--color-text-primary)]">Arrows</span>
               <Toggle value={settings.showArrows} onChange={v => setSettings(s => ({ ...s, showArrows: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Node size</span><span className="text-[#aaa] text-[10px]">{settings.nodeSize.toFixed(1)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Node size</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.nodeSize.toFixed(1)}</span></div>
               <Slider value={settings.nodeSize} min={1} max={20} step={0.5} onChange={v => setSettings(s => ({ ...s, nodeSize: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Link thickness</span><span className="text-[#aaa] text-[10px]">{settings.linkThickness.toFixed(1)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Link thickness</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.linkThickness.toFixed(1)}</span></div>
               <Slider value={settings.linkThickness} min={0.5} max={5} step={0.5} onChange={v => setSettings(s => ({ ...s, linkThickness: v }))} />
             </div>
           </Section>
 
           <Section title="Forces">
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Centre force</span><span className="text-[#aaa] text-[10px]">{settings.centreForce.toFixed(1)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Centre force</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.centreForce.toFixed(1)}</span></div>
               <Slider value={settings.centreForce} min={0} max={2} step={0.1} onChange={v => setSettings(s => ({ ...s, centreForce: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Repel force</span><span className="text-[#aaa] text-[10px]">{settings.repelForce}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Repel force</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.repelForce}</span></div>
               <Slider value={settings.repelForce} min={-300} max={0} step={5} onChange={v => setSettings(s => ({ ...s, repelForce: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Link force</span><span className="text-[#aaa] text-[10px]">{settings.linkForce.toFixed(2)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Link force</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.linkForce.toFixed(2)}</span></div>
               <Slider value={settings.linkForce} min={0} max={1} step={0.05} onChange={v => setSettings(s => ({ ...s, linkForce: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Link distance</span><span className="text-[#aaa] text-[10px]">{settings.linkDistance}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Link distance</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.linkDistance}</span></div>
               <Slider value={settings.linkDistance} min={10} max={300} step={5} onChange={v => setSettings(s => ({ ...s, linkDistance: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Alpha decay</span><span className="text-[#aaa] text-[10px]">{settings.d3AlphaDecay.toFixed(2)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Alpha decay</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.d3AlphaDecay.toFixed(2)}</span></div>
               <Slider value={settings.d3AlphaDecay} min={0.001} max={0.1} step={0.005} onChange={v => setSettings(s => ({ ...s, d3AlphaDecay: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Velocity decay</span><span className="text-[#aaa] text-[10px]">{settings.d3VelocityDecay.toFixed(2)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Velocity decay</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.d3VelocityDecay.toFixed(2)}</span></div>
               <Slider value={settings.d3VelocityDecay} min={0.1} max={0.9} step={0.05} onChange={v => setSettings(s => ({ ...s, d3VelocityDecay: v }))} />
             </div>
             <div>
-              <div className="flex items-center justify-between"><span className="text-white">Containment</span><span className="text-[#aaa] text-[10px]">{settings.containmentStrength.toFixed(3)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-[var(--color-text-primary)]">Containment</span><span className="text-[var(--color-text-tertiary)] text-[10px]">{settings.containmentStrength.toFixed(3)}</span></div>
               <Slider value={settings.containmentStrength} min={0} max={0.3} step={0.005} onChange={v => setSettings(s => ({ ...s, containmentStrength: v }))} />
             </div>
           </Section>
@@ -454,7 +483,7 @@ export function KnowledgeGraphView() {
         graphData={forceGraphData}
         width={containerSize.width}
         height={containerSize.height}
-        backgroundColor="#0f0f1a"
+        backgroundColor={appBgColor}
         showNavInfo={false}
         nodeLabel={settings.labelsVisible ? nodeLabelFn : undefined}
         nodeColor={getNodeColor}
@@ -465,7 +494,10 @@ export function KnowledgeGraphView() {
         linkWidth={settings.linkThickness}
         linkDirectionalArrowLength={settings.showArrows ? 5 : 0}
         linkDirectionalArrowColor={linkArrowColorFn}
-        linkDirectionalParticles={0}
+        linkDirectionalParticles={4}
+        linkDirectionalParticleWidth={1.5}
+        linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleColor={() => 'rgba(128, 128, 128, 0.4)'}
         enableNodeDrag={true}
         enableNavigationControls={true}
         d3AlphaDecay={settings.d3AlphaDecay}
@@ -479,21 +511,29 @@ export function KnowledgeGraphView() {
         onEngineStop={handleEngineStop}
       />
 
-      {/* Hover tooltip */}
+      {/* Hover tooltip — Holographic data tag */}
       {hoveredNode && selectedNode !== hoveredNode && (
-        <div className="absolute top-10 left-2 bg-[var(--color-bg-elevated)]/90 p-2 rounded border border-[var(--color-border)] shadow-lg max-w-[200px] z-10 backdrop-blur-sm">
-          <div className="font-medium text-xs text-[var(--color-text-primary)]">{hoveredNode.name}</div>
-          <div className="text-[10px] text-[var(--color-text-tertiary)]">{hoveredNode.group}</div>
+        <div className="absolute top-14 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[200px] z-10">
+          <div className="font-mono text-xs text-[var(--color-text-primary)]">{hoveredNode.name}</div>
+          <div className="text-[9px] font-mono text-[var(--color-text-tertiary)] tracking-wider">{hoveredNode.group}</div>
         </div>
       )}
 
-      {/* Selected node info */}
+      {/* Selected node info — Sci-fi data card */}
       {selectedNode && (
-        <div className="absolute top-2 right-2 bg-[var(--color-bg-elevated)] p-2.5 rounded border border-[var(--color-border)] shadow-lg max-w-[220px] z-10" style={{ right: showSettings ? '264px' : '2px' }}>
-          <div className="font-medium text-sm text-[var(--color-text-primary)] mb-0.5">{selectedNode.name}</div>
-          <div className="text-[11px] text-[var(--color-text-tertiary)]">{selectedNode.group}</div>
-          <div className="text-[10px] text-[var(--color-text-tertiary)] truncate">{selectedNode.path}</div>
-          <button onClick={() => setSelectedNode(null)} className="mt-1.5 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-border)] transition-colors">Close</button>
+        <div className="absolute top-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/90 backdrop-blur-md border border-[var(--color-border)] max-w-[240px] z-10" style={{ right: showSettings ? '266px' : '10px' }}>
+          <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--color-border)]">
+            <span className="text-[9px] font-mono tracking-[0.2em] text-[var(--color-text-tertiary)]">SELECTED_NODE</span>
+            <button onClick={() => setSelectedNode(null)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+              <CloseIcon className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </div>
+          <div className="font-mono text-sm text-[var(--color-text-primary)] mb-1.5">{selectedNode.name}</div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
+            <span className="text-[10px] font-mono text-[var(--color-text-secondary)] tracking-wider">{selectedNode.group}</span>
+          </div>
+          <div className="text-[9px] font-mono text-[var(--color-text-tertiary)] truncate tracking-wider">{selectedNode.path}</div>
         </div>
       )}
     </div>
