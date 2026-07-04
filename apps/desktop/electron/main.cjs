@@ -5168,7 +5168,7 @@ ipcMain.handle('anakot:api', async (_event, request) => {
 
   const connection = await ensureBackend(request?.profile)
   const timeoutMs = resolveTimeoutMs(request?.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
-  const url = `${connection.baseUrl}${request.path}`
+  const url = `${connection.baseUrl}${request.path.startsWith('/') ? request.path : '/' + request.path}`
   // OAuth gateways authenticate REST via the HttpOnly session cookie held in
   // the OAuth partition — route through Electron's net stack bound to that
   // session so the cookie attaches automatically. Token/local modes keep using

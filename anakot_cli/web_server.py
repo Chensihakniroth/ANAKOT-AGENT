@@ -1929,6 +1929,29 @@ async def validate_obsidian_path(body: dict):
     return {"ok": True, "valid": True, "count": md_count}
 
 
+@app.post("/api/open-file")
+async def open_file(body: dict):
+    """Open a file in the default system editor/viewer."""
+    import os
+    import subprocess
+    import sys
+    file_path = body.get("path", "")
+    if not file_path:
+        return {"ok": False, "error": "No path provided"}
+    if not os.path.exists(file_path):
+        return {"ok": False, "error": "File not found"}
+    try:
+        if sys.platform == "win32":
+            os.startfile(file_path)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", file_path], check=False)
+        else:
+            subprocess.run(["xdg-open", file_path], check=False)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/api/config/defaults")
 async def get_defaults():
     return DEFAULT_CONFIG
@@ -2071,7 +2094,7 @@ def get_model_options():
         # affordance instead of hiding the provider entirely.
         return build_models_payload(
             load_picker_context(),
-            max_models=50,
+            max_models=200,
             include_unconfigured=True,
             picker_hints=True,
             canonical_order=True,

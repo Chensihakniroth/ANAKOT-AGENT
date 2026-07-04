@@ -59,3 +59,46 @@ Use `patch` for focused note changes when the current content gives you stable c
 ## Wikilinks
 
 Obsidian links notes with `[[Note Name]]` syntax. When creating notes, use these to link related content.
+
+## Knowledge Graph Visualization
+
+Use the `obsidian_graph_scan` tool to scan your vault and generate a force-directed graph of notes and their connections:
+
+```python
+# Via tool call
+obsidian_graph_scan(vault_path="/path/to/vault")
+```
+
+Returns a JSON structure with:
+- `nodes`: Array of note objects with `id`, `name`, `path`, `group` (folder), `size` (connection count)
+- `links`: Array of connection objects with `source` and `target` note IDs
+
+The graph data is compatible with force-directed visualization libraries (D3, react-force-graph, etc.).
+
+### Example Usage
+
+```
+> Scan my Obsidian vault for the knowledge graph
+```
+
+The tool will:
+1. Find all `.md` files in the vault
+2. Extract `[[WikiLink]]` references from each note
+3. Resolve links to actual note files (matching by path or filename)
+4. Build nodes grouped by folder
+5. Calculate node sizes based on connection count (incoming + outgoing)
+6. Return graph data ready for visualization
+
+### Configuration
+
+Set your vault path in one of:
+- `obsidian.vault_path` in `~/.anakot/config.yaml`
+- `OBSIDIAN_VAULT_PATH` environment variable in `~/.anakot/.env`
+- Pass `vault_path` directly to the tool
+
+### Toolset
+
+Enable the `obsidian` toolset to access the graph scanner:
+```
+anakot tools enable obsidian
+```

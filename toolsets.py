@@ -139,6 +139,12 @@ TOOLSETS = {
         "includes": []
     },
 
+    "obsidian": {
+        "description": "Obsidian Knowledge Graph — scan vault for markdown notes and [[WikiLink]] connections, returning force-directed graph data for visualization",
+        "tools": ["obsidian_graph_scan"],
+        "includes": []
+    },
+
     "computer_use": {
         "description": (
             "Background macOS desktop control via cua-driver — screenshots, "

@@ -11108,7 +11108,7 @@ class GatewayRunner:
                         current_model=current_model,
                         user_providers=user_provs,
                         custom_providers=custom_provs,
-                        max_models=50,
+                        max_models=200,
                     )
                 except Exception:
                     providers = []
