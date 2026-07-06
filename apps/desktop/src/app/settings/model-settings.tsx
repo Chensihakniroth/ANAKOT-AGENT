@@ -43,7 +43,8 @@ const AUX_TASKS: readonly AuxTaskMeta[] = [
   { key: 'approval' },
   { key: 'mcp' },
   { key: 'title_generation' },
-  { key: 'curator' }
+  { key: 'curator' },
+  { key: 'commit_gen' },
 ]
 
 const NO_PROVIDERS: readonly ModelOptionProvider[] = [{ name: '—', slug: '', models: [] }]

@@ -62,6 +62,7 @@ declare global {
       gitDiscard?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
       gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitStagedDiff?: (cwd: string) => Promise<{ ok: boolean; diff: string; error?: string }>
       gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
       gitBranches?: (cwd: string) => Promise<{ ok: boolean; branches: Array<{ name: string; current: boolean }>; error?: string }>
       gitCheckout?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>

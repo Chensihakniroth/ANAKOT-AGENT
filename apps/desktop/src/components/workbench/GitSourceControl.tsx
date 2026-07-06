@@ -22,13 +22,24 @@ interface ContextMenuState {
   type: 'staged' | 'changes'
 }
 
-const STATUS_ICONS: Record<string, { icon: string; color: string }> = {
-  modified: { icon: 'edit', color: 'text-amber-400' },
-  added: { icon: 'add', color: 'text-green-400' },
-  deleted: { icon: 'trash', color: 'text-red-400' },
-  renamed: { icon: 'file-symlink-file', color: 'text-blue-400' },
-  untracked: { icon: 'question', color: 'text-muted-foreground' },
-  unmerged: { icon: 'git-merge', color: 'text-red-400' },
+const STATUS_LETTER: Record<string, { letter: string; color: string }> = {
+  modified:    { letter: 'M', color: 'text-amber-400' },
+  added:       { letter: 'A', color: 'text-green-400' },
+  deleted:     { letter: 'D', color: 'text-red-400' },
+  renamed:     { letter: 'R', color: 'text-blue-400' },
+  untracked:   { letter: '?', color: 'text-muted-foreground' },
+  unmerged:    { letter: 'U', color: 'text-red-400' },
+}
+
+function getFileIcon(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  if (!ext) return 'file'
+  if (ext === 'ts' || ext === 'tsx') return 'symbol-file'
+  if (ext === 'py' || ext === 'rb' || ext === 'go' || ext === 'rs') return 'symbol-misc'
+  if (ext === 'css' || ext === 'scss' || ext === 'less') return 'symbol-color'
+  const CODE_EXTS = ['ts','tsx','js','jsx','cjs','mjs','rb','go','rs','java','kt','scala','swift','html','htm','vue','svelte','json','yaml','yml','xml','toml','sh','bash','zsh','ps1','bat','sql','graphql']
+  if (CODE_EXTS.includes(ext)) return 'file-code'
+  return 'file'
 }
 
 export function GitSourceControl() {
@@ -43,6 +54,10 @@ export function GitSourceControl() {
   const commitMessage = useStore($gitCommitMessage)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [checkoutConflict, setCheckoutConflict] = useState<{ branch: string, message: string } | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [stagedCollapsed, setStagedCollapsed] = useState(false)
+  const [changesCollapsed, setChangesCollapsed] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Track the current git root in a ref so async callbacks always see the latest value
   const gitRootRef = useRef<string | null>(null)
@@ -146,6 +161,23 @@ export function GitSourceControl() {
     }
   }, [cwd, status.root, unstagedFiles])
 
+  const handleGenerate = useCallback(async () => {
+    if (!cwd.trim() || generating) return
+    setGenerating(true)
+    try {
+      const root = status.root || cwd
+      const { gitGenerateCommitMessage } = await import('@/store/git')
+      await gitGenerateCommitMessage(root)
+      const el = textareaRef.current
+      if (el) {
+        el.style.height = 'auto'
+        el.style.height = `${el.scrollHeight}px`
+      }
+    } finally {
+      setGenerating(false)
+    }
+  }, [cwd, status.root, generating])
+
   const handleCommit = useCallback(async () => {
     if (commitMessage.trim()) {
       const root = status.root || cwd
@@ -199,49 +231,62 @@ export function GitSourceControl() {
   }, [cwd, status.root])
 
   const renderFileItem = (file: GitFile, type: 'staged' | 'changes') => {
-    const statusInfo = STATUS_ICONS[file.status] || STATUS_ICONS.modified
+    const statusInfo = STATUS_LETTER[file.status] || STATUS_LETTER.modified
+    const fileName = file.path.split('/').pop() || file.path
+    const fileDir = file.path.split('/').slice(0, -1).join('/')
+    const iconName = getFileIcon(fileName)
     return (
       <div
         key={file.path}
-        className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs hover:bg-(--ui-control-hover-background) w-full cursor-pointer"
+        className="group flex items-start gap-1.5 rounded-[2px] px-2 py-[3px] text-xs leading-4 hover:bg-(--ui-control-hover-background) w-full cursor-pointer"
         onContextMenu={e => openContextMenu(e, file, type)}
         onClick={() => {
           console.log('[GitSourceControl] row click:', file.path, type)
           void handleOpenFile(file.path)
         }}
       >
-        <Codicon name={statusInfo.icon} size="0.75rem" className={`shrink-0 ${statusInfo.color} w-4`} />
-        <span className="flex-1 truncate text-foreground min-w-0" title={file.path}>{file.path.split('/').pop()}</span>
-        <span className="text-[0.6rem] uppercase text-muted-foreground shrink-0">{file.status}</span>
-        {/* Hover actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 pr-1">
+        {/* File type icon (left side) */}
+        <Codicon name={iconName} size="0.65rem" className="shrink-0 mt-0.5 text-muted-foreground" />
+        {/* Filename + path (middle) */}
+        <div className="flex-1 min-w-0">
+          <div className="truncate text-foreground text-[0.6rem]" title={file.path}>{fileName}</div>
+          {fileDir && (
+            <div className="truncate text-[0.5rem] leading-3 text-muted-foreground/45">{fileDir}</div>
+          )}
+        </div>
+        {/* Status letter on the right (VS Code style) */}
+        <span className={`shrink-0 text-[0.5rem] font-bold font-mono leading-4 mt-0.5 ${statusInfo.color}`}>
+          {statusInfo.letter}
+        </span>
+        {/* Hover actions — minimal icon buttons */}
+        <div className="flex items-center gap-px opacity-0 group-hover:opacity-100 mt-0.5 shrink-0">
           {type === 'staged' && (
              <button
-               className="rounded-sm p-1 text-muted-foreground hover:text-foreground focus:outline-none"
+               className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline unstage click, file:', file.path); handleUnstage(file.path) }}
                title="Unstage"
                type="button"
              >
-               <Codicon name="remove" size="0.625rem" />
+               <Codicon name="remove" size="0.5rem" />
              </button>
-           )}
+          )}
           {type === 'changes' && (
             <>
               <button
-                className="rounded-sm p-1 text-muted-foreground hover:text-foreground focus:outline-none"
+                className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
                 onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline stage click, file:', file.path); handleStage(file.path) }}
                 title="Stage"
                 type="button"
               >
-                <Codicon name="add" size="0.625rem" />
+                <Codicon name="add" size="0.5rem" />
               </button>
               <button
-                className="rounded-sm p-1 text-muted-foreground hover:text-destructive focus:outline-none"
+                className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive focus:outline-none"
                 onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline discard click, file:', file.path); handleDiscard(file.path) }}
                 title="Discard"
                 type="button"
               >
-                <Codicon name="discard" size="0.625rem" />
+                <Codicon name="discard" size="0.5rem" />
               </button>
             </>
           )}
@@ -251,11 +296,12 @@ export function GitSourceControl() {
   }
 
   return (
-    <div tabIndex={-1} className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-3 outline-none" onFocus={handleFocus}>
+    <div tabIndex={-1} className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-2 outline-none" onFocus={handleFocus}>
+      <style>{`.commit-textarea::placeholder { white-space: nowrap; text-overflow: ellipsis; }`}</style>
       {/* Header */}
-      <div className="flex min-w-0 items-center gap-2">
-        <Codicon name="source-control" size="1rem" className="shrink-0 text-foreground" />
-        <span className="min-w-0 truncate text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Codicon name="source-control" size="0.875rem" className="shrink-0 text-foreground" />
+        <span className="min-w-0 truncate text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
           {t.gitSourceControl || 'Source Control'}
         </span>
         {status.branch && (
@@ -265,11 +311,11 @@ export function GitSourceControl() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2 py-1 hover:bg-(--ui-control-hover-background)"
+                className="ml-auto flex shrink-0 items-center gap-1 rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-1.5 py-0.5 hover:bg-(--ui-control-hover-background)"
               >
-                <Codicon name="git-branch" size="0.75rem" className="text-foreground" />
-                <span className="max-w-24 truncate text-xs font-medium text-foreground">{status.branch}</span>
-                <Codicon name="chevron-down" size="0.75rem" className="text-muted-foreground ml-0.5" />
+                <Codicon name="git-branch" size="0.625rem" className="text-foreground" />
+                <span className="max-w-20 truncate text-[0.65rem] font-medium text-foreground">{status.branch}</span>
+                <Codicon name="chevron-down" size="0.625rem" className="text-muted-foreground ml-0.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-[200px] overflow-y-auto">
@@ -300,25 +346,57 @@ export function GitSourceControl() {
         )}
       </div>
 
-      {/* Commit input */}
-      <div className="flex min-w-0 gap-1.5">
-        <input
-          className="min-w-0 max-w-64 flex-1 rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-          placeholder={t.gitCommitPlaceholder || 'Commit message'}
-          value={commitMessage}
-          onChange={e => $gitCommitMessage.set(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <Button
-          size="sm"
-          disabled={!commitMessage.trim() || stagedFiles.length === 0}
-          onClick={handleCommit}
-          className="shrink-0 px-3 py-1 text-xs"
-        >
-          <Codicon name="check" size="0.75rem" />
-          {t.gitCommit || 'Commit'}
-        </Button>
+      {/* Commit input - sparkle button next to textarea */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-start gap-1">
+          <textarea
+            ref={textareaRef}
+            className="commit-textarea min-h-[22px] flex-1 rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) pl-3 py-[5px] text-[0.65rem] leading-4 text-foreground placeholder:text-muted-foreground/45 focus:border-primary focus:outline-none resize-none overflow-hidden"
+            placeholder={`Message (Ctrl+Enter to commit on "${status.branch || 'main'}")`}
+            value={commitMessage}
+            onChange={e => {
+              $gitCommitMessage.set(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = `${e.target.scrollHeight}px`
+            }}
+            onKeyDown={handleKeyDown}
+            rows={1}
+          />
+          <button
+            aria-label="Generate commit message with AI"
+            className="flex h-[28px] shrink-0 items-center justify-center rounded-[2px] px-1 text-muted-foreground hover:text-foreground hover:bg-(--ui-control-hover-background) disabled:opacity-40"
+            disabled={generating}
+            onClick={handleGenerate}
+            type="button"
+            title="Generate commit message from changes"
+          >
+            <Codicon name={generating ? 'sync' : 'sparkle'} size="0.7rem" className={generating ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        {/* Split-button commit — VS Code style */}
+        <div className="flex items-stretch">
+          <button
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-s-[2px] border border-(--ui-stroke-tertiary) bg-[#3c3c4c] px-3 py-[5px] text-[0.65rem] font-medium text-foreground hover:bg-[#4a4a5a] disabled:opacity-40 disabled:pointer-events-none"
+            disabled={!commitMessage.trim() || stagedFiles.length === 0}
+            onClick={handleCommit}
+            type="button"
+          >
+            <Codicon name="check" size="0.65rem" className="text-foreground" />
+            <span>{t.gitCommit || 'Commit'}</span>
+          </button>
+          <button
+            className="flex items-center justify-center rounded-r-[2px] border border-l-0 border-(--ui-stroke-tertiary) bg-[#3c3c4c] px-[7px] py-[5px] text-muted-foreground hover:bg-[#4a4a5a] disabled:opacity-40"
+            disabled={!commitMessage.trim() || stagedFiles.length === 0}
+            type="button"
+            aria-label="Commit options"
+          >
+            <Codicon name="chevron-down" size="0.65rem" />
+          </button>
+        </div>
       </div>
+
+      {/* Separator — like VS Code's visual boundary between commit box and file list */}
+      <div className="h-px bg-(--ui-stroke-tertiary)" />
 
       {/* Git error banner — shows git-specific errors like VS Code */}
       {error && (
@@ -383,33 +461,50 @@ export function GitSourceControl() {
           {/* Staged Changes */}
           {stagedFiles.length > 0 && (
             <div>
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
-                  {t.gitStaged || 'Staged Changes'} ({stagedFiles.length})
+              <div
+                className="flex items-center gap-1 px-1 py-0.5 cursor-pointer hover:bg-(--ui-control-hover-background) rounded-[2px] select-none"
+                onClick={() => setStagedCollapsed(prev => !prev)}
+              >
+                <Codicon name={stagedCollapsed ? 'chevron-right' : 'chevron-down'} size="0.5rem" className="text-muted-foreground shrink-0" />
+                <span className="text-[0.55rem] font-medium uppercase tracking-wider text-muted-foreground">
+                  {t.gitStaged || 'Staged Changes'}
+                </span>
+                <span className="flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-(--ui-bg-quaternary) px-[5px] text-[0.45rem] font-semibold text-muted-foreground/70">
+                  {stagedFiles.length}
                 </span>
               </div>
-              <div className="flex flex-col gap-px">
-                {stagedFiles.map(f => renderFileItem(f, 'staged'))}
-              </div>
+              {!stagedCollapsed && (
+                <div className="flex flex-col gap-px">
+                  {stagedFiles.map(f => renderFileItem(f, 'staged'))}
+                </div>
+              )}
             </div>
           )}
           {/* Changes (unstaged) — always show like VS Code */}
           <div>
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[0.65rem] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.gitChanges || 'Changes'} ({unstagedFiles.length})
+            <div
+              className="flex items-center gap-1 px-1 py-0.5 cursor-pointer hover:bg-(--ui-control-hover-background) rounded-[2px] select-none"
+              onClick={() => setChangesCollapsed(prev => !prev)}
+            >
+              <Codicon name={changesCollapsed ? 'chevron-right' : 'chevron-down'} size="0.5rem" className="text-muted-foreground shrink-0" />
+              <span className="text-[0.55rem] font-medium uppercase tracking-wider text-muted-foreground">
+                {t.gitChanges || 'Changes'}
+              </span>
+              <span className="flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-(--ui-bg-quaternary) px-[5px] text-[0.45rem] font-semibold text-muted-foreground/70">
+                {unstagedFiles.length}
               </span>
               {unstagedFiles.length > 0 && (
                 <button
-                  className="text-[0.6rem] text-muted-foreground hover:text-foreground"
-                  onClick={handleStageAll}
+                  className="ml-auto rounded-[2px] px-1 text-[0.5rem] text-muted-foreground/60 hover:text-foreground hover:bg-(--ui-control-hover-background)"
+                  onClick={e => { e.stopPropagation(); handleStageAll() }}
                   type="button"
+                  title="Stage All"
                 >
-                  {t.gitStageAll || 'Stage All'}
+                  <Codicon name="add" size="0.5rem" />
                 </button>
               )}
             </div>
-            {unstagedFiles.length > 0 && (
+            {!changesCollapsed && unstagedFiles.length > 0 && (
               <div className="flex flex-col gap-px">
                 {unstagedFiles.map(f => renderFileItem(f, 'changes'))}
               </div>

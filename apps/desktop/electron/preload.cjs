@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   gitDiscard: (cwd, files) => ipcRenderer.invoke('anakot:git:discard', { cwd, files }),
   gitCommit: (cwd, message) => ipcRenderer.invoke('anakot:git:commit', { cwd, message }),
   gitDiff: (cwd, file) => ipcRenderer.invoke('anakot:git:diff', { cwd, file }),
+  gitStagedDiff: cwd => ipcRenderer.invoke('anakot:git:staged-diff', { cwd }),
   gitLog: (cwd, limit) => ipcRenderer.invoke('anakot:git:log', { cwd, limit }),
   gitBranches: cwd => ipcRenderer.invoke('anakot:git:branches', cwd),
   gitCheckout: (cwd, branch) => ipcRenderer.invoke('anakot:git:checkout', { cwd, branch }),

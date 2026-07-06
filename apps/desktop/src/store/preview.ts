@@ -1,12 +1,14 @@
 import { atom, computed } from 'nanostores'
 
-import { $rightRailActiveTabId, RIGHT_RAIL_PREVIEW_TAB_ID, type RightRailTabId, selectRightRailTab } from './layout'
+import { $rightRailActiveTabId, RIGHT_RAIL_CODE_REVIEW_TAB_ID, RIGHT_RAIL_GIT_COMMIT_TAB_ID, RIGHT_RAIL_PREVIEW_TAB_ID, type RightRailTabId, selectRightRailTab } from './layout'
 import { $activeSessionId, $selectedStoredSessionId } from './session'
+import { clearCodeReviewData } from './code-review'
+import { clearGitCommitData } from './git-commit'
 
 export interface PreviewTarget {
   binary?: boolean
   byteSize?: number
-  kind: 'file' | 'url'
+  kind: 'file' | 'url' | 'diff'
   label: string
   large?: boolean
   language?: string
@@ -16,6 +18,10 @@ export interface PreviewTarget {
   renderMode?: 'preview' | 'source'
   source: string
   url: string
+  /** Diff-specific: original file content */
+  originalContent?: string
+  /** Diff-specific: modified file content */
+  modifiedContent?: string
 }
 
 export interface PreviewServerRestart {
@@ -392,6 +398,20 @@ export function closeRightRailTab(tabId: RightRailTabId) {
       dismissPreviewTarget()
     }
 
+    return
+  }
+
+  if (tabId === RIGHT_RAIL_CODE_REVIEW_TAB_ID) {
+    clearCodeReviewData()
+    const nextTabs = $filePreviewTabs.get()
+    selectRightRailTab(nextTabs[0]?.id ?? RIGHT_RAIL_PREVIEW_TAB_ID)
+    return
+  }
+
+  if (tabId === RIGHT_RAIL_GIT_COMMIT_TAB_ID) {
+    clearGitCommitData()
+    const nextTabs = $filePreviewTabs.get()
+    selectRightRailTab(nextTabs[0]?.id ?? RIGHT_RAIL_PREVIEW_TAB_ID)
     return
   }
 

@@ -2,7 +2,16 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import ForceGraph3D from 'react-force-graph-3d'
 import * as THREE from 'three'
 import { forceX, forceY, forceZ } from 'd3-force-3d'
-import { IconSettings, IconRotateClockwise as RefreshIcon, IconX as CloseIcon, IconChevronDown as ChevronDownIcon } from '@tabler/icons-react'
+import {
+  IconSettings,
+  IconRotateClockwise as RefreshIcon,
+  IconX as CloseIcon,
+  IconChevronDown as ChevronDownIcon,
+  IconSearch as SearchIcon,
+  IconZoomReset as ResetZoomIcon,
+} from '@tabler/icons-react'
+import type { PreviewTarget } from '@/store/preview'
+import { setCurrentSessionPreviewTarget } from '@/store/preview'
 
 interface GraphNode {
   id: string
@@ -34,6 +43,7 @@ interface GraphSettings {
   d3AlphaDecay: number
   d3VelocityDecay: number
   containmentStrength: number
+  autoRefresh: boolean
 }
 
 const GROUP_COLORS: Record<string, string> = {
@@ -98,21 +108,27 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
   )
 }
 
-export function KnowledgeGraphView() {
+export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const fgRef = useRef<any>(null)
   const zoomedRef = useRef(false)
   const mountedRef = useRef(true)
+  const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null)
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
+  const [hoveredLink, setHoveredLink] = useState<{ source: GraphNode; target: GraphNode } | null>(null)
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 })
   const [vaultPath, setVaultPath] = useState<string | null>(null)
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null)
+  const [expandDepth, setExpandDepth] = useState(1)
   const [appBgColor, setAppBgColor] = useState('#0f0f1a')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null)
   const [settings, setSettings] = useState<GraphSettings>({
     showArrows: false,
     nodeSize: 4,
@@ -125,6 +141,7 @@ export function KnowledgeGraphView() {
     d3AlphaDecay: 0.02,
     d3VelocityDecay: 0.3,
     containmentStrength: 0.05,
+    autoRefresh: false,
   })
 
   // Shared Three.js geometries/materials for performance
@@ -165,6 +182,19 @@ export function KnowledgeGraphView() {
     if (bg) setAppBgColor(bg)
   }, [])
 
+  // Escape key clears selection
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedNode(null)
+        setHighlightedNodeId(null)
+        setHoveredLink(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const updateSize = useCallback(() => {
     if (containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect()
@@ -175,6 +205,73 @@ export function KnowledgeGraphView() {
   const getNodeColor = useCallback((node: GraphNode) => {
     return GROUP_COLORS[node.group] || FALLBACK_COLORS[node.id.charCodeAt(0) % FALLBACK_COLORS.length]
   }, [])
+
+  // Search + group filtering
+  const allGroupNames = useMemo(() => {
+    if (!graphData) return []
+    const names = new Set(graphData.nodes.map(n => n.group))
+    return Array.from(names).sort()
+  }, [graphData])
+
+  const filteredGraphData = useMemo(() => {
+    if (!graphData) return null
+    let nodes = graphData.nodes
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      nodes = nodes.filter(n => n.name.toLowerCase().includes(q) || n.path.toLowerCase().includes(q))
+    }
+
+    // Filter by visible groups
+    if (visibleGroups) {
+      nodes = nodes.filter(n => visibleGroups.has(n.group))
+    }
+
+    // Only keep links between visible nodes
+    const visibleIds = new Set(nodes.map(n => n.id))
+    const links = graphData.links.filter(l => {
+      // d3-force may have mutated source/target to node refs — handle both
+      const linkAny = l as any
+      const sourceId = typeof linkAny.source === 'object' ? (linkAny.source?.id ?? linkAny.source) : linkAny.source
+      const targetId = typeof linkAny.target === 'object' ? (linkAny.target?.id ?? linkAny.target) : linkAny.target
+      return visibleIds.has(sourceId) && visibleIds.has(targetId)
+    })
+
+    return { nodes, links }
+  }, [graphData, searchQuery, visibleGroups])
+
+  // Connected-node highlighting with depth expansion
+  const connectedNodeIds = useMemo(() => {
+    if (!highlightedNodeId || !filteredGraphData) return null
+    const connected = new Set<string>([highlightedNodeId])
+
+    // BFS up to expandDepth
+    let frontier = [highlightedNodeId]
+    for (let depth = 0; depth < expandDepth; depth++) {
+      const next: string[] = []
+      for (const nid of frontier) {
+        for (const link of filteredGraphData.links) {
+          // d3-force may have mutated source/target to node refs — handle both
+          const linkAny = link as any
+          const sourceId = typeof linkAny.source === 'object' ? (linkAny.source?.id ?? linkAny.source) : linkAny.source
+          const targetId = typeof linkAny.target === 'object' ? (linkAny.target?.id ?? linkAny.target) : linkAny.target
+          if (sourceId === nid && !connected.has(targetId)) {
+            connected.add(targetId)
+            next.push(targetId)
+          }
+          if (targetId === nid && !connected.has(sourceId)) {
+            connected.add(sourceId)
+            next.push(sourceId)
+          }
+        }
+      }
+      frontier = next
+      if (frontier.length === 0) break
+    }
+
+    return connected
+  }, [highlightedNodeId, filteredGraphData, expandDepth])
 
   const scanVault = useCallback(async () => {
     if (!vaultPath) { setError('No vault path set'); return }
@@ -235,10 +332,17 @@ export function KnowledgeGraphView() {
     return () => { mounted = false }
   }, [vaultPath])
 
+  // Auto-refresh polling (30s interval)
+  useEffect(() => {
+    if (!settings.autoRefresh || !vaultPath || loading) return
+    const interval = setInterval(() => {
+      scanVault()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [settings.autoRefresh, vaultPath, scanVault, loading])
+
   // --- Forces ---
 
-  // Apply force parameters when graph data loads (no reheat — ForceGraph3D
-  // handles simulation startup internally, so reheating here races its init)
   useEffect(() => {
     const fg = fgRef.current
     if (!fg || !graphData) return
@@ -255,18 +359,11 @@ export function KnowledgeGraphView() {
       link.strength(settings.linkForce)
     }
 
-    // Register containment forces — rubber bands that pull nodes back
-    // toward origin. Strength acts like max-distance limit: higher =
-    // tighter boundary.
     fg.d3Force('x', forceX(0).strength(settings.containmentStrength))
     fg.d3Force('y', forceY(0).strength(settings.containmentStrength))
     fg.d3Force('z', forceZ(0).strength(settings.containmentStrength))
   }, [graphData])
 
-  // Reheat simulation only when user tweaks force-related settings (safe
-  // because initialization is already complete by the time they interact).
-  // Display-only settings (showArrows, labelsVisible, nodeSize, linkThickness)
-  // do NOT reheat — they're handled by ForceGraph3D props directly.
   useEffect(() => {
     const fg = fgRef.current
     if (!fg || !graphData) return
@@ -285,8 +382,6 @@ export function KnowledgeGraphView() {
 
     fg.d3ReheatSimulation()
 
-    // Update containment forces to match slider (forces already registered
-    // on initial load, but strength needs updating + reheat)
     const xForce = fg.d3Force('x')
     if (xForce) xForce.strength(settings.containmentStrength)
     const yForce = fg.d3Force('y')
@@ -307,13 +402,70 @@ export function KnowledgeGraphView() {
 
   const handleRefresh = scanVault
 
+  const handleResetCamera = useCallback(() => {
+    if (fgRef.current) {
+      zoomedRef.current = true
+      setTimeout(() => fgRef.current?.zoomToFit(400, 80), 50)
+    }
+  }, [])
+
+  const handleNodeDoubleClick = useCallback((node: GraphNode) => {
+    const posixPath = node.path.replace(/\\/g, '/')
+    const target: PreviewTarget = {
+      kind: 'file',
+      label: node.name,
+      language: 'markdown',
+      path: posixPath,
+      previewKind: 'text',
+      source: node.path,
+      url: `file:///${posixPath}`,
+    }
+    setCurrentSessionPreviewTarget(target, 'manual')
+    onClose?.()
+  }, [onClose])
+
   const handleNodeClick = useCallback((node: GraphNode) => {
-    setSelectedNode(node)
+    const now = Date.now()
+    const last = lastClickRef.current
+    // Double-click on same node within 400ms → open file
+    if (last && last.nodeId === node.id && now - last.time < 400) {
+      lastClickRef.current = null
+      handleNodeDoubleClick(node)
+      return
+    }
+    lastClickRef.current = { nodeId: node.id, time: now }
+
+    if (selectedNode?.id === node.id) {
+      // Same node re-clicked: toggle expand depth 1↔2
+      setExpandDepth(prev => prev === 1 ? 2 : 1)
+    } else {
+      // Different node: select and reset depth to 1
+      setSelectedNode(node)
+      setHighlightedNodeId(node.id)
+      setExpandDepth(1)
+    }
+  }, [selectedNode, handleNodeDoubleClick])
+
+  const handleBackgroundClick = useCallback(() => {
+    setSelectedNode(null)
+    setHighlightedNodeId(null)
+    setHoveredLink(null)
   }, [])
 
   const handleNodeHover = useCallback((node: GraphNode | null) => {
     document.body.style.cursor = node ? 'pointer' : 'default'
     setHoveredNode(node)
+  }, [])
+
+  const handleLinkHover = useCallback((link: any | null) => {
+    if (!link) {
+      setHoveredLink(null)
+      return
+    }
+    setHoveredLink({
+      source: link.source,
+      target: link.target,
+    })
   }, [])
 
   const handleNodeDragEnd = useCallback((node: any) => {
@@ -333,13 +485,25 @@ export function KnowledgeGraphView() {
 
   const nodeLabelFn = useCallback((node: GraphNode) => `${node.name}`, [])
   const nodeValFn = useCallback((node: GraphNode) => node.size ?? 1, [])
-  const linkColorFn = useCallback(() => 'rgba(128, 128, 128, 0.15)', [])
+  const linkColorFn = useCallback((link: any) => {
+    if (!connectedNodeIds) return 'rgba(128, 128, 128, 0.15)'
+    const sourceId = link.source?.id ?? link.source
+    const targetId = link.target?.id ?? link.target
+    return connectedNodeIds.has(sourceId) && connectedNodeIds.has(targetId)
+      ? 'rgba(128, 128, 128, 0.3)'
+      : 'rgba(128, 128, 128, 0.04)'
+  }, [connectedNodeIds])
   const linkArrowColorFn = useCallback(() => 'rgba(128, 128, 128, 0.3)', [])
+  const linkLabelFn = useCallback((link: any) => {
+    const s = link.source?.name ?? link.source
+    const t = link.target?.name ?? link.target
+    return `${s} → ${t}`
+  }, [])
 
   const forceGraphData = useMemo(() => ({
-    nodes: graphData?.nodes ?? [],
-    links: graphData?.links ?? [],
-  }), [graphData])
+    nodes: filteredGraphData?.nodes ?? [],
+    links: filteredGraphData?.links ?? [],
+  }), [filteredGraphData])
 
   // --- 3D Node Renderer ---
 
@@ -347,17 +511,20 @@ export function KnowledgeGraphView() {
     const color = getNodeColor(node)
     const scale = Math.max(0.3, (node.size ?? 1) * (settings.nodeSize / 4) * 0.5)
     const geometry = getSphereGeometry()
-    const material = getNodeMaterial(color)
+    const isDimmed = connectedNodeIds !== null && !connectedNodeIds.has(node.id)
+    const material = isDimmed
+      ? new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.12 })
+      : getNodeMaterial(color)
     const mesh = new THREE.Mesh(geometry, material)
     mesh.scale.set(scale, scale, scale)
     return mesh
-  }, [getSphereGeometry, getNodeMaterial, getNodeColor, settings.nodeSize])
+  }, [getSphereGeometry, getNodeMaterial, getNodeColor, settings.nodeSize, connectedNodeIds])
 
   // --- Render States ---
 
   return (
     <div ref={containerRef} className="relative h-full w-full" style={{ width: '100%', height: '100%' }}>
-      {/* Overlay: Loading — canvas preserved underneath */}
+      {/* Overlay: Loading */}
       {loading && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
@@ -382,7 +549,7 @@ export function KnowledgeGraphView() {
         </div>
       )}
 
-      {/* Overlay: Empty — no data, not loading, no error */}
+      {/* Overlay: Empty */}
       {(!graphData || graphData.nodes.length === 0) && !loading && !error && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[var(--color-bg-primary)]/80 backdrop-blur-sm">
           <div className="text-center">
@@ -391,10 +558,12 @@ export function KnowledgeGraphView() {
           </div>
         </div>
       )}
-      {/* Top bar — Sci-fi HUD */}
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[var(--color-bg-primary)]/80 backdrop-blur-md border border-[var(--color-border)] shadow-sm">
+
+      {/* Top bar — full HUD */}
+      <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-bg-primary)]/80 backdrop-blur-md border border-[var(--color-border)] shadow-sm">
+        {/* Settings toggle */}
         <button onClick={() => setShowSettings(s => !s)}
-          className={`p-1.5 rounded-md transition-all ${
+          className={`p-1.5 rounded-md transition-all shrink-0 ${
             showSettings
               ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]'
               : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)]'
@@ -403,19 +572,47 @@ export function KnowledgeGraphView() {
         >
           <IconSettings className="h-4 w-4" strokeWidth={2} />
         </button>
-        <div className="w-px h-4 bg-[var(--color-border)]" />
-        <button onClick={handleRefresh} className="text-xs px-2.5 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider" title="Rescan vault">
-          <RefreshIcon className="h-3 w-3 inline mr-1.5" strokeWidth={2} />
+
+        {/* Search bar */}
+        <div className="relative flex-1 min-w-0 max-w-[260px]">
+          <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--color-text-tertiary)]" strokeWidth={2} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search nodes..."
+            className="w-full pl-7 pr-2 py-1 text-[11px] font-mono bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)]/50 outline-none focus:border-[var(--color-accent)]/50 transition-colors"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">
+              <CloseIcon className="h-3 w-3" strokeWidth={2} />
+            </button>
+          )}
+        </div>
+
+        <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
+
+        {/* Refresh + Reset camera */}
+        <button onClick={handleRefresh} className="text-xs px-2 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider shrink-0" title="Rescan vault">
+          <RefreshIcon className="h-3 w-3 inline mr-1" strokeWidth={2} />
           REFRESH
         </button>
-        <div className="w-px h-4 bg-[var(--color-border)]" />
-        <div className="flex items-center gap-3 font-mono text-[10px]">
+        <button onClick={handleResetCamera} className="text-xs px-2 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider shrink-0" title="Reset camera">
+          <ResetZoomIcon className="h-3 w-3 inline mr-1" strokeWidth={2} />
+          RESET
+        </button>
+
+        <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
+
+        {/* Stats */}
+        <div className="flex items-center gap-3 font-mono text-[10px] shrink-0">
           {lastScanTime && <span className="text-[var(--color-text-tertiary)]">{lastScanTime.toLocaleTimeString()}</span>}
-          <span className="text-[var(--color-text-secondary)]">{graphData?.nodes.length ?? 0}<span className="text-[var(--color-text-tertiary)]">N</span> <span className="text-[var(--color-accent)]">{graphData?.links.length ?? 0}<span className="text-[var(--color-text-tertiary)]">E</span></span></span>
+          <span className="text-[var(--color-text-secondary)]">{filteredGraphData?.nodes.length ?? 0}<span className="text-[var(--color-text-tertiary)]">N</span> <span className="text-[var(--color-accent)]">{filteredGraphData?.links.length ?? 0}<span className="text-[var(--color-text-tertiary)]">E</span></span></span>
+          {expandDepth === 2 && <span className="text-[var(--color-accent)]/70 font-mono text-[9px]">2-HOP</span>}
         </div>
       </div>
 
-      {/* Settings panel — Sci-fi interface */}
+      {/* Settings panel */}
       {showSettings && (
         <div className="absolute top-0 right-0 z-20 h-full w-[260px] overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-bg-primary)] backdrop-blur-2xl p-4 shadow-2xl shadow-black/20">
           <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
@@ -474,6 +671,37 @@ export function KnowledgeGraphView() {
               <Slider value={settings.containmentStrength} min={0} max={0.3} step={0.005} onChange={v => setSettings(s => ({ ...s, containmentStrength: v }))} />
             </div>
           </Section>
+
+          <Section title="Automation">
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--color-text-primary)]">Auto-refresh</span>
+              <Toggle value={settings.autoRefresh} onChange={v => setSettings(s => ({ ...s, autoRefresh: v }))} />
+            </div>
+          </Section>
+
+          {/* Group filters */}
+          {allGroupNames.length > 0 && (
+            <Section title="Groups">
+              {allGroupNames.map(group => (
+                <div key={group} className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-[var(--color-text-primary)]">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GROUP_COLORS[group] || FALLBACK_COLORS[group.charCodeAt(0) % FALLBACK_COLORS.length] }} />
+                    {group}
+                  </span>
+                  <Toggle
+                    value={!visibleGroups || visibleGroups.has(group)}
+                    onChange={v => {
+                      setVisibleGroups(prev => {
+                        const next = new Set(prev ?? allGroupNames)
+                        v ? next.add(group) : next.delete(group)
+                        return next.size === allGroupNames.length ? null : next
+                      })
+                    }}
+                  />
+                </div>
+              ))}
+            </Section>
+          )}
         </div>
       )}
 
@@ -498,6 +726,7 @@ export function KnowledgeGraphView() {
         linkDirectionalParticleWidth={1.5}
         linkDirectionalParticleSpeed={0.004}
         linkDirectionalParticleColor={() => 'rgba(128, 128, 128, 0.4)'}
+        linkLabel={linkLabelFn}
         enableNodeDrag={true}
         enableNavigationControls={true}
         d3AlphaDecay={settings.d3AlphaDecay}
@@ -507,11 +736,13 @@ export function KnowledgeGraphView() {
         d3AlphaMin={0.001}
         onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
+        onLinkHover={handleLinkHover}
+        onBackgroundClick={handleBackgroundClick}
         onNodeDragEnd={handleNodeDragEnd}
         onEngineStop={handleEngineStop}
       />
 
-      {/* Hover tooltip — Holographic data tag */}
+      {/* Hover tooltip — Node */}
       {hoveredNode && selectedNode !== hoveredNode && (
         <div className="absolute top-14 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[200px] z-10">
           <div className="font-mono text-xs text-[var(--color-text-primary)]">{hoveredNode.name}</div>
@@ -519,11 +750,22 @@ export function KnowledgeGraphView() {
         </div>
       )}
 
-      {/* Selected node info — Sci-fi data card */}
+      {/* Hover tooltip — Link */}
+      {hoveredLink && !hoveredNode && (
+        <div className="absolute top-14 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[300px] z-10">
+          <div className="font-mono text-xs text-[var(--color-text-primary)]">{hoveredLink.source.name}</div>
+          <div className="text-[10px] font-mono text-[var(--color-text-tertiary)]">↓</div>
+          <div className="font-mono text-xs text-[var(--color-accent)]">{hoveredLink.target.name}</div>
+        </div>
+      )}
+
+      {/* Selected node info */}
       {selectedNode && (
-        <div className="absolute top-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/90 backdrop-blur-md border border-[var(--color-border)] max-w-[240px] z-10" style={{ right: showSettings ? '266px' : '10px' }}>
+        <div className="absolute top-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/90 backdrop-blur-md border border-[var(--color-border)] max-w-[280px] z-10" style={{ right: showSettings ? '266px' : '10px' }}>
           <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--color-border)]">
-            <span className="text-[9px] font-mono tracking-[0.2em] text-[var(--color-text-tertiary)]">SELECTED_NODE</span>
+            <span className="text-[9px] font-mono tracking-[0.2em] text-[var(--color-text-tertiary)]">
+              {expandDepth === 2 ? 'SELECTED (2-HOP)' : 'SELECTED_NODE'}
+            </span>
             <button onClick={() => setSelectedNode(null)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
               <CloseIcon className="h-3.5 w-3.5" strokeWidth={2} />
             </button>
@@ -533,7 +775,13 @@ export function KnowledgeGraphView() {
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
             <span className="text-[10px] font-mono text-[var(--color-text-secondary)] tracking-wider">{selectedNode.group}</span>
           </div>
-          <div className="text-[9px] font-mono text-[var(--color-text-tertiary)] truncate tracking-wider">{selectedNode.path}</div>
+          <div className="text-[9px] font-mono text-[var(--color-text-tertiary)] truncate tracking-wider hover:text-clip hover:overflow-visible hover:whitespace-normal" title={selectedNode.path}>{selectedNode.path}</div>
+          <button
+            onClick={() => handleNodeDoubleClick(selectedNode)}
+            className="mt-2.5 w-full text-[10px] px-2.5 py-1.5 rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] font-mono tracking-[0.1em] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all"
+          >
+            OPEN FILE
+          </button>
         </div>
       )}
     </div>

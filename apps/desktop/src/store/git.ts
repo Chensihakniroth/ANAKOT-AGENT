@@ -461,6 +461,82 @@ export async function gitCommit(cwd: string, message: string) {
   }
 }
 
+/** Fetch the staged diff (what will be committed). */
+export async function gitGetStagedDiff(cwd: string): Promise<{ ok: boolean; diff?: string; error?: string }> {
+  if (!cwd.trim()) return { ok: false, error: 'empty-path' }
+  const safePath = toIpcSafePath(cwd.trim())
+  try {
+    const result = await window.anakotDesktop?.gitStagedDiff?.(safePath)
+    if (result?.ok && result.diff) {
+      return { ok: true, diff: result.diff }
+    }
+    return { ok: false, error: result?.error || 'no staged changes' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'git diff failed' }
+  }
+}
+
+/**
+ * Generate an AI commit message from the staged diff using the backend API.
+ * Returns the generated message, or null on failure.
+ */
+export async function gitGenerateCommitMessage(cwd: string): Promise<string | null> {
+  try {
+    const staged = await gitGetStagedDiff(cwd)
+    let diffText = staged.ok && typeof staged.diff === 'string' ? staged.diff : ''
+    
+    // Fall back to unstaged diff if nothing staged
+    if (!diffText.trim() && cwd.trim()) {
+      try {
+        const safePath = toIpcSafePath(cwd.trim())
+        const allDiff = await window.anakotDesktop?.gitDiff?.(safePath, '')
+        if (allDiff?.ok && typeof allDiff.diff === 'string') {
+          diffText = allDiff.diff
+        }
+      } catch { /* ignore fallback */ }
+    }
+
+    if (!diffText.trim()) return null
+
+    // Truncate very large diffs to avoid token limits
+    if (diffText.length > 8000) {
+      diffText = diffText.slice(0, 8000) + '\n... (diff truncated)'
+    }
+
+    const response = await window.anakotDesktop.api<{
+      choices?: Array<{ message?: { content?: string } }>
+    }>({
+      method: 'POST',
+      path: '/api/v1/chat/completions',
+      body: {
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a git commit message generator. Generate a concise, conventional commit message (format: type(scope): description) based on the provided git diff. Keep the subject line under 72 characters. Use types: feat, fix, refactor, chore, docs, style, perf, test, ci. If multiple changes exist, use a single descriptive message or a short scope list. Output ONLY the commit message, no explanation.'
+          },
+          {
+            role: 'user',
+            content: `Generate a conventional commit message for this diff:\n\n\`\`\`diff\n${diffText}\n\`\`\``
+          }
+        ],
+        max_tokens: 4096,
+        temperature: 0.3,
+        reasoning_effort: 'low'
+      }
+    })
+
+    const content = response?.choices?.[0]?.message?.content?.trim()
+    if (content) {
+      return content
+    }
+    console.warn('[gitGenerateCommitMessage] API returned no content:', JSON.stringify(response).slice(0, 500))
+    return null
+  } catch (err) {
+    console.error('[gitGenerateCommitMessage] unexpected error:', err)
+    return null
+  }
+}
+
 export async function gitLoadCommits(cwd: string, limit = 20) {
   if (!cwd.trim()) return
   const safePath = toIpcSafePath(cwd)

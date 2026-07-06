@@ -2069,6 +2069,7 @@ _AUX_TASK_SLOTS: Tuple[str, ...] = (
     "kanban_decomposer",
     "profile_describer",
     "curator",
+    "commit_gen",
 )
 
 
@@ -2567,6 +2568,143 @@ async def validate_provider_credential(body: EnvVarUpdate, request: Request):
         # 429 = key is valid but rate-limited; success = valid.
         return {"ok": True, "reachable": True, "message": ""}
     return {"ok": False, "reachable": True, "message": f"Provider returned HTTP {resp.status_code} for this key."}
+
+
+@app.post("/api/v1/chat/completions")
+async def proxy_chat_completions(request: Request):
+    """Proxy POST /api/v1/chat/completions to the configured main provider.
+
+    Used by the desktop commit-message generation (git.ts / right-rail
+    git-commit.tsx).  Forwards the request body as-is to the provider's
+    OpenAI-compatible /v1/chat/completions endpoint and returns its
+    response transparently.
+    """
+    _require_token(request)
+
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+
+    if not provider_name or provider_name == "auto":
+        # Fallback: resolve via auth module
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+
+    # Normalize provider aliases (mirrors anakot_cli/providers.py alias maps)
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode",
+        "zen": "opencode",
+        "opencode-go": "opencode-go",
+        "google": "gemini",
+        "google-gemini-cli": "gemini",
+        "gemini-cli": "gemini",
+        "x-ai": "xai",
+        "x.ai": "xai",
+        "grok": "xai",
+        "claude": "anthropic",
+        "github": "copilot",
+        "github-copilot": "copilot",
+        "llama.cpp": "custom",
+        "ollama": "custom",
+        "vllm": "custom",
+        "lmstudio": "custom",
+        "lm-studio": "custom",
+    }
+    # Keep original provider name for API key lookup (env vars use the original key name)
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+
+    # Well-known base URLs for common providers
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com",
+        "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "google": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai",
+        "copilot": "https://api.githubcopilot.com",
+        "zai": "https://open.bigmodel.cn/api/paas/v4",
+        "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        # Check provider-specific env var for custom base URLs
+        env_base_url_var = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(env_base_url_var, "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+
+    # Load .env vars and find the API key
+    # Note: replace dashes with underscores so "opencode-zen" -> "OPENCODE_ZEN_API_KEY"
+    # (env var names use underscores, never dashes)
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY")
+        or env.get("GEMINI_API_KEY")
+    )
+
+    if not api_key:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No API key found for provider '{provider_name}'. Check your .env file.",
+        )
+
+    # Parse the incoming OpenAI-format body
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    # Inject the configured model into the request body if caller didn't
+    # specify one (the desktop git code doesn't).
+    if "model" not in body or not body["model"]:
+        body["model"] = model_name or "gpt-4o"
+
+    # Forward to the provider
+    # Strip trailing /v1 from base_url to avoid double /v1 path
+    if base_url.endswith('/v1'):
+        base_url = base_url[:-3]
+    target_url = f"{base_url}/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+            resp = await client.post(target_url, json=body, headers=headers)
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            media_type="application/json",
+        )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Cannot connect to provider at {base_url}: {exc}",
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Provider request timed out",
+        )
+    except Exception as exc:
+        _log.exception("Proxy /api/v1/chat/completions failed")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Provider request failed: {exc}",
+        )
 
 
 @app.delete("/api/env")

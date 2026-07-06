@@ -32,6 +32,7 @@ import {
   unpinSession
 } from '../store/layout'
 import { $filePreviewTarget, $previewTarget, closeActiveRightRailTab } from '../store/preview'
+import { $codeReviewData } from '../store/code-review'
 import { $activeGatewayProfile, $freshSessionRequest, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
 import {
   $activeSessionId,
@@ -158,6 +159,7 @@ export function DesktopController() {
   const freshDraftReady = useStore($freshDraftReady)
   const filePreviewTarget = useStore($filePreviewTarget)
   const previewTarget = useStore($previewTarget)
+  const codeReviewData = useStore($codeReviewData)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
@@ -224,8 +226,8 @@ export function DesktopController() {
   const { connectionRef, gatewayRef, requestGateway } = useGatewayRequest()
 
   useEffect(() => {
-    window.anakotDesktop?.setPreviewShortcutActive?.(Boolean(chatOpen && (filePreviewTarget || previewTarget)))
-  }, [chatOpen, filePreviewTarget, previewTarget])
+    window.anakotDesktop?.setPreviewShortcutActive?.(Boolean(chatOpen && (filePreviewTarget || previewTarget || codeReviewData)))
+  }, [chatOpen, codeReviewData, filePreviewTarget, previewTarget])
 
   useEffect(() => {
     startUpdatePoller()
@@ -239,7 +241,7 @@ export function DesktopController() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!$filePreviewTarget.get() && !$previewTarget.get()) {
+      if (!$filePreviewTarget.get() && !$previewTarget.get() && !$codeReviewData.get()) {
         return
       }
 
@@ -750,7 +752,7 @@ export function DesktopController() {
       {pluginsOpen && (
         <Suspense fallback={null}>
           <OverlayModal onClose={closeOverlayToPreviousRoute} title="Plugins">
-            <PluginsView />
+            <PluginsView onClose={closeOverlayToPreviousRoute} />
           </OverlayModal>
         </Suspense>
       )}
@@ -811,7 +813,7 @@ export function DesktopController() {
 
   const previewPane = (
     <Pane
-      disabled={rightRailCollapsed || !chatOpen || (!previewTarget && !filePreviewTarget)}
+      disabled={rightRailCollapsed || !chatOpen || (!previewTarget && !filePreviewTarget && !codeReviewData)}
       id="preview"
       key="preview"
       maxWidth={PREVIEW_RAIL_MAX_WIDTH}

@@ -28,7 +28,10 @@ export const CHAT_SIDEBAR_PANE_ID = 'chat-sidebar'
 export const FILE_BROWSER_PANE_ID = 'file-browser'
 export const RIGHT_RAIL_PREVIEW_TAB_ID = 'preview'
 
-export type RightRailTabId = typeof RIGHT_RAIL_PREVIEW_TAB_ID | `file:${string}`
+export const RIGHT_RAIL_CODE_REVIEW_TAB_ID = 'code-review'
+export const RIGHT_RAIL_GIT_COMMIT_TAB_ID = 'git-commit'
+
+export type RightRailTabId = typeof RIGHT_RAIL_PREVIEW_TAB_ID | typeof RIGHT_RAIL_CODE_REVIEW_TAB_ID | typeof RIGHT_RAIL_GIT_COMMIT_TAB_ID | `file:${string}`
 
 ensurePaneRegistered(CHAT_SIDEBAR_PANE_ID, { open: true })
 ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: false })

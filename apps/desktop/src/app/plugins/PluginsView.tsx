@@ -14,7 +14,7 @@ const LOCAL_PLUGINS = [
   },
 ]
 
-export function PluginsView() {
+export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void }) {
   const { plugins, manifests, loading } = usePlugins()
   const navigate = useNavigate()
   const [activeLocalPlugin, setActiveLocalPlugin] = useState<string | null>(null)
@@ -41,7 +41,7 @@ export function PluginsView() {
           </p>
         </div>
         <div className="flex-1 min-h-0">
-          <KnowledgeGraphView />
+          <KnowledgeGraphView onClose={onOverlayClose} />
         </div>
       </div>
     )

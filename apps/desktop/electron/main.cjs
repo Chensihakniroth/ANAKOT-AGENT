@@ -532,15 +532,15 @@ function registerPluginProtocol() {
       const url = new URL(request.url)
       const pluginName = url.hostname
       const pluginFile = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
-      
+
       if (!connectionPromise) {
         return new Response('Backend not ready', { status: 503 })
       }
-      
+
       const conn = await connectionPromise
       const baseUrl = conn.baseUrl || `http://127.0.0.1:${conn.port}`
       const targetUrl = new URL(`/dashboard-plugins/${pluginName}/${pluginFile}`, baseUrl)
-      
+
       return electronNet.fetch(targetUrl.toString(), {
         bypassCustomProtocolHandlers: true,
         headers: request.headers
@@ -5730,8 +5730,8 @@ function startGitWatcher(gitRoot) {
       const name = String(filename)
       // Skip .git directory events (handled above), lock files, and heavy temp folders
       if (
-        name === '.git' || 
-        name.startsWith(`.git${path.sep}`) || 
+        name === '.git' ||
+        name.startsWith(`.git${path.sep}`) ||
         name.startsWith('.git/') ||
         name.endsWith('lock')
       ) return
@@ -5968,10 +5968,28 @@ ipcMain.handle('anakot:git:diff', async (_event, { cwd, file }) => {
     }
     const root = await findGitRoot(rawPath)
     if (!root) return { ok: false, error: 'not a git repo' }
-    const diff = await runGit(['diff', 'HEAD', '--', file], { cwd: root })
-    return { ok: true, diff }
+    const result = await runGit(['diff', 'HEAD', '--', file], { cwd: root })
+    return { ok: true, diff: result.stdout }
   } catch (error) {
     return { ok: false, error: error?.message || 'git diff failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:staged-diff', async (_event, { cwd }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    // staged diff = what will be committed
+    const result = await runGit(['diff', '--cached'], { cwd: root })
+    return { ok: true, diff: result.stdout }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git staged diff failed' }
   }
 })
 

@@ -15,10 +15,18 @@ import { translateNow, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   $rightRailActiveTabId,
+  RIGHT_RAIL_CODE_REVIEW_TAB_ID,
+  RIGHT_RAIL_GIT_COMMIT_TAB_ID,
   RIGHT_RAIL_PREVIEW_TAB_ID,
   type RightRailTabId,
   selectRightRailTab
 } from '@/store/layout'
+import {
+  $codeReviewData
+} from '@/store/code-review'
+import {
+  $gitCommitData
+} from '@/store/git-commit'
 import {
   $filePreviewTabs,
   $previewReloadRequest,
@@ -29,6 +37,9 @@ import {
 } from '@/store/preview'
 
 import { PreviewPane } from './preview-pane'
+import { DiffPreview } from './diff-preview'
+import { CodeReviewPanel } from './code-review'
+import { GitCommitPanel } from './git-commit'
 
 export const PREVIEW_RAIL_MIN_WIDTH = '18rem'
 export const PREVIEW_RAIL_MAX_WIDTH = '38rem'
@@ -49,7 +60,7 @@ interface ChatPreviewRailProps {
 interface RailTab {
   id: RightRailTabId
   label: string
-  target: PreviewTarget
+  target?: PreviewTarget
 }
 
 function tabLabelFor(target: PreviewTarget): string {
@@ -65,15 +76,19 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
   const activeTabId = useStore($rightRailActiveTabId)
   const filePreviewTabs = useStore($filePreviewTabs)
   const previewTarget = useStore($previewTarget)
+  const codeReviewData = useStore($codeReviewData)
+  const gitCommitData = useStore($gitCommitData)
   const [contextTabId, setContextTabId] = useState<string | null>(null)
   const [contextTabPath, setContextTabPath] = useState<string | null>(null)
 
   const tabs = useMemo<readonly RailTab[]>(
     () => [
       ...(previewTarget ? [{ id: RIGHT_RAIL_PREVIEW_TAB_ID, label: t.preview.tab, target: previewTarget } as RailTab] : []),
+      ...(codeReviewData ? [{ id: RIGHT_RAIL_CODE_REVIEW_TAB_ID, label: 'Review' } as RailTab] : []),
+      ...(gitCommitData ? [{ id: RIGHT_RAIL_GIT_COMMIT_TAB_ID, label: 'Commit' } as RailTab] : []),
       ...filePreviewTabs.map(({ id, target }) => ({ id, label: tabLabelFor(target), target }) as RailTab)
     ],
-    [filePreviewTabs, previewTarget, t.preview.tab]
+    [codeReviewData, filePreviewTabs, gitCommitData, previewTarget, t.preview.tab]
   )
 
   const activeTab = tabs.find(tab => tab.id === activeTabId) ?? tabs[0]
@@ -99,8 +114,8 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
         >
           {tabs.map(tab => {
             const active = tab.id === activeTab.id
-            const isFileTab = tab.id !== RIGHT_RAIL_PREVIEW_TAB_ID
-            const tabPath = isFileTab ? (tab.target.path ?? null) : null
+            const isFileTab = tab.id !== RIGHT_RAIL_PREVIEW_TAB_ID && tab.id !== RIGHT_RAIL_CODE_REVIEW_TAB_ID && tab.id !== RIGHT_RAIL_GIT_COMMIT_TAB_ID
+            const tabPath = isFileTab ? (tab.target?.path ?? null) : null
 
             return (
               <ContextMenu key={tab.id} onOpenChange={(open) => { if (!open && contextTabId === tab.id) { setContextTabId(null); setContextTabPath(null) } }}>
@@ -243,13 +258,21 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        <PreviewPane
-          embedded
-          onRestartServer={isPreview ? onRestartServer : undefined}
-          reloadRequest={previewReloadRequest}
-          setTitlebarToolGroup={setTitlebarToolGroup}
-          target={activeTab.target}
-        />
+        {activeTab.id === RIGHT_RAIL_CODE_REVIEW_TAB_ID ? (
+          <CodeReviewPanel />
+        ) : activeTab.id === RIGHT_RAIL_GIT_COMMIT_TAB_ID ? (
+          <GitCommitPanel />
+        ) : activeTab.target?.kind === 'diff' ? (
+          <DiffPreview target={activeTab.target} />
+        ) : (
+          <PreviewPane
+            embedded
+            onRestartServer={isPreview ? onRestartServer : undefined}
+            reloadRequest={previewReloadRequest}
+            setTitlebarToolGroup={setTitlebarToolGroup}
+            target={activeTab.target!}
+          />
+        )}
       </div>
     </aside>
   )
