@@ -46,6 +46,7 @@
   },
   "dependencies": {
     "@anakot/shared": "file:../shared",
+    "d3-force": "^3.0.0",
     "@assistant-ui/react": "^0.12.28",
     "@assistant-ui/react-streamdown": "^0.1.11",
     "@audiowave/react": "^0.6.2",
@@ -108,6 +109,7 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.3.2",
     "@types/hast": "^3.0.4",
+    "@types/d3-force": "^3.0.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

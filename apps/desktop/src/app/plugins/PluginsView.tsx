@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePlugins } from './usePlugins'
 import { KnowledgeGraphView } from './KnowledgeGraphView'
+import { StarmapView } from '@/app/starmap'
 
 const LOCAL_PLUGINS = [
   {
@@ -10,6 +11,14 @@ const LOCAL_PLUGINS = [
     description: 'Visualize Obsidian vault notes and their connections',
     version: '1.0.0',
     tab: { path: '__local__knowledge-graph' },
+    kind: 'local',
+  },
+  {
+    name: 'memory-graph',
+    label: 'Memory Graph',
+    description: 'Radial timeline of memories and skills over time',
+    version: '1.0.0',
+    tab: { path: '__local__memory-graph' },
     kind: 'local',
   },
 ]
@@ -45,6 +54,10 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
         </div>
       </div>
     )
+  }
+
+  if (activeLocalPlugin === 'memory-graph') {
+    return <StarmapView onClose={onOverlayClose ?? (() => {/* no-op */})} />
   }
 
   return (

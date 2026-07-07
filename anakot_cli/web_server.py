@@ -1245,6 +1245,62 @@ async def update_anakot():
     }
 
 
+@app.get("/api/learning/graph")
+async def get_learning_graph():
+    """Return the Memory Graph (starmap) data for desktop's Memory Graph plugin."""
+    try:
+        from agent.learning_graph import build_learning_graph
+
+        graph = build_learning_graph()
+        return JSONResponse(graph)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+class LearningNodeRef(BaseModel):
+    id: str
+    profile: str | None = None
+
+
+class LearningNodeEdit(BaseModel):
+    id: str
+    content: str
+    profile: str | None = None
+
+
+@app.get("/api/learning/node")
+async def get_learning_node(id: str, profile: str | None = None):
+    """Current content of a journey node (skill SKILL.md or memory chunk), for an edit prefill."""
+    from agent.learning_mutations import node_detail
+
+    res = node_detail(id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("message", "not found"))
+    return res
+
+
+@app.delete("/api/learning/node")
+async def delete_learning_node(body: LearningNodeRef):
+    """Delete a journey node — skills are archived (restorable), memories removed."""
+    from agent.learning_mutations import delete_node
+
+    res = delete_node(body.id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("message", "delete failed"))
+    return res
+
+
+@app.put("/api/learning/node")
+async def update_learning_node(body: LearningNodeEdit):
+    """Rewrite a journey node's content (SKILL.md or memory chunk)."""
+    from agent.learning_mutations import edit_node
+
+    res = edit_node(body.id, body.content)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("message", "edit failed"))
+    return res
+
+
 @app.get("/api/anakot/update/check")
 async def check_anakot_update(force: bool = False):
     """Report whether a Anakot update is available, without applying it.
