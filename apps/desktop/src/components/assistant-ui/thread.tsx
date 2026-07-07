@@ -423,7 +423,7 @@ const ThinkingDisclosure: FC<{
           <span
             className={cn(
               'text-[length:var(--conversation-tool-font-size)] font-medium leading-(--conversation-line-height) text-(--ui-text-secondary)',
-              pending && 'shimmer text-foreground/55'
+              pending && 'text-(--ui-text-tertiary)'
             )}
           >
             {t.assistant.thread.thinking}
@@ -471,7 +471,7 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
       s.thread.isRunning &&
       s.message.status?.type === 'running' &&
       s.message.parts
-        .slice(Math.max(0, startIndex))
+        .slice(Math.max(0, startIndex), endIndex + 1)
         .some(p => p?.type === 'reasoning' && p.status?.type !== 'complete')
   )
 
@@ -506,8 +506,7 @@ const ReasoningTextPart: FC<{ text: string; status?: { type: string } }> = ({ te
   return (
     <MarkdownTextContent
       containerClassName={cn(
-        'text-xs leading-snug text-muted-foreground/85',
-        isRunning && 'shimmer text-muted-foreground/55'
+        'text-xs leading-snug text-muted-foreground/85'
       )}
       containerProps={{ 'data-slot': 'aui_reasoning-text' } as ComponentProps<'div'>}
       isRunning={isRunning}

@@ -306,7 +306,7 @@ function ToolEntry({ part }: ToolEntryProps) {
             <FadeText
               className={cn(
                 TOOL_HEADER_TITLE_CLASS,
-                isPending && 'shimmer text-(--ui-text-tertiary)',
+                isPending && 'text-(--ui-text-tertiary)',
                 view.status === 'error' && 'text-destructive',
                 view.status === 'warning' && 'text-amber-700 dark:text-amber-300'
               )}
