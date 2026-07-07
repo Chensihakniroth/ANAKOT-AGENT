@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import ForceGraph3D from 'react-force-graph-3d'
-import * as THREE from 'three'
 import { forceX, forceY, forceZ } from 'd3-force-3d'
 import {
   IconSettings,
@@ -126,13 +125,14 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
   const [showSettings, setShowSettings] = useState(false)
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null)
   const [expandDepth, setExpandDepth] = useState(1)
-  const [appBgColor, setAppBgColor] = useState('#0f0f1a')
+
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchVisible, setSearchVisible] = useState(false)
   const [visibleGroups, setVisibleGroups] = useState<Set<string> | null>(null)
   const [settings, setSettings] = useState<GraphSettings>({
     showArrows: false,
     nodeSize: 4,
-    linkThickness: 1,
+    linkThickness: 2.5,
     centreForce: 1.0,
     repelForce: -60,
     linkForce: 0.3,
@@ -144,43 +144,12 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
     autoRefresh: false,
   })
 
-  // Shared Three.js geometries/materials for performance
-  const sphereGeomRef = useRef<THREE.SphereGeometry | null>(null)
-  const materialCacheRef = useRef<Map<string, THREE.MeshLambertMaterial>>(new Map())
-
-  const getSphereGeometry = useCallback(() => {
-    if (!sphereGeomRef.current) {
-      sphereGeomRef.current = new THREE.SphereGeometry(1, 16, 12)
-    }
-    return sphereGeomRef.current
-  }, [])
-
-  const getNodeMaterial = useCallback((color: string) => {
-    const cache = materialCacheRef.current
-    let mat = cache.get(color)
-    if (!mat) {
-      mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 })
-      cache.set(color, mat)
-    }
-    return mat
-  }, [])
-
-  // Clean up Three.js resources on unmount
+  // Prevent state updates after unmount
   useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      if (sphereGeomRef.current) sphereGeomRef.current.dispose()
-      materialCacheRef.current.forEach(m => m.dispose())
-      materialCacheRef.current.clear()
-    }
+    return () => { mountedRef.current = false }
   }, [])
 
-  // Read app theme color for the Three.js WebGL background
-  useEffect(() => {
-    const el = document.documentElement
-    const bg = getComputedStyle(el).getPropertyValue('--color-bg-primary').trim()
-    if (bg) setAppBgColor(bg)
-  }, [])
+
 
   // Escape key clears selection
   useEffect(() => {
@@ -189,6 +158,7 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
         setSelectedNode(null)
         setHighlightedNodeId(null)
         setHoveredLink(null)
+        setSearchVisible(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -479,21 +449,30 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
   const handleEngineStop = useCallback(() => {
     if (fgRef.current && !zoomedRef.current) {
       zoomedRef.current = true
-      setTimeout(() => fgRef.current?.zoomToFit(400, 80), 100)
+      // Force a known camera position to ensure nodes are in view
+      setTimeout(() => {
+        try {
+          fgRef.current?.cameraPosition(
+            { x: 0, y: 0, z: 250 },
+            { x: 0, y: 0, z: 0 },
+            0
+          )
+        } catch {}
+      }, 50)
     }
   }, [])
 
   const nodeLabelFn = useCallback((node: GraphNode) => `${node.name}`, [])
-  const nodeValFn = useCallback((node: GraphNode) => node.size ?? 1, [])
+  const nodeValFn = useCallback((node: GraphNode) => Math.max(1, node.size ?? 1), [])
   const linkColorFn = useCallback((link: any) => {
-    if (!connectedNodeIds) return 'rgba(128, 128, 128, 0.15)'
+    if (!connectedNodeIds) return '#888888'
     const sourceId = link.source?.id ?? link.source
     const targetId = link.target?.id ?? link.target
     return connectedNodeIds.has(sourceId) && connectedNodeIds.has(targetId)
-      ? 'rgba(128, 128, 128, 0.3)'
-      : 'rgba(128, 128, 128, 0.04)'
+      ? '#aaaaaa'
+      : '#555555'
   }, [connectedNodeIds])
-  const linkArrowColorFn = useCallback(() => 'rgba(128, 128, 128, 0.3)', [])
+  const linkArrowColorFn = useCallback(() => '#888888', [])
   const linkLabelFn = useCallback((link: any) => {
     const s = link.source?.name ?? link.source
     const t = link.target?.name ?? link.target
@@ -504,21 +483,6 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
     nodes: filteredGraphData?.nodes ?? [],
     links: filteredGraphData?.links ?? [],
   }), [filteredGraphData])
-
-  // --- 3D Node Renderer ---
-
-  const nodeThreeObject = useCallback((node: GraphNode) => {
-    const color = getNodeColor(node)
-    const scale = Math.max(0.3, (node.size ?? 1) * (settings.nodeSize / 4) * 0.5)
-    const geometry = getSphereGeometry()
-    const isDimmed = connectedNodeIds !== null && !connectedNodeIds.has(node.id)
-    const material = isDimmed
-      ? new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.12 })
-      : getNodeMaterial(color)
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.scale.set(scale, scale, scale)
-    return mesh
-  }, [getSphereGeometry, getNodeMaterial, getNodeColor, settings.nodeSize, connectedNodeIds])
 
   // --- Render States ---
 
@@ -559,62 +523,9 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
         </div>
       )}
 
-      {/* Top bar — full HUD */}
-      <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-bg-primary)]/80 backdrop-blur-md border border-[var(--color-border)] shadow-sm">
-        {/* Settings toggle */}
-        <button onClick={() => setShowSettings(s => !s)}
-          className={`p-1.5 rounded-md transition-all shrink-0 ${
-            showSettings
-              ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]'
-              : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)]'
-          }`}
-          title="Settings"
-        >
-          <IconSettings className="h-4 w-4" strokeWidth={2} />
-        </button>
-
-        {/* Search bar */}
-        <div className="relative flex-1 min-w-0 max-w-[260px]">
-          <SearchIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--color-text-tertiary)]" strokeWidth={2} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search nodes..."
-            className="w-full pl-7 pr-2 py-1 text-[11px] font-mono bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)]/50 outline-none focus:border-[var(--color-accent)]/50 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">
-              <CloseIcon className="h-3 w-3" strokeWidth={2} />
-            </button>
-          )}
-        </div>
-
-        <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
-
-        {/* Refresh + Reset camera */}
-        <button onClick={handleRefresh} className="text-xs px-2 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider shrink-0" title="Rescan vault">
-          <RefreshIcon className="h-3 w-3 inline mr-1" strokeWidth={2} />
-          REFRESH
-        </button>
-        <button onClick={handleResetCamera} className="text-xs px-2 py-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-bg-secondary)] transition-all font-mono tracking-wider shrink-0" title="Reset camera">
-          <ResetZoomIcon className="h-3 w-3 inline mr-1" strokeWidth={2} />
-          RESET
-        </button>
-
-        <div className="w-px h-4 bg-[var(--color-border)] shrink-0" />
-
-        {/* Stats */}
-        <div className="flex items-center gap-3 font-mono text-[10px] shrink-0">
-          {lastScanTime && <span className="text-[var(--color-text-tertiary)]">{lastScanTime.toLocaleTimeString()}</span>}
-          <span className="text-[var(--color-text-secondary)]">{filteredGraphData?.nodes.length ?? 0}<span className="text-[var(--color-text-tertiary)]">N</span> <span className="text-[var(--color-accent)]">{filteredGraphData?.links.length ?? 0}<span className="text-[var(--color-text-tertiary)]">E</span></span></span>
-          {expandDepth === 2 && <span className="text-[var(--color-accent)]/70 font-mono text-[9px]">2-HOP</span>}
-        </div>
-      </div>
-
-      {/* Settings panel */}
+      {/* Settings panel (floating overlay) */}
       {showSettings && (
-        <div className="absolute top-0 right-0 z-20 h-full w-[260px] overflow-y-auto border-l border-[var(--color-border)] bg-[var(--color-bg-primary)] backdrop-blur-2xl p-4 shadow-2xl shadow-black/20">
+        <div className="absolute bottom-12 right-3 z-20 w-[260px] max-h-[65vh] overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)]/95 backdrop-blur-2xl p-4 shadow-2xl shadow-black/20">
           <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <span className="text-sm font-mono tracking-[0.2em] text-[var(--color-text-secondary)]">CONTROLS</span>
             <button onClick={() => setShowSettings(false)} className="text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
@@ -711,21 +622,16 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
         graphData={forceGraphData}
         width={containerSize.width}
         height={containerSize.height}
-        backgroundColor={appBgColor}
+        backgroundColor="#000000"
         showNavInfo={false}
         nodeLabel={settings.labelsVisible ? nodeLabelFn : undefined}
         nodeColor={getNodeColor}
         nodeRelSize={settings.nodeSize}
         nodeVal={nodeValFn}
-        nodeThreeObject={nodeThreeObject}
         linkColor={linkColorFn}
         linkWidth={settings.linkThickness}
         linkDirectionalArrowLength={settings.showArrows ? 5 : 0}
         linkDirectionalArrowColor={linkArrowColorFn}
-        linkDirectionalParticles={4}
-        linkDirectionalParticleWidth={1.5}
-        linkDirectionalParticleSpeed={0.004}
-        linkDirectionalParticleColor={() => 'rgba(128, 128, 128, 0.4)'}
         linkLabel={linkLabelFn}
         enableNodeDrag={true}
         enableNavigationControls={true}
@@ -742,9 +648,73 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
         onEngineStop={handleEngineStop}
       />
 
+      {/* Top-center: Search bar (when active) */}
+      {searchVisible && (
+        <div className="pointer-events-none absolute inset-x-0 top-6 z-20 flex justify-center px-12">
+          <div className="pointer-events-auto relative w-full max-w-[300px]">
+            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-[var(--color-text-tertiary)]" strokeWidth={2} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search nodes..."
+              ref={(input) => { if (input && searchVisible) { setTimeout(() => input.focus(), 50) } }}
+              className="w-full pl-8 pr-8 py-1.5 text-[11px] font-mono bg-[var(--color-bg-primary)]/80 backdrop-blur-md border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)]/50 outline-none text-center focus:border-[var(--color-accent)]/50 transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => { setSearchQuery(''); setSearchVisible(false) }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">
+                <CloseIcon className="h-3 w-3" strokeWidth={2} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bottom-left: Stats (like StarMap legend) */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-10 flex flex-col gap-0.5 text-[0.6rem] font-mono text-[var(--color-text-tertiary)]">
+        <span className="text-[var(--color-text-secondary)]">
+          {filteredGraphData?.nodes.length ?? 0}<span className="text-[var(--color-text-tertiary)]">N</span>
+          {' · '}
+          <span className="text-[var(--color-accent)]">{filteredGraphData?.links.length ?? 0}<span className="text-[var(--color-text-tertiary)]">E</span></span>
+        </span>
+        {lastScanTime && <span>updated {lastScanTime.toLocaleTimeString()}</span>}
+        {expandDepth === 2 && <span className="text-[var(--color-accent)]/70">2-HOP</span>}
+      </div>
+
+      {/* Bottom-right: Controls (like StarMap share controls) */}
+      <div className="pointer-events-auto absolute bottom-3 right-3 z-10 [-webkit-app-region:no-drag] flex items-center gap-1">
+        <button onClick={() => setSearchVisible(s => !s)}
+          className={`p-1.5 rounded-md transition-all ${
+            searchVisible
+              ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]'
+              : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)]'
+          }`}
+          title="Search nodes"
+        >
+          <SearchIcon className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+        <button onClick={() => setShowSettings(s => !s)}
+          className={`p-1.5 rounded-md transition-all ${
+            showSettings
+              ? 'bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]'
+              : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)]'
+          }`}
+          title="Settings"
+        >
+          <IconSettings className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+        <div className="w-px h-4 bg-[var(--color-border)]" />
+        <button onClick={handleRefresh} className="p-1.5 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-all" title="Rescan vault">
+          <RefreshIcon className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+        <button onClick={handleResetCamera} className="p-1.5 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-secondary)] transition-all" title="Reset camera">
+          <ResetZoomIcon className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      </div>
+
       {/* Hover tooltip — Node */}
       {hoveredNode && selectedNode !== hoveredNode && (
-        <div className="absolute top-14 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[200px] z-10">
+        <div className="absolute top-3 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[200px] z-10">
           <div className="font-mono text-xs text-[var(--color-text-primary)]">{hoveredNode.name}</div>
           <div className="text-[9px] font-mono text-[var(--color-text-tertiary)] tracking-wider">{hoveredNode.group}</div>
         </div>
@@ -752,7 +722,7 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
 
       {/* Hover tooltip — Link */}
       {hoveredLink && !hoveredNode && (
-        <div className="absolute top-14 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[300px] z-10">
+        <div className="absolute top-3 left-3 bg-[var(--color-bg-primary)]/90 backdrop-blur-md px-2.5 py-1.5 rounded border border-[var(--color-border)] max-w-[300px] z-10">
           <div className="font-mono text-xs text-[var(--color-text-primary)]">{hoveredLink.source.name}</div>
           <div className="text-[10px] font-mono text-[var(--color-text-tertiary)]">↓</div>
           <div className="font-mono text-xs text-[var(--color-accent)]">{hoveredLink.target.name}</div>
@@ -761,7 +731,7 @@ export function KnowledgeGraphView({ onClose }: { onClose?: () => void }) {
 
       {/* Selected node info */}
       {selectedNode && (
-        <div className="absolute top-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/90 backdrop-blur-md border border-[var(--color-border)] max-w-[280px] z-10" style={{ right: showSettings ? '266px' : '10px' }}>
+        <div className="absolute top-3 right-3 p-3 rounded-lg bg-[var(--color-bg-primary)]/90 backdrop-blur-md border border-[var(--color-border)] max-w-[280px] z-10">
           <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--color-border)]">
             <span className="text-[9px] font-mono tracking-[0.2em] text-[var(--color-text-tertiary)]">
               {expandDepth === 2 ? 'SELECTED (2-HOP)' : 'SELECTED_NODE'}

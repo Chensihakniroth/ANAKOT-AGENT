@@ -1,7 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
-import { PageLoader } from '@/components/page-loader'
 import { useI18n } from '@/i18n'
 import { $starmapError, $starmapGraph, $starmapLoading, loadStarmapGraph } from '@/store/starmap'
 import type { StarmapGraph } from '@/global.d'
@@ -26,6 +25,10 @@ export function StarmapView({ onClose }: { onClose: () => void }) {
   // whenever a fresh profile graph loads in.
   const [imported, setImported] = useState<StarmapGraph | null>(null)
 
+  // Fade-in on first mount — the StarMap appears with a short opacity transition
+  // instead of a jarring pop.
+  const [fadedIn, setFadedIn] = useState(false)
+
   useEffect(() => {
     void loadStarmapGraph()
   }, [])
@@ -37,21 +40,29 @@ export function StarmapView({ onClose }: { onClose: () => void }) {
 
   const shown = imported ?? graph
 
+  // When data becomes available, delay one frame then fade in.
+  useEffect(() => {
+    if (shown) {
+      const id = requestAnimationFrame(() => setFadedIn(true))
+      return () => cancelAnimationFrame(id)
+    }
+  }, [shown])
+
   return (
     <Panel closeLabel={t.starmap.close} onClose={onClose}>
       {error ? (
         <PanelEmpty description={error} icon="warning" title={t.starmap.loadFailed} />
-      ) : !shown && loading ? (
-        <PageLoader aria-label={t.starmap.loading} className="min-h-0 flex-1" />
-      ) : shown && shown.nodes.length === 0 && !imported ? (
+      ) : shown && shown.nodes.length === 0 && !loading && !imported ? (
         <PanelEmpty description={t.starmap.emptyDesc} icon="lightbulb" title={t.starmap.emptyTitle} />
       ) : shown ? (
-        <StarMap
-          graph={shown}
-          imported={imported !== null}
-          onImport={setImported}
-          onResetMap={() => setImported(null)}
-        />
+        <div style={{ opacity: fadedIn ? 1 : 0, transition: 'opacity 0.6s ease' }} className="flex min-h-0 flex-1 flex-col">
+          <StarMap
+            graph={shown}
+            imported={imported !== null}
+            onImport={setImported}
+            onResetMap={() => setImported(null)}
+          />
+        </div>
       ) : null}
     </Panel>
   )

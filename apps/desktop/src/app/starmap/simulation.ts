@@ -292,7 +292,13 @@ export function buildSimulation(graph: StarmapGraph, onTick: () => void): BuiltS
         .iterations(2)
     )
     .force('radial', forceRadial<SimNode>(n => (n as SimNode).tr, 0, 0).strength(0.92))
-    .on('tick', onTick)
+
+  // Warm up the simulation so it starts already settled instead of visibly
+  // oscillating for the first ~5 seconds. 200 ticks at alphaDecay 0.05
+  // brings alpha ≈ e⁻¹⁰, well below the min threshold (0.001), so the
+  // simulation is effectively frozen on first render.
+  sim.tick(200)
+  sim.on('tick', onTick)
 
   return { byId, links, nodes, rings, sim }
 }

@@ -174,7 +174,7 @@ export function StarMap({
   // ringSeen reveals one band ahead), surfaced as markers on the timeline.
   const [ringStops, setRingStops] = useState<number[]>([])
   const revealRef = useRef(1)
-  // Spore-style zoom: the camera fits the *leading ring's* radius, a step
+  // Spore-style zoom: the camera fits the *leading ring's* radius
   // function of reveal. It holds steady while a band fills, then eases out to the
   // next shell when a new ring is reached — growth in discrete jumps, not a
   // constant creep. This ref is the camera's current (eased) fit radius.
@@ -316,15 +316,7 @@ export function StarMap({
     invalidate()
   }, [invalidate, selectedId])
 
-  // A fresh graph resets the scrubber to "fully built" (the idle default).
-  useEffect(() => {
-    camRadiusRef.current = RING_OUTER
-    snapMotionRef.current = false
-    setRevealValue(1)
-    setPlaying(false)
-  }, [graph, setRevealValue])
-
-  // The stepped fit radius for a reveal: fit ONE ring BEYOND the leading shell
+  // The stepped fit radius for a reveal
   // (the first not-yet-passed ring) so the ring currently igniting its nodes
   // sits comfortably inside the frame with a band of headroom, instead of jammed
   // against the edge. Steps only when reveal crosses a boundary — the Spore step.
@@ -360,6 +352,13 @@ export function StarMap({
     },
     [applyFit, targetRadius]
   )
+  // A fresh graph resets the scrubber to "fully built" (the idle default).
+  useEffect(() => {
+    camRadiusRef.current = RING_OUTER
+    snapMotionRef.current = false
+    setRevealValue(1)
+    setPlaying(false)
+  }, [graph, setRevealValue])
 
   // Playback: sweep reveal 0 → 1 over SWEEP_MS, then stop (play once).
   useEffect(() => {
@@ -596,12 +595,15 @@ export function StarMap({
       // Composite order flips on focus/hover. Idle: scene first, sphere on top —
       // its backdrop wash dims the busy centre. Focused/hovered: sphere first,
       // scene on top — so the active node's tooltip + lit lines lift ABOVE the
-      // sphere instead of being covered by it.
+      // sphere instead of being covered by it. During playback/scrubbing (reveal
+      // < 1) we also use scene-on-top so the inner rings aren't hidden behind the
+      // core's katakana scramble.
       const focused = selectedIdRef.current ?? hoverRef.current
+      const building = revealRef.current < 1
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-      if (focused) {
+      if (focused || building) {
         drawScramble({ ctx, dpr: dprRef.current, palette, rings: ringsRef.current, vp: viewportRef.current })
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.drawImage(staticCanvas, 0, 0)

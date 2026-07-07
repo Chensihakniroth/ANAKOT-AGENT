@@ -33,22 +33,6 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
   if (activeLocalPlugin === 'knowledge-graph') {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex-none p-4 pb-0">
-          <button
-            type="button"
-            className="mb-2 flex items-center gap-1 text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer"
-            onClick={() => setActiveLocalPlugin(null)}
-          >
-            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-          <h1 className="text-xl font-bold tracking-tight">Knowledge Graph</h1>
-          <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">
-            Interactive view of your Obsidian vault notes and connections.
-          </p>
-        </div>
         <div className="flex-1 min-h-0">
           <KnowledgeGraphView onClose={onOverlayClose} />
         </div>
