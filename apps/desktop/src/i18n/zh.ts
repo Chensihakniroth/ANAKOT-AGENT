@@ -858,7 +858,24 @@ export const zh: Translations = {
     noModelUsage: '暂无模型用量。',
     topSkills: '常用技能',
     noSkillActivity: '暂无技能活动。',
-    actions: count => `${count} 次操作`
+    actions: count => `${count} 次操作`,
+    pets: {
+      title: '宠物',
+      loading: '加载宠物中...',
+      staleBackend: '后端已更新，请关闭并重新打开面板。',
+      empty: '没有匹配的宠物。',
+      noneAvailable: '暂无可用宠物。请先从命令中心生成一个。',
+      toggleFailed: '无法切换宠物显示。',
+      turnOn: '开启宠物',
+      turnOff: '关闭宠物',
+      adoptFailed: slug => `无法领养 ${slug}。`,
+      uninstallFailed: slug => `无法卸载 ${slug}。`,
+      exportFailed: slug => `无法导出 ${slug}。`,
+      renameFailed: slug => `无法重命名 ${slug}。`,
+      generatedTag: '已生成',
+      installed: '已安装',
+      generateFailed: '无法生成宠物。'
+    }
   },
 
   messaging: {

@@ -598,6 +598,44 @@ export interface Translations {
     topSkills: string
     noSkillActivity: string
     actions: (count: string) => string
+    generatePet: {
+      genericError: string
+      backgroundHint: string
+      slowProviderHint: string
+      title: string
+      spawning: string
+      hatched: string
+      placeholder: string
+      generate: string
+      staleBackend: string
+      referenceImageTooLarge: string
+      referenceImageInvalid: string
+      referenceImageTaken: string
+      remix: string
+      remixConfirmBody: string
+      namePlaceholder: string
+      startOver: string
+      adopt: string
+      generating: string
+      hatch: string
+    }
+    pets: {
+      title: string
+      loading: string
+      staleBackend: string
+      empty: string
+      noneAvailable: string
+      toggleFailed: string
+      turnOn: string
+      turnOff: string
+      adoptFailed: (slug: string) => string
+      uninstallFailed: (slug: string) => string
+      exportFailed: (slug: string) => string
+      renameFailed: (slug: string) => string
+      generatedTag: string
+      installed: string
+      generateFailed: string
+    }
   }
 
   messaging: {

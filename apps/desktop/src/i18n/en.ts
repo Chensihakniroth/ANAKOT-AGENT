@@ -739,6 +739,23 @@ export const en: Translations = {
       adopt: 'Adopt',
       generating: 'Generating...',
       hatch: 'Hatch'
+    },
+    pets: {
+      title: 'Pets',
+      loading: 'Loading pets...',
+      staleBackend: 'The backend has been updated. Close and reopen the palette.',
+      empty: 'No matching pets.',
+      noneAvailable: 'No pets available. Generate one from the command center first.',
+      toggleFailed: 'Could not toggle the pet display.',
+      turnOn: 'Turn on pet',
+      turnOff: 'Turn off pet',
+      adoptFailed: slug => `Could not adopt ${slug}.`,
+      uninstallFailed: slug => `Could not uninstall ${slug}.`,
+      exportFailed: slug => `Could not export ${slug}.`,
+      renameFailed: slug => `Could not rename ${slug}.`,
+      generatedTag: 'generated',
+      installed: 'installed',
+      generateFailed: 'Could not generate pet.'
     }
   },
 
