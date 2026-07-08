@@ -8,6 +8,8 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { searchSessions, type SessionSearchResult, type SessionInfo, setSessionArchived, deleteSession } from '@/anakot'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { useI18n } from '@/i18n'
+import { notify, notifyError } from '@/store/notifications'
+import { setSessions } from '@/store/session'
 
 interface SessionListProps {
   onSelectSession: (sessionId: string) => void
@@ -120,8 +122,10 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
   const handlePinSession = (sessionId: string) => {
     if (pinnedIds.includes(sessionId)) {
       unpinSession(sessionId)
+      notify({ durationMs: 2_000, kind: 'success', message: 'Session unpinned' })
     } else {
       pinSession(sessionId)
+      notify({ durationMs: 2_000, kind: 'success', message: 'Session pinned' })
     }
     setContextMenu(null)
   }
@@ -129,18 +133,30 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
   const handleArchiveSession = useCallback(async (sessionId: string) => {
     setContextMenu(null)
     try {
-      await setSessionArchived(sessionId, true)
-    } catch {
-      // Session will reappear on next refresh
+      const res = await setSessionArchived(sessionId, true)
+      if (res?.ok !== false) {
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        notify({ durationMs: 2_000, kind: 'success', message: 'Session archived' })
+      } else {
+        notify({ durationMs: 3_000, kind: 'error', message: 'Failed to archive session' })
+      }
+    } catch (err) {
+      notifyError(err, 'Failed to archive session')
     }
   }, [])
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     setContextMenu(null)
     try {
-      await deleteSession(sessionId)
-    } catch {
-      // Handled silently
+      const res = await deleteSession(sessionId)
+      if (res?.ok) {
+        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        notify({ durationMs: 2_000, kind: 'success', message: 'Session deleted' })
+      } else {
+        notify({ durationMs: 3_000, kind: 'error', message: 'Failed to delete session' })
+      }
+    } catch (err) {
+      notifyError(err, 'Failed to delete session')
     }
   }, [])
 

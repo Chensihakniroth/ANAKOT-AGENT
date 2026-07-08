@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { ExternalLink } from '@/lib/external-link'
 import { PawPrint, Settings2 } from '@/lib/icons'
 
 interface GenerateUnavailableProps {
@@ -27,28 +26,6 @@ export function GenerateUnavailable({ onSetup }: GenerateUnavailableProps) {
         <Settings2 className="size-4" />
         Set up image generation
       </Button>
-      <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
-        <span>Grab a key from</span>
-        <ExternalLink href="https://portal.nousresearch.com" showExternalIcon={false}>
-          Nous Portal
-        </ExternalLink>
-        <span>·</span>
-        <ExternalLink
-          className="opacity-40 transition-opacity hover:opacity-100"
-          href="https://openrouter.ai/keys"
-          showExternalIcon={false}
-        >
-          OpenRouter
-        </ExternalLink>
-        <span>·</span>
-        <ExternalLink
-          className="opacity-40 transition-opacity hover:opacity-100"
-          href="https://platform.openai.com/api-keys"
-          showExternalIcon={false}
-        >
-          OpenAI
-        </ExternalLink>
-      </p>
     </div>
   )
 }
