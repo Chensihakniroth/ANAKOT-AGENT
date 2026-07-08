@@ -12,7 +12,7 @@ import type { UsageStats } from '@/types/anakot'
 
 interface ContextUsagePopoverProps {
   usage: UsageStats
-  children: React.ReactNode
+  children?: React.ReactNode
 }
 
 function StatRow({

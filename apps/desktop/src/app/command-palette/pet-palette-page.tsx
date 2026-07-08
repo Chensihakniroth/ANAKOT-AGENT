@@ -10,13 +10,16 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo } from 'react'
 
-import { HUD_ITEM, HUD_TEXT } from '@/app/floating-hud'
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { PetThumb } from '@/components/pet/pet-thumb'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, Egg, Loader2, PawPrint } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+
+/** Tailwind classes reused from the floating-hud module. */
+const HUD_ITEM = 'min-h-[1.75rem] min-w-0 px-2'
+const HUD_TEXT = 'text-xs'
 import {
   $petBusy,
   $petGallery,
@@ -55,7 +58,7 @@ export function PetPalettePage({ search, onGenerate }: PetPalettePageProps) {
   const shown = useMemo(() => rankedGalleryPets(gallery, search).slice(0, 50), [gallery, search])
 
   const adopt = (slug: string) => {
-    void adoptPet(requestGateway, slug, copy.adoptFailed).then(ok => ok && triggerHaptic('crisp'))
+    void adoptPet(requestGateway, slug, copy.adoptFailed(slug)).then(ok => ok && triggerHaptic('crisp'))
   }
 
   if (status === 'loading' && !gallery) {

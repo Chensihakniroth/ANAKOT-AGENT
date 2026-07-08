@@ -127,6 +127,99 @@ declare global {
           links: Array<{ source: string; target: string }>
         }
       }>
+
+      // Pet overlay — a secondary always-on-top transparent BrowserWindow
+      petOverlay?: {
+        open: (request?: {
+          bounds?: { x: number; y: number; width: number; height: number }
+          screen?: boolean
+          show?: boolean
+          centerToPet?: boolean
+          skipLoad?: boolean
+        }) => Promise<{ ok: boolean; bounds?: { x: number; y: number; width: number; height: number } }>
+        close: () => Promise<{ ok: boolean }>
+        setBounds: (bounds: { x: number; y: number; width: number; height: number }) => void
+        setIgnoreMouse: (ignore: boolean) => void
+        setFocusable: (focusable: boolean) => void
+        pushState: (payload: {
+          info: {
+            enabled: boolean
+            slug?: string
+            displayName?: string
+            mime?: string
+            spritesheetBase64?: string
+            spritesheetRevision?: string
+            frameW?: number
+            frameH?: number
+            framesPerState?: number
+            framesByState?: Record<string, number>
+            framesByRow?: Record<string, number>
+            loopMs?: number
+            scale?: number
+            stateRows?: string[]
+          }
+          activity: {
+            busy?: boolean
+            awaitingInput?: boolean
+            toolRunning?: boolean
+            reasoning?: boolean
+            error?: boolean
+            justCompleted?: boolean
+            celebrate?: boolean
+          }
+          busy: boolean
+          awaiting: boolean
+          unread: boolean
+        }) => void
+        control: (payload:
+          | { type: 'pop-in' }
+          | { type: 'ready' }
+          | { type: 'submit'; text: string }
+          | { type: 'bounds'; bounds: { x: number; y: number; width: number; height: number } }
+          | { type: 'open-app' }
+          | { type: 'toggle-app' }
+          | { type: 'scale'; scale: number }
+        ) => void
+        onState: (callback: (payload: {
+          info: {
+            enabled: boolean
+            slug?: string
+            displayName?: string
+            mime?: string
+            spritesheetBase64?: string
+            spritesheetRevision?: string
+            frameW?: number
+            frameH?: number
+            framesPerState?: number
+            framesByState?: Record<string, number>
+            framesByRow?: Record<string, number>
+            loopMs?: number
+            scale?: number
+            stateRows?: string[]
+          }
+          activity: {
+            busy?: boolean
+            awaitingInput?: boolean
+            toolRunning?: boolean
+            reasoning?: boolean
+            error?: boolean
+            justCompleted?: boolean
+            celebrate?: boolean
+          }
+          busy: boolean
+          awaiting: boolean
+          unread: boolean
+        }) => void) => () => void
+        onControl: (callback: (action:
+          | { type: 'pop-in' }
+          | { type: 'ready' }
+          | { type: 'submit'; text: string }
+          | { type: 'bounds'; bounds: { x: number; y: number; width: number; height: number } }
+          | { type: 'open-app' }
+          | { type: 'toggle-app' }
+          | { type: 'scale'; scale: number }
+        ) => void) => () => void
+      }
     }
   }
 
@@ -411,8 +504,10 @@ export interface AnakotNotification {
   body?: string
   silent?: boolean
   type?: string
+  sessionId?: string
+  actions?: Array<{ id: string; text: string }>
+  kind?: string
 }
-
 export interface AnakotPreviewTarget {
   binary?: boolean
   byteSize?: number

@@ -211,7 +211,7 @@ export function ChatView({
     // Gateway-first even with no session yet: a connected (possibly remote)
     // gateway owns the model catalog, including virtual providers like `moa`
     // that the local REST fallback can't know about.
-    queryFn: () => requestModelOptions({ gateway, sessionId: activeSessionId }),
+    queryFn: () => requestModelOptions({ gateway: gateway ?? undefined, sessionId: activeSessionId }),
     enabled: gatewayOpen
   })
 

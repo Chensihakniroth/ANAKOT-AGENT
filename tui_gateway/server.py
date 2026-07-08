@@ -243,6 +243,12 @@ sys.stdout = sys.stderr
 # patches of `_real_stdout` (used extensively in tests) still land correctly.
 _stdio_transport = StdioTransport(lambda: _real_stdout, _stdout_lock)
 
+# ── Pet generation state ──────────────────────────────────────────────
+# Staged base-image paths between `pet.generate` and `pet.hatch`, keyed by
+# a UUID token.  Cleared on hatch, cancel, or after 30 min of inactivity.
+_pet_gen_sessions: dict[str, dict] = {}
+_pet_gen_sessions_lock = threading.Lock()
+
 
 class _SlashWorker:
     """Persistent AnakotCLI subprocess for slash commands."""
@@ -8941,20 +8947,239 @@ def _(rid, params: dict) -> dict:
 
 @method("pet.generate.status")
 def _(rid, params: dict) -> dict:
-    # Placeholder: generation requires the generate subpackage (not yet ported)
-    return _ok(rid, {"available": False, "generating": False})
+    """Probe whether a reference-capable image backend is configured."""
+    import base64
+
+    try:
+        from agent.pet.generate.imagegen import list_sprite_providers
+
+        providers = list_sprite_providers()
+        available = len(providers) > 0
+    except Exception as exc:
+        logger.debug("pet.generate.status probe failed: %s", exc)
+        providers = []
+        available = False
+    return _ok(rid, {"available": available, "generating": False, "providers": providers})
+
+
+def _png_to_data_uri(path: str | Path) -> str:
+    """Read a PNG file and return its data URI."""
+    import base64
+
+    with open(path, "rb") as f:
+        raw = f.read()
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+
+
+def _pet_gen_cleanup(token: str) -> None:
+    """Remove session state for *token*."""
+    with _pet_gen_sessions_lock:
+        _pet_gen_sessions.pop(token, None)
 
 
 @method("pet.generate")
 def _(rid, params: dict) -> dict:
-    return _err(rid, 5010, "pet generation not yet available in this release")
+    """Generate *count* base-look drafts for a pet concept.
+
+    Runs in the long-handler thread pool.  Streams ``pet.generate.progress``
+    events as each draft lands so the front-end grid fills live, then returns
+    ``{ok, token, drafts}`` with the full set.
+    """
+    prompt = (params.get("prompt") or "").strip()
+    style = (params.get("style") or "auto").strip().lower()
+    count = max(1, min(8, int(params.get("count") or 4)))
+    reference_image = params.get("referenceImage") or None
+    provider_name = params.get("provider") or None
+
+    if not prompt and not reference_image:
+        return _err(rid, 4004, "prompt or referenceImage is required")
+
+    logger.info("pet.generate: drafting %d base looks for %r (style=%s)", count, prompt, style)
+
+    token = str(uuid.uuid4())
+    with _pet_gen_sessions_lock:
+        _pet_gen_sessions[token] = {"base_paths": {}, "cancelled": False}
+
+    try:
+        from agent.pet.generate import orchestrate, imagegen
+
+        sprite = None
+        if provider_name:
+            try:
+                sprite = imagegen.resolve_provider(require_references=bool(reference_image), prefer=provider_name)
+            except Exception:
+                pass
+
+        ref_paths = None
+        if reference_image and reference_image.startswith("data:"):
+            import tempfile
+
+            import base64
+
+            raw = base64.b64decode(reference_image.split(",", 1)[-1])
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            tmp.write(raw)
+            tmp.close()
+            ref_paths = [Path(tmp.name)]
+
+        drafts_out: list[dict] = []
+
+        def on_draft(index: int, path: Path) -> None:
+            if _pet_gen_sessions.get(token, {}).get("cancelled"):
+                return
+            try:
+                data_uri = _png_to_data_uri(path)
+                draft = {"index": index, "dataUri": data_uri, "token": token, "count": count}
+                # Store the base path for later hatching
+                with _pet_gen_sessions_lock:
+                    session = _pet_gen_sessions.get(token)
+                    if session is not None:
+                        session["base_paths"][index] = path
+                drafts_out.append({"index": index, "dataUri": data_uri})
+                # Stream live event to front-end
+                _emit("pet.generate.progress", "", draft)
+                logger.debug("pet.generate: draft %d/%d streamed", index + 1, count)
+            except Exception as exc:
+                logger.warning("pet.generate: on_draft %d failed: %s", index, exc)
+
+        paths = orchestrate.generate_base_drafts(
+            prompt,
+            n=count,
+            style=style,
+            reference_images=ref_paths,
+            provider=sprite,
+            on_draft=on_draft,
+        )
+
+        # Clean up temp files
+        if ref_paths:
+            for p in ref_paths:
+                try:
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+        # Mark any unfilled slot as missing so the front-end knows the count
+        result_drafts = sorted(drafts_out, key=lambda d: d["index"])
+        logger.info("pet.generate: %d/%d drafts ready (token=%s)", len(result_drafts), count, token)
+        return _ok(rid, {"ok": True, "token": token, "drafts": result_drafts})
+
+    except Exception as exc:
+        _pet_gen_cleanup(token)
+        logger.error("pet.generate failed: %s", exc)
+        return _err(rid, 5020, f"pet generation failed: {exc}")
 
 
 @method("pet.hatch")
 def _(rid, params: dict) -> dict:
-    return _err(rid, 5010, "pet hatching not yet available in this release")
+    """Hatch the chosen base draft into a full animated pet.
+
+    Runs in the long-handler thread pool.  Streams ``pet.hatch.progress``
+    events so the egg screen shows live step-by-step progress.
+    Returns ``{ok, slug, displayName, pet}``.
+    """
+    token = params.get("token") or ""
+    index = int(params.get("index") or 0)
+    name = (params.get("name") or "").strip()
+    description = (params.get("description") or "").strip()
+    concept = (params.get("prompt") or name or "a custom pet").strip()
+    style = (params.get("style") or "auto").strip().lower()
+    provider_name = params.get("provider") or None
+
+    if not token or not name:
+        return _err(rid, 4004, "token and name are required")
+
+    with _pet_gen_sessions_lock:
+        session = _pet_gen_sessions.get(token)
+
+    if session is None:
+        return _err(rid, 4041, f"no generation session for token '{token[:8]}…' — it may have expired")
+
+    base_path = session.get("base_paths", {}).get(index)
+    if base_path is None or not Path(base_path).is_file():
+        return _err(rid, 4042, f"base draft {index} not found for token '{token[:8]}…'")
+
+    logger.info("pet.hatch: hatching draft %d as %r (token=%s)", index, name, token[:8])
+
+    try:
+        from agent.pet.generate import orchestrate, imagegen
+
+        sprite = None
+        if provider_name:
+            try:
+                sprite = imagegen.resolve_provider(require_references=True, prefer=provider_name)
+            except Exception:
+                pass
+
+        def on_progress(event: str, detail: str) -> None:
+            if event == "row":
+                parts = detail.split(":")
+                state = parts[0] if len(parts) > 0 else ""
+                done = parts[1] if len(parts) > 1 else ""
+                total = parts[2] if len(parts) > 2 else ""
+                _emit("pet.hatch.progress", "", {"event": "row", "state": state, "done": done, "total": total})
+            elif event == "compose":
+                _emit("pet.hatch.progress", "", {"event": "compose"})
+            elif event == "save":
+                _emit("pet.hatch.progress", "", {"event": "save"})
+
+        result = orchestrate.hatch_pet(
+            base_image=str(base_path),
+            slug=name,
+            display_name=name,
+            description=description,
+            concept=concept,
+            style=style,
+            on_progress=on_progress,
+            provider=sprite,
+        )
+
+        _pet_gen_cleanup(token)
+
+        # Build renderer info for the front-end preview
+        import base64
+
+        with open(result.spritesheet, "rb") as f:
+            spritesheet_b64 = base64.b64encode(f.read()).decode("ascii")
+
+        pet_info = {
+            "slug": result.slug,
+            "displayName": result.display_name,
+            "spritesheetBase64": f"data:image/webp;base64,{spritesheet_b64}",
+            "states": result.states,
+            "frameWidth": FRAME_W,
+            "frameHeight": FRAME_H,
+            "loopMs": LOOP_MS,
+            "framesPerState": FRAMES_PER_STATE,
+            "frameCounts": _pet_frame_counts(str(result.spritesheet)),
+            "stateRows": result.states,
+        }
+
+        logger.info("pet.hatch: %r ready (%d states)", result.slug, len(result.states))
+        return _ok(rid, {
+            "ok": True,
+            "slug": result.slug,
+            "displayName": result.display_name,
+            "pet": pet_info,
+        })
+
+    except Exception as exc:
+        logger.error("pet.hatch failed: %s", exc)
+        return _err(rid, 5021, f"pet hatch failed: {exc}")
 
 
 @method("pet.cancel")
 def _(rid, params: dict) -> dict:
-    return _ok(rid, {"cancelled": False, "note": "no generation in progress"})
+    """Cancel an in-flight pet generation/hatch session."""
+    token = (params.get("token") or "").strip()
+    if not token:
+        return _ok(rid, {"cancelled": False, "note": "token is required"})
+
+    with _pet_gen_sessions_lock:
+        session = _pet_gen_sessions.get(token)
+        if session is not None:
+            session["cancelled"] = True
+            _pet_gen_sessions.pop(token, None)
+
+    logger.info("pet.cancel: cancelled session %r", token[:8])
+    return _ok(rid, {"cancelled": True})

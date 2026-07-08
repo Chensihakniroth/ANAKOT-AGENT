@@ -220,6 +220,43 @@ export interface Translations {
       technicalDesc: string
       themeTitle: string
       themeDesc: string
+      pet: {
+        title: string
+        intro: string
+        noneAvailable: string
+        turnOnFailed: string
+        turnOffFailed: string
+        restartHint: string
+        searchPlaceholder: string
+        unreachable: string
+        noMatch: (query: string) => string
+        adoptFailed: (slug: string) => string
+        uninstallFailed: (slug: string) => string
+        exportFailed: (slug: string) => string
+        renameFailed: (slug: string) => string
+        generatedTag: string
+        installedTag: string
+        rename: (name: string) => string
+        exportPet: (name: string) => string
+        delete: (name: string) => string
+        uninstall: (name: string) => string
+        countCapped: (cap: number, total: number) => string
+        count: (n: number) => string
+        chooseDesc: string
+        chooseTitle: string
+        off: string
+        on: string
+        scaleTitle: string
+        scaleDesc: string
+        roamTitle: string
+        roamDesc: string
+        deleteConfirm: string
+        deleteBody: string
+        deleteTitle: (name: string) => string
+        renameTitle: string
+        renamePlaceholder: string
+        renameSave: string
+      }
     }
     fieldLabels: Record<string, string>
     fieldDescriptions: Record<string, string>
@@ -599,25 +636,30 @@ export interface Translations {
     noSkillActivity: string
     actions: (count: string) => string
     generatePet: {
-      genericError: string
-      backgroundHint: string
-      slowProviderHint: string
-      title: string
-      spawning: string
-      hatched: string
-      placeholder: string
-      generate: string
-      staleBackend: string
-      referenceImageTooLarge: string
-      referenceImageInvalid: string
-      referenceImageTaken: string
-      remix: string
-      remixConfirmBody: string
-      namePlaceholder: string
-      startOver: string
-      adopt: string
-      generating: string
-      hatch: string
+    genericError: string
+    backgroundHint: string
+    slowProviderHint: string
+    title: string
+    spawning: string
+    hatched: string
+    placeholder: string
+    generate: string
+    staleBackend: string
+    referenceImageTooLarge: string
+    referenceImageInvalid: string
+    referenceImageTaken: string
+    remix: string
+    remixConfirmBody: string
+    remixConfirmTitle: string
+    namePlaceholder: string
+    startOver: string
+    adopt: string
+    generating: string
+    hatch: string
+    hatchRow: (state: string, done: number, total: number) => string
+    hatchComposing: string
+    hatchSaving: string
+    hatchingSub: string
     }
     pets: {
       title: string
@@ -1207,6 +1249,13 @@ export interface Translations {
       modelTitle: (provider: string, model: string) => string
       providerModelTitle: (provider: string, model: string) => string
       noWorkspace: string
+      contextInput: string
+      contextOutput: string
+      contextTotal: string
+      contextCalls: string
+      contextWindow: string
+      contextUtilisation: string
+      contextCost: string
     }
   }
 

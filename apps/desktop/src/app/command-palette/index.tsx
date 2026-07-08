@@ -41,9 +41,10 @@ import {
   Zap
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
+import { $commandPaletteOpen, closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
 import { type ThemeMode, useTheme } from '@/themes/context'
 import { PetPalettePage } from './pet-palette-page'
+import { openPetGenerate } from '@/store/pet-generate'
 
 import {
   AGENTS_ROUTE,
@@ -543,12 +544,19 @@ export function CommandPalette() {
                   />
                 </div>
                 <CommandList className="max-h-[min(24rem,60vh)]">
-                  <PetPalettePage search={search} />
+                  <PetPalettePage
+                    onGenerate={() => {
+                      openPetGenerate()
+                      closeCommandPalette()
+                    }}
+                    search={search}
+                  />
                 </CommandList>
               </>
             ) : (
               <></>
             )}
+            {!isPetPage && (
             <CommandInput
               onKeyDown={event => {
                 if (!activePage) {
@@ -567,6 +575,7 @@ export function CommandPalette() {
               placeholder={placeholder}
               value={search}
             />
+            )}
             <CommandList className="max-h-[min(24rem,60vh)]">
               <CommandEmpty>{t.commandCenter.noResults}</CommandEmpty>
               {visibleGroups.map(group => (
