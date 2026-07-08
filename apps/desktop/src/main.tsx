@@ -26,18 +26,22 @@ if (import.meta.env.MODE !== 'production') {
   import('./app/chat/perf-probe')
 }
 
-createRoot(document.getElementById('root')!).render(
-  <ErrorBoundary label="root">
-    <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <ThemeProvider>
-          <HapticsProvider>
-            <HashRouter>
-              <App />
-            </HashRouter>
-          </HapticsProvider>
-        </ThemeProvider>
-      </I18nProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
-)
+if (new URLSearchParams(window.location.search).get('win') === 'overlay') {
+  import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
+} else {
+  createRoot(document.getElementById('root')!).render(
+    <ErrorBoundary label="root">
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>
+          <ThemeProvider>
+            <HapticsProvider>
+              <HashRouter>
+                <App />
+              </HashRouter>
+            </HapticsProvider>
+          </ThemeProvider>
+        </I18nProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  )
+}

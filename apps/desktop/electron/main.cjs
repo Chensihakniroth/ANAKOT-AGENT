@@ -27,6 +27,7 @@ const { execFileSync, spawn } = require('node:child_process')
 const { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } = require('./bootstrap-platform.cjs')
 const { runBootstrap } = require('./bootstrap-runner.cjs')
 const { canImportAnakotCli, verifyAnakotCli } = require('./backend-probes.cjs')
+const { readLiveUpdateMarker, writeUpdateMarker } = require('./update-marker.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
 const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
 const {
@@ -244,6 +245,8 @@ const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
+const WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
+const NOTIFICATION_PREFS_PATH = path.join(app.getPath('userData'), 'notification-prefs.json')
 // active-profile.json records which Anakot profile the desktop launches its
 // local backend as. When set, startAnakot() passes `anakot --profile <name>
 // dashboard …`, which deterministically pins ANAKOT_HOME (see
@@ -289,6 +292,9 @@ const BOOT_FAKE_STEP_MS = (() => {
   if (!Number.isFinite(raw) || raw <= 0) return 650
   return Math.max(120, raw)
 })()
+const UPDATE_WAIT_TIMEOUT_MS = 20 * 60 * 1000
+const UPDATE_WAIT_POLL_MS = 1000
+const UPDATE_HANDOFF_DWELL_MS = 2500
 const APP_NAME = 'Anakot'
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -479,7 +485,6 @@ const STREAMABLE_MEDIA_EXTS = new Set([
 ])
 
 const PLUGIN_PROTOCOL = 'anakot-plugin'
-
 protocol.registerSchemesAsPrivileged([
   {
     scheme: MEDIA_PROTOCOL,
@@ -553,6 +558,7 @@ function registerPluginProtocol() {
 }
 
 let mainWindow = null
+let petOverlayWindow = null
 let anakotProcess = null
 let connectionPromise = null
 // Additional per-profile backends, keyed by profile name. The PRIMARY backend
@@ -1296,6 +1302,32 @@ function writeFileAtomic(targetPath, data, encoding) {
   fs.renameSync(tmp, targetPath)
 }
 
+// Block until no live update is in progress (or we hit the wait timeout).
+// Emits a boot-progress phase so the renderer shows "Update in progress…"
+// rather than a frozen splash. Returns true if it parked at all.
+async function waitForUpdateToFinish() {
+  let marker = readLiveUpdateMarker(ANAKOT_HOME)
+  if (!marker) return false
+
+  rememberLog(`[updates] update in progress (pid=${marker.pid}); deferring backend start until it finishes`)
+  const deadline = Date.now() + UPDATE_WAIT_TIMEOUT_MS
+  while (marker && Date.now() < deadline) {
+    await advanceBootProgress(
+      'backend.update-wait',
+      'An update is finishing — Anakot will start automatically when it completes…',
+      12
+    )
+    await new Promise(r => setTimeout(r, UPDATE_WAIT_POLL_MS))
+    marker = readLiveUpdateMarker(ANAKOT_HOME)
+  }
+  if (marker) {
+    rememberLog('[updates] update still in progress after wait timeout; starting backend anyway')
+  } else {
+    rememberLog('[updates] update finished; proceeding with backend start')
+  }
+  return true
+}
+
 function writeDesktopUpdateConfig(config) {
   fs.mkdirSync(path.dirname(DESKTOP_UPDATE_CONFIG_PATH), { recursive: true })
   writeFileAtomic(DESKTOP_UPDATE_CONFIG_PATH, JSON.stringify(config, null, 2))
@@ -1526,6 +1558,7 @@ async function readCommitLog(cwd, branch) {
 }
 
 let updateInFlight = false
+let isQuittingForHandoff = false
 
 // Resolve the staged updater binary. The Tauri installer copies itself to
 // ANAKOT_HOME/anakot-setup.exe on a successful install (see
@@ -1788,13 +1821,27 @@ async function applyUpdates(opts = {}) {
     })
     child.unref()
 
+    // Write the update-in-progress marker IMMEDIATELY — before the quit
+    // dwell. The Tauri updater won't write its own marker for several
+    // seconds (window init + manifest), and during that gap our renderer
+    // can reconnect and spawn a fresh backend that re-locks .pyd files in
+    // the venv. By writing the marker ourselves the renderer's
+    // waitForUpdateToFinish() gate sees a live update and parks instead.
+    // The updater overwrites this with its own PID later; same format.
+    if (Number.isInteger(child.pid)) {
+      writeUpdateMarker(ANAKOT_HOME, child.pid)
+    }
+
     rememberLog(`[updates] launched updater: ${updater} ${updaterArgs.join(' ')}; exiting desktop to release venv shim`)
 
-    // Give the OS a beat to register the new process, then quit. The updater
-    // rebuilds and relaunches us when it's done.
+    // Linger on the "updating — don't reopen" overlay long enough for the user
+    // to actually read it (and to bridge the gap until the updater's own window
+    // appears), THEN quit to release the venv shim. The updater rebuilds and
+    // relaunches us when it's done.
+    isQuittingForHandoff = true
     setTimeout(() => {
       app.quit()
-    }, 600)
+    }, UPDATE_HANDOFF_DWELL_MS)
 
     return { ok: true, handedOff: true, updater }
   } finally {
@@ -2035,7 +2082,11 @@ function isBootstrapComplete() {
   // a runnable venv: an interrupted or split-home install can leave the marker
   // + checkout without a venv, and trusting that spawns a dead backend
   // ("gateway offline") instead of re-running bootstrap to repair it.
-  return isAnakotSourceRoot(ACTIVE_ANAKOT_ROOT) && fileExists(getVenvPython(VENV_ROOT))
+  return isAnakotSourceRoot(ACTIVE_ANAKOT_ROOT) && fileExists(getVenvPython(VENV_ROOT)) && canImportAnakotCli(getVenvPython(VENV_ROOT), {
+    env: {
+      PYTHONPATH: [ACTIVE_ANAKOT_ROOT, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter)
+    }
+  })
 }
 
 function writeBootstrapMarker(payload) {
@@ -4639,6 +4690,15 @@ async function startAnakot() {
       }
     }
 
+    // Mutual exclusion with an in-app update. If this instance was
+    // relaunched while the Tauri updater is still applying an update,
+    // spawning a local backend now re-locks the venv shim and gets
+    // killed by the updater's straggler cleanup — looping. Park until
+    // the update finishes (or is detected stale), THEN start the
+    // backend. Local backends only; remote connections returned above
+    // and never touch the install tree.
+    await waitForUpdateToFinish()
+
     await advanceBootProgress('backend.port', 'Finding an open local port', 16)
     const port = await pickPort()
     const token = crypto.randomBytes(32).toString('base64url')
@@ -4768,11 +4828,197 @@ async function startAnakot() {
   return connectionPromise
 }
 
+function loadWindowState() {
+  try {
+    const data = JSON.parse(fs.readFileSync(WINDOW_STATE_PATH, 'utf8'))
+    if (data && typeof data === 'object' && typeof data.width === 'number' && typeof data.height === 'number') {
+      return data
+    }
+  } catch {
+    // File doesn't exist or is malformed — use defaults
+  }
+  return null
+}
+
+function saveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    const bounds = mainWindow.getBounds()
+    const maximized = mainWindow.isMaximized()
+    const fullscreen = mainWindow.isFullScreen()
+    fs.mkdirSync(path.dirname(WINDOW_STATE_PATH), { recursive: true })
+    fs.writeFileSync(WINDOW_STATE_PATH, JSON.stringify({ ...bounds, maximized, fullscreen }), 'utf8')
+  } catch {
+    // Best-effort — window state is not critical
+  }
+}
+
+const DEFAULT_NOTIFICATION_PREFS = {
+  message: true,
+  task_complete: true,
+  update: true,
+  error: true,
+  info: true
+}
+
+function loadNotificationPrefs() {
+  try {
+    const data = JSON.parse(fs.readFileSync(NOTIFICATION_PREFS_PATH, 'utf8'))
+    if (data && typeof data === 'object') {
+      return { ...DEFAULT_NOTIFICATION_PREFS, ...data }
+    }
+  } catch {
+    // File doesn't exist or is malformed
+  }
+  return { ...DEFAULT_NOTIFICATION_PREFS }
+}
+
+function saveNotificationPrefs(prefs) {
+  try {
+    fs.mkdirSync(path.dirname(NOTIFICATION_PREFS_PATH), { recursive: true })
+    fs.writeFileSync(NOTIFICATION_PREFS_PATH, JSON.stringify(prefs), 'utf8')
+  } catch {
+    // Best-effort
+  }
+}
+
+// --- Pet overlay (pop-out mascot) -----------------------------------------
+// pushes pet state over IPC (anakot:pet-overlay:state); the overlay just renders
+// it. Control flows back (pop-in, composer submit) via anakot:pet-overlay:control.
+function petOverlayUrl() {
+  if (DEV_SERVER) {
+    return DEV_SERVER + '/index.html?win=overlay#/'
+  }
+  return pathToFileURL(resolveRendererIndex()).toString() + '?win=overlay#/'
+}
+
+function spawnPetOverlayWindow(bounds) {
+  const win = new BrowserWindow({
+    width: Math.max(80, Math.round(bounds?.width || 220)),
+    height: Math.max(80, Math.round(bounds?.height || 220)),
+    x: Number.isFinite(bounds?.x) ? Math.round(bounds.x) : undefined,
+    y: Number.isFinite(bounds?.y) ? Math.round(bounds.y) : undefined,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    // Windows/Linux need this so the helper window does not get its own
+    // taskbar/alt-tab entry. On macOS, cmd-tab is app-level and this can make
+    // the whole app look like it vanished when the only newly-created visible
+    // window is a frameless overlay. Use NSPanel + Mission Control hiding below
+    // instead, leaving the main Anakot app as the Dock/cmd-tab anchor.
+    skipTaskbar: !IS_MAC,
+    hasShadow: false,
+    alwaysOnTop: true,
+    // macOS panels are non-activating helper windows and can float over full
+    // screen spaces without becoming the app's main switcher window.
+    type: IS_MAC ? 'panel' : undefined,
+    hiddenInMissionControl: IS_MAC,
+    // Non-activating: the overlay must never become the app's key/main window,
+    // or it (a frameless, taskbar-skipping panel) becomes the app's switcher
+    // anchor and the Anakot icon drops out of cmd/alt-tab — especially when the
+    // main window is minimized. We flip this on only while the composer needs
+    // the keyboard (see anakot:pet-overlay:set-focusable).
+    focusable: false,
+    show: false,
+    // Fully transparent — the renderer paints only the sprite + bubble.
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      devTools: true,
+      // Keep the sprite animating + bubble updating while the main window is
+      // minimized/blurred — the whole point of the overlay.
+      backgroundThrottling: false
+    }
+  })
+
+  // Float above other apps and follow the user across desktops so the pet is
+  // always reachable. `floating` + `type: panel` is the macOS NSPanel path; the
+  // more aggressive `screen-saver` level can interfere with normal app/window
+  // switching semantics.
+  win.setAlwaysOnTop(true, IS_MAC ? 'floating' : 'screen-saver')
+  win.setHiddenInMissionControl?.(true)
+  try {
+    // Electron docs: macOS may transform process type on each
+    // setVisibleOnAllWorkspaces() call unless skipTransformProcessType=true,
+    // which briefly hides the Dock/cmd-tab presence. Keep Anakot in the normal
+    // ForegroundApplication class so shift-clicking the pet never drops the app
+    // out of app switchers.
+    win.setVisibleOnAllWorkspaces(
+      true,
+      IS_MAC ? { visibleOnFullScreen: true, skipTransformProcessType: true } : undefined
+    )
+  } catch {
+    // Not supported everywhere — best effort.
+  }
+
+  wireCommonWindowHandlers(win)
+
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.showInactive()
+  })
+
+  win.on('closed', () => {
+    if (petOverlayWindow === win) {
+      petOverlayWindow = null
+    }
+
+    // If the overlay went away on its own (e.g. ⌘W), tell the main renderer to
+    // pop the pet back in so it doesn't stay hidden. Harmless echo when we're
+    // the ones who closed it (popInPet already cleared the active flag).
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('anakot:pet-overlay:control', { type: 'pop-in' })
+    }
+  })
+
+  win.loadURL(petOverlayUrl())
+
+  return win
+}
+
+function openPetOverlay(bounds) {
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
+    if (bounds) {
+      petOverlayWindow.setBounds({
+        x: Math.round(bounds.x),
+        y: Math.round(bounds.y),
+        width: Math.max(80, Math.round(bounds.width)),
+        height: Math.max(80, Math.round(bounds.height))
+      })
+    }
+
+    petOverlayWindow.showInactive()
+
+    return petOverlayWindow
+  }
+
+  petOverlayWindow = spawnPetOverlayWindow(bounds)
+
+  return petOverlayWindow
+}
+
+function closePetOverlay() {
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
+    petOverlayWindow.close()
+  }
+
+  petOverlayWindow = null
+}
+
 function createWindow() {
   const icon = getAppIconPath()
+  const savedState = loadWindowState()
   mainWindow = new BrowserWindow({
-    width: 1220,
-    height: 800,
+    width: savedState?.width || 1220,
+    height: savedState?.height || 800,
+    x: savedState?.x,
+    y: savedState?.y,
     minWidth: 900,
     minHeight: 620,
     title: 'Anakot',
@@ -4818,6 +5064,15 @@ function createWindow() {
   mainWindow.on('enter-full-screen', () => sendWindowStateChanged(true))
   mainWindow.on('will-leave-full-screen', () => sendWindowStateChanged(false))
   mainWindow.on('leave-full-screen', () => sendWindowStateChanged(false))
+
+  mainWindow.on('resize', saveWindowState)
+  mainWindow.on('move', saveWindowState)
+  mainWindow.on('close', saveWindowState)
+
+  // The overlay rides the main window — closing the app's primary window must
+  // tear it down too (otherwise it strands as an orphan that blocks
+  // window-all-closed from quitting on Windows/Linux).
+  mainWindow.on('closed', () => closePetOverlay())
 
   installPreviewShortcut(mainWindow)
   installDevToolsShortcut(mainWindow)
@@ -4882,6 +5137,7 @@ function createWindow() {
     rememberLog(`[renderer console] ${text} (${src}:${lineNo})`)
   })
 
+  // Use DEV_SERVER (Vite) in dev or file:// in production for localStorage compatibility
   if (DEV_SERVER) {
     mainWindow.loadURL(DEV_SERVER)
   } else {
@@ -4891,6 +5147,13 @@ function createWindow() {
   mainWindow.webContents.once('did-finish-load', () => {
     broadcastBootProgress()
     sendWindowStateChanged()
+    // Restore maximized/fullscreen state after window is ready
+    if (savedState?.maximized && !savedState?.fullscreen) {
+      mainWindow?.maximize()
+    }
+    if (savedState?.fullscreen) {
+      mainWindow?.setFullScreen(true)
+    }
     startAnakot().catch(error => rememberLog(error.stack || error.message))
   })
 }
@@ -5189,12 +5452,39 @@ ipcMain.handle('anakot:api', async (_event, request) => {
 
 ipcMain.handle('anakot:notify', (_event, payload) => {
   if (!Notification.isSupported()) return false
+  const prefs = loadNotificationPrefs()
+  const type = payload?.type || 'info'
+  if (prefs[type] === false) return false
   new Notification({
     title: payload?.title || 'Anakot',
     body: payload?.body || '',
     silent: Boolean(payload?.silent)
   }).show()
   return true
+})
+
+ipcMain.handle('anakot:window:setOpacity', (_event, opacity) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const val = Math.max(0.2, Math.min(1, Number(opacity) || 1))
+    mainWindow.setOpacity(val)
+    return val
+  }
+  return null
+})
+
+ipcMain.handle('anakot:window:getOpacity', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.getOpacity()
+  }
+  return 1
+})
+
+ipcMain.handle('anakot:notification:getPrefs', () => loadNotificationPrefs())
+
+ipcMain.handle('anakot:notification:setPrefs', (_event, prefs) => {
+  const merged = { ...loadNotificationPrefs(), ...prefs }
+  saveNotificationPrefs(merged)
+  return merged
 })
 
 ipcMain.handle('anakot:readFileDataUrl', async (_event, filePath) => {
@@ -6499,6 +6789,129 @@ ipcMain.handle('anakot:uninstall:run', async (_event, payload) => {
   return runDesktopUninstall(String(mode || ''))
 })
 
+// --- Pet overlay (pop-out mascot) IPC -------------------------------------
+// `request` is `{ bounds, screen }`. A fresh pop-out passes viewport-space
+// bounds (screen=false): convert to screen space by adding the main window's
+// content origin so the pet lands where it sat in-window. A remembered/dragged
+// spot passes screen-space bounds (screen=true) and is used as-is. We return the
+// resolved screen bounds so the renderer can persist exactly where it opened.
+ipcMain.handle('anakot:pet-overlay:open', async (_event, request) => {
+  const bounds = request && request.bounds ? request.bounds : request
+  const isScreen = Boolean(request && request.screen)
+  let screenBounds = bounds
+
+  try {
+    if (bounds && !isScreen && mainWindow && !mainWindow.isDestroyed()) {
+      const content = mainWindow.getContentBounds()
+      screenBounds = {
+        x: content.x + (bounds.x || 0),
+        y: content.y + (bounds.y || 0),
+        width: bounds.width,
+        height: bounds.height
+      }
+    }
+  } catch {
+    // Fall back to raw bounds if the window geometry is unavailable.
+  }
+
+  openPetOverlay(screenBounds)
+
+  return { ok: true, bounds: screenBounds }
+})
+ipcMain.handle('anakot:pet-overlay:close', async () => {
+  closePetOverlay()
+
+  return { ok: true }
+})
+// Drag/resize: the overlay reports new absolute screen bounds (it already knows
+// the pointer's screen coords). Drag keeps the size constant; the wheel-to-scale
+// gesture grows/shrinks it so the sprite is never cropped by the window edge.
+// The window is created non-resizable (no stray edge-drag on the transparent
+// frameless panel), which on Windows/Linux also blocks programmatic setBounds
+// sizing — so briefly flip resizable on whenever the size actually changes.
+ipcMain.on('anakot:pet-overlay:set-bounds', (_event, bounds) => {
+  if (!petOverlayWindow || petOverlayWindow.isDestroyed() || !bounds) {
+    return
+  }
+
+  const win = petOverlayWindow
+  const width = Math.max(80, Math.round(bounds.width))
+  const height = Math.max(80, Math.round(bounds.height))
+  const [curW, curH] = win.getSize()
+  const resizing = width !== curW || height !== curH
+
+  if (resizing && !win.isResizable()) {
+    win.setResizable(true)
+  }
+
+  win.setBounds({ x: Math.round(bounds.x), y: Math.round(bounds.y), width, height })
+
+  if (resizing) {
+    win.setResizable(false)
+  }
+})
+// Click-through: the overlay window is a full rectangle but only the pet pixels
+// should be interactive. The renderer toggles this as the cursor enters/leaves
+// the sprite so transparent margins pass clicks to whatever is behind.
+ipcMain.on('anakot:pet-overlay:ignore-mouse', (_event, ignore) => {
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
+    petOverlayWindow.setIgnoreMouseEvents(Boolean(ignore), { forward: true })
+  }
+})
+// The overlay is a non-activating panel (focusable:false) so it never steals
+// the app's cmd/alt-tab anchor from the main window. But the pop-up composer
+// needs the keyboard, so the renderer asks us to flip it focusable + focus it
+// while the composer is open, then back to non-activating when it closes.
+ipcMain.on('anakot:pet-overlay:set-focusable', (_event, focusable) => {
+  if (!petOverlayWindow || petOverlayWindow.isDestroyed()) {
+    return
+  }
+
+  petOverlayWindow.setFocusable(Boolean(focusable))
+  if (focusable) {
+    petOverlayWindow.focus()
+  }
+})
+// Main renderer → overlay: forward the latest pet state for the overlay to render.
+ipcMain.on('anakot:pet-overlay:state', (_event, payload) => {
+  if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
+    petOverlayWindow.webContents.send('anakot:pet-overlay:state', payload)
+  }
+})
+// Overlay → main renderer: control messages (pop back in, composer submit).
+ipcMain.on('anakot:pet-overlay:control', (_event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  // Double-click toggles the app window: hide it away if it's up front, bring it
+  // back if it's minimized/buried. Pure window control — nothing for the
+  // renderer to do, so don't forward it.
+  if (payload && payload.type === 'toggle-app') {
+    if (mainWindow.isMinimized() || !mainWindow.isVisible()) {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      mainWindow.minimize()
+    }
+
+    return
+  }
+
+  // The mail icon means "take me to the app": raise the main window (it may be
+  // minimized or buried) before the renderer navigates to the latest thread.
+  if (payload && payload.type === 'open-app') {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+
+    mainWindow.show()
+    mainWindow.focus()
+  }
+
+  mainWindow.webContents.send('anakot:pet-overlay:control', payload)
+})
+
 
 app.whenReady().then(() => {
   if (IS_MAC) {
@@ -6558,6 +6971,7 @@ app.on('before-quit', () => {
   }
   flushDesktopLogBufferSync()
   closePreviewWatchers()
+  closePetOverlay()
   stopAllLsp()
 
   // Dispose live PTY sessions before the environment tears down.

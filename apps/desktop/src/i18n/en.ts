@@ -255,6 +255,7 @@ export const en: Translations = {
       keysTools: 'Tools',
       keysSettings: 'Settings',
       mcp: 'MCP',
+      toolsets: 'Tool Backends',
       archivedChats: 'Archived Chats',
       about: 'About'
     },
@@ -294,7 +295,17 @@ export const en: Translations = {
       technical: 'Technical',
       technicalDesc: 'Include raw tool args/results and low-level details.',
       themeTitle: 'Theme',
-      themeDesc: 'Desktop palettes only. The selected mode is applied on top.'
+      themeDesc: 'Desktop palettes only. The selected mode is applied on top.',
+      pet: {
+        title: 'Desktop Pets',
+        noneAvailable: 'No pets available. Generate one from the command center first.',
+        turnOnFailed: 'Could not turn on the pet display.',
+        turnOffFailed: 'Could not turn off the pet display.',
+        adoptFailed: slug => `Could not adopt ${slug}.`,
+        uninstallFailed: slug => `Could not uninstall ${slug}.`,
+        exportFailed: slug => `Could not export ${slug}.`,
+        renameFailed: slug => `Could not rename ${slug}.`
+      }
     },
     fieldLabels: FIELD_LABELS,
     fieldDescriptions: FIELD_DESCRIPTIONS,
@@ -706,7 +717,29 @@ export const en: Translations = {
     noModelUsage: 'No model usage yet.',
     topSkills: 'Top skills',
     noSkillActivity: 'No skill activity yet.',
-    actions: count => `${count} actions`
+    actions: count => `${count} actions`,
+    generatePet: {
+      genericError: 'Could not generate pet. Try again.',
+      backgroundHint:
+        'Give it a moment — the request is still running. Some providers take a while.',
+      slowProviderHint: 'This might take a while. The provider is thinking.',
+      title: 'Generate Pet',
+      spawning: 'Spawning...',
+      hatched: 'Hatched!',
+      placeholder: 'Describe the pet you want...',
+      generate: 'Generate',
+      staleBackend: 'The backend has been updated. Close and reopen the overlay.',
+      referenceImageTooLarge: 'The reference image is too large.',
+      referenceImageInvalid: 'The reference image is invalid.',
+      referenceImageTaken: 'Reference image added.',
+      remix: 'Remix',
+      remixConfirmBody: 'This will replace all current drafts. Continue?',
+      namePlaceholder: 'Enter a name',
+      startOver: 'Start over',
+      adopt: 'Adopt',
+      generating: 'Generating...',
+      hatch: 'Hatch'
+    }
   },
 
   messaging: {
@@ -852,6 +885,7 @@ export const en: Translations = {
     allProfiles: 'All profiles',
     showAllProfiles: 'Show all profiles',
     switchToProfile: name => `Switch to ${name}`,
+    switchProfile: 'Switch profile',
     manageProfiles: 'Manage profiles...',
     actionsFor: name => `Actions for ${name}`,
     color: 'Color...',
@@ -1218,6 +1252,10 @@ export const en: Translations = {
     snippetsDesc: 'Pick a starter prompt to drop into the composer.',
     dropFiles: 'Drop files to attach',
     dropSession: 'Drop to link this chat',
+    selectModel: 'Select model',
+    noModel: 'No model',
+    noModelsAvailable: 'No models available',
+    loading: 'Loading…',
     snippets: {
       codeReview: {
         label: 'Code review',
@@ -1234,7 +1272,9 @@ export const en: Translations = {
         description: 'Walk through how the selected code works and link to the key files.',
         text: 'Please explain how this works and point me to the key files.'
       }
-    }
+    },
+    autoReadAloud: 'Auto-read aloud',
+    autoReadAloudDesc: 'Automatically read assistant replies aloud via text-to-speech'
   },
 
   updates: {
@@ -1491,7 +1531,14 @@ export const en: Translations = {
       openModelPicker: 'Open model picker',
       modelTitle: (provider, model) => `Model · ${provider}: ${model}`,
       providerModelTitle: (provider, model) => `${provider} · ${model}`,
-      noWorkspace: 'No workspace'
+      noWorkspace: 'No workspace',
+      contextInput: 'Input',
+      contextOutput: 'Output',
+      contextTotal: 'Total',
+      contextCalls: 'API calls',
+      contextWindow: 'Context window',
+      contextUtilisation: 'Utilisation',
+      contextCost: 'Cost'
     }
   },
 

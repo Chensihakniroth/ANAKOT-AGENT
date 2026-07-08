@@ -7,31 +7,49 @@ export const $starmapGraph = atom<StarmapGraph | null>(null)
 export const $starmapLoading = atom(true)
 export const $starmapError = atom<string | null>(null)
 
+// ── In-flight dedup (Hermes Memory Graph pattern) ──────────────────────────
+let inflight: Promise<void> | null = null
+
 // ── Load ────────────────────────────────────────────────────────────────────
-export async function loadStarmapGraph(): Promise<void> {
+export async function loadStarmapGraph(force = false): Promise<void> {
+  // Dedup concurrent calls — only one graph load at a time
+  if (inflight) {
+    return inflight
+  }
+
+  // Cache hit: skip unless forced
+  if ($starmapGraph.get() && !force) {
+    return
+  }
+
   $starmapLoading.set(true)
   $starmapError.set(null)
 
-  try {
-    // The learning graph is served over the desktop HTTP bridge (FastAPI
-    // route /api/learning/graph), NOT the JSON-RPC gateway — so we call it
-    // through window.anakotDesktop.api(), which is how the rest of the app
-    // fetches data. gateway.request() would hit "unknown method".
-    const data = await window.anakotDesktop.api<StarmapGraph>({
-      path: '/api/learning/graph'
-    })
+  inflight = (async () => {
+    try {
+      // The learning graph is served over the desktop HTTP bridge (FastAPI
+      // route /api/learning/graph), NOT the JSON-RPC gateway — so we call it
+      // through window.anakotDesktop.api(), which is how the rest of the app
+      // fetches data. gateway.request() would hit "unknown method".
+      const data = await window.anakotDesktop.api<StarmapGraph>({
+        path: '/api/learning/graph'
+      })
 
-    if (!data?.nodes || !Array.isArray(data.nodes)) {
-      throw new Error('Invalid graph data structure')
+      if (!data?.nodes || !Array.isArray(data.nodes)) {
+        throw new Error('Invalid graph data structure')
+      }
+
+      $starmapGraph.set(data)
+      $starmapError.set(null)
+    } catch (err) {
+      $starmapError.set(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      $starmapLoading.set(false)
+      inflight = null
     }
+  })()
 
-    $starmapGraph.set(data)
-    $starmapError.set(null)
-  } catch (err) {
-    $starmapError.set(err instanceof Error ? err.message : 'Unknown error')
-  } finally {
-    $starmapLoading.set(false)
-  }
+  return inflight
 }
 
 // ── Node detail (GET /api/learning/node) ───────────────────────────────────

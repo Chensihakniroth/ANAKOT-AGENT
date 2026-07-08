@@ -449,17 +449,9 @@ function MarkdownTextSurface({ containerClassName, containerProps }: MarkdownTex
     <StreamdownTextPrimitive
       components={components}
       containerClassName={cn(MARKDOWN_CONTAINER_CLASS_NAME, containerClassName)}
-      containerProps={containerProps}
+      containerProps={{ ...containerProps, dir: 'auto' }}
       lineNumbers={false}
       mode="streaming"
-      // Always auto-close incomplete fences — even during streaming.
-      // Without this, an unclosed ```python ... ``` whose body contains
-      // `$` (very common: shell snippets, JS template strings, dollar
-      // amounts) leaks those dollars out to the math parser and they
-      // get rendered as broken inline math until the closing fence
-      // arrives. Shiki is independently deferred via `defer={isStreaming}`
-      // on the SyntaxHighlighter component, so we don't pay code-block
-      // tokenization on every token even with this set.
       parseIncompleteMarkdown
       plugins={plugins}
       preprocess={preprocessMarkdown}

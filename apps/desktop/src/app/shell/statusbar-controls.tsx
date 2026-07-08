@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
@@ -36,9 +37,10 @@ export interface StatusbarItem {
   menuContent?: ReactNode
   menuItems?: readonly StatusbarMenuItem[]
   onSelect?: () => void
+  popoverContent?: ReactNode
   title?: string
   to?: string
-  variant?: 'action' | 'link' | 'menu' | 'text'
+  variant?: 'action' | 'link' | 'menu' | 'popover' | 'text'
 }
 
 export type StatusbarItemSide = 'left' | 'right'
@@ -90,6 +92,21 @@ function StatusbarItemView({ item, navigate }: { item: StatusbarItem; navigate: 
       {item.detail && <span className="truncate text-muted-foreground/80">{item.detail}</span>}
     </>
   )
+
+  if (item.variant === 'popover' && item.popoverContent) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className={cn(STATUSBAR_ACTION_CLASS, item.className)} disabled={item.disabled} type="button">
+            {content}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className={cn('w-56 p-0', item.menuClassName)} side="top" sideOffset={8}>
+          {item.popoverContent}
+        </PopoverContent>
+      </Popover>
+    )
+  }
 
   if (item.variant === 'menu' && (item.menuContent || (item.menuItems && item.menuItems.length > 0))) {
     return (

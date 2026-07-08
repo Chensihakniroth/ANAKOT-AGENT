@@ -18,6 +18,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { getGlobalModelOptions, type AnakotGateway } from '@/anakot'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { quickModelOptions, sessionTitle, toRuntimeMessage } from '@/lib/chat-runtime'
+import { requestModelOptions } from '@/lib/model-options'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
@@ -55,6 +56,7 @@ import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
+import { TimelineRail } from './timeline-rail'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   gateway: AnakotGateway | null
@@ -206,17 +208,10 @@ export function ChatView({
 
   const modelOptionsQuery = useQuery<ModelOptionsResponse>({
     queryKey: ['model-options', activeSessionId || 'global'],
-    queryFn: () => {
-      if (!activeSessionId) {
-        return getGlobalModelOptions()
-      }
-
-      if (!gateway) {
-        throw new Error('Anakot gateway unavailable')
-      }
-
-      return gateway.request<ModelOptionsResponse>('model.options', { session_id: activeSessionId })
-    },
+    // Gateway-first even with no session yet: a connected (possibly remote)
+    // gateway owns the model catalog, including virtual providers like `moa`
+    // that the local REST fallback can't know about.
+    queryFn: () => requestModelOptions({ gateway, sessionId: activeSessionId }),
     enabled: gatewayOpen
   })
 
@@ -322,10 +317,12 @@ export function ChatView({
   return (
     <div
       className={cn(
-        'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
+        'relative isolate flex h-full min-w-0 overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
     >
+      <TimelineRail />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <Backdrop />
       <ChatHeader
         activeSessionId={activeSessionId}
@@ -384,6 +381,7 @@ export function ChatView({
         </AssistantRuntimeProvider>
         <ChatDropOverlay kind={dragKind} />
         <ChatSwapOverlay profile={gatewaySwapTarget} />
+      </div>
       </div>
     </div>
   )

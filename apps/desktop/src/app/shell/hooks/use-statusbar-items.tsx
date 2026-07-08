@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 
 import type { CommandCenterSection } from '@/app/command-center'
 import { GatewayMenuPanel } from '@/app/shell/gateway-menu-panel'
+import { ContextUsagePopover } from '@/app/shell/context-usage-popover'
 import {
   Activity,
   AlertCircle,
@@ -331,8 +332,9 @@ export function useStatusbarItems({
         hidden: !contextUsage,
         id: 'context-usage',
         label: contextUsage,
+        popoverContent: <ContextUsagePopover usage={currentUsage} />,
         title: copy.contextUsage,
-        variant: 'text'
+        variant: 'popover'
       },
       {
         detail: <LiveDuration since={sessionStartedAt} />,

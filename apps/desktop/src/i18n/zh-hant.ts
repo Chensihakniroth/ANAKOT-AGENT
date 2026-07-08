@@ -171,6 +171,7 @@ export const zhHant = defineLocale({
       keysTools: '工具',
       keysSettings: '設定',
       mcp: 'MCP',
+      toolsets: '工具集',
       archivedChats: '已封存聊天',
       about: '關於'
     },

@@ -19,6 +19,7 @@ import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
+import { FloatingPet } from '@/components/pet/floating-pet'
 
 interface AppShellProps {
   activityBar?: ReactNode
@@ -136,6 +137,7 @@ export function AppShell({
       <KeybindPanel />
 
       <NotificationStack />
+      <FloatingPet />
     </SidebarProvider>
   )
 }

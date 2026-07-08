@@ -25,6 +25,12 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -132,6 +138,7 @@ export function ProfileRail() {
 
   const named = sortByProfileOrder(profiles.filter(profile => !profile.is_default), order)
   const multiProfile = profiles.length > 1
+  const collapsed = profiles.length > 13
 
   // distance constraint: a small drag reorders, a tap still selects the profile.
   const sensors = useSensors(
@@ -226,7 +233,60 @@ export function ProfileRail() {
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         ref={scrollRef}
       >
-        {multiProfile && (
+        {/* When collapsed (≥14 profiles), replace the sortable squares with
+            a compact dropdown so the rail doesn't overflow. The active
+            profile's initial still shows with its color tint. */}
+        {multiProfile && collapsed && (
+          <div className="relative flex items-center gap-1">
+            <ActiveProfileBadge
+              activeKey={activeKey}
+              colors={colors}
+              named={named}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  aria-label={p.switchProfile}
+                  className="grid size-5 shrink-0 place-items-center rounded-[3px] text-(--ui-text-tertiary) opacity-55 transition hover:bg-(--ui-control-hover-background) hover:text-foreground hover:opacity-100"
+                  type="button"
+                >
+                  <Codicon name="chevron-down" size="0.75rem" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-72 w-44 overflow-y-auto"
+                collisionPadding={{ bottom: 44, left: 8, right: 8, top: 8 }}
+                side="top"
+              >
+                {named.map(profile => {
+                  const hue = resolveProfileColor(profile.name, colors) ?? 'var(--ui-text-quaternary)'
+
+                  return (
+                    <DropdownMenuItem
+                      key={profile.name}
+                      className="gap-2"
+                      onSelect={() => selectProfile(profile.name)}
+                    >
+                      <span
+                        className="grid size-4 shrink-0 place-items-center rounded-[2px] text-[0.5rem] font-semibold uppercase leading-none"
+                        style={{
+                          backgroundColor: profileColorSoft(hue, 30),
+                          color: hue
+                        }}
+                      >
+                        {profile.name.replace(/[^a-z0-9]/gi, '').charAt(0) || '?'}
+                      </span>
+                      <span className="truncate">{profile.name}</span>
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
+        {multiProfile && !collapsed && (
           <DndContext
             collisionDetection={closestCenter}
             modifiers={[stepThroughCells]}
@@ -326,6 +386,38 @@ function ProfilePill({ active, glyph, label, onSelect }: ProfilePillProps) {
         <Codicon name={glyph} size="0.875rem" />
       </Button>
     </Tip>
+  )
+}
+
+// ── Collapsed rail badge ────────────────────────────────────────────────────
+// When the profile count exceeds the threshold, the rail swaps the sortable
+// squares for a compact dropdown. This badge shows the active profile's initial
+// with its color, so the user can still see "where they are" at a glance.
+interface ActiveProfileBadgeProps {
+  activeKey: string
+  colors: Record<string, string>
+  named: ProfileInfo[]
+}
+
+function ActiveProfileBadge({ activeKey, colors, named }: ActiveProfileBadgeProps) {
+  const active = named.find(p => normalizeProfileKey(p.name) === activeKey)
+
+  if (!active) {
+    return null
+  }
+
+  const hue = resolveProfileColor(active.name, colors) ?? 'var(--ui-text-quaternary)'
+
+  return (
+    <span
+      className="grid size-5 shrink-0 place-items-center rounded-[3px] text-[0.5625rem] font-semibold uppercase leading-none opacity-100"
+      style={{
+        backgroundColor: profileColorSoft(hue, 30),
+        color: hue
+      }}
+    >
+      {active.name.replace(/[^a-z0-9]/gi, '').charAt(0) || '?'}
+    </span>
   )
 }
 

@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   },
   api: request => ipcRenderer.invoke('anakot:api', request),
   notify: payload => ipcRenderer.invoke('anakot:notify', payload),
+  setWindowOpacity: opacity => ipcRenderer.invoke('anakot:window:setOpacity', opacity),
+  getWindowOpacity: () => ipcRenderer.invoke('anakot:window:getOpacity'),
+  getNotificationPrefs: () => ipcRenderer.invoke('anakot:notification:getPrefs'),
+  setNotificationPrefs: prefs => ipcRenderer.invoke('anakot:notification:setPrefs', prefs),
   requestMicrophoneAccess: () => ipcRenderer.invoke('anakot:requestMicrophoneAccess'),
   readFileDataUrl: filePath => ipcRenderer.invoke('anakot:readFileDataUrl', filePath),
   readFileText: filePath => ipcRenderer.invoke('anakot:readFileText', filePath),
@@ -180,4 +184,25 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   // Obsidian Knowledge Graph
   getObsidianVaultPath: () => ipcRenderer.invoke('anakot:obsidian:getVaultPath'),
   scanObsidianVault: rootPath => ipcRenderer.invoke('anakot:obsidian:scanVault', rootPath),
+
+  // Desktop Pet Overlay
+  petOverlay: {
+    open: request => ipcRenderer.invoke('anakot:pet-overlay:open', request),
+    close: () => ipcRenderer.invoke('anakot:pet-overlay:close'),
+    setBounds: bounds => ipcRenderer.invoke('anakot:pet-overlay:set-bounds', bounds),
+    setIgnoreMouse: ignore => ipcRenderer.invoke('anakot:pet-overlay:ignore-mouse', ignore),
+    setFocusable: focusable => ipcRenderer.invoke('anakot:pet-overlay:set-focusable', focusable),
+    pushState: state => ipcRenderer.send('anakot:pet-overlay:state', state),
+    control: action => ipcRenderer.send('anakot:pet-overlay:control', action),
+    onState: cb => {
+      const listener = (_event, state) => cb(state)
+      ipcRenderer.on('anakot:pet-overlay:state', listener)
+      return () => ipcRenderer.removeListener('anakot:pet-overlay:state', listener)
+    },
+    onControl: cb => {
+      const listener = (_event, action) => cb(action)
+      ipcRenderer.on('anakot:pet-overlay:control', listener)
+      return () => ipcRenderer.removeListener('anakot:pet-overlay:control', listener)
+    }
+  },
 })

@@ -249,6 +249,7 @@ export const zh: Translations = {
       keysTools: '工具',
       keysSettings: '设置',
       mcp: 'MCP',
+      toolsets: '工具集',
       archivedChats: '已归档对话',
       about: '关于'
     },
@@ -998,6 +999,7 @@ export const zh: Translations = {
     allProfiles: '全部配置档案',
     showAllProfiles: '显示全部配置档案',
     switchToProfile: name => `切换到 ${name}`,
+    switchProfile: '切换配置档案',
     manageProfiles: '管理配置档案...',
     actionsFor: name => `${name} 的操作`,
     color: '颜色...',
@@ -1379,7 +1381,13 @@ export const zh: Translations = {
         description: '讲解所选代码的工作方式，并链接到关键文件。',
         text: '请解释这是如何工作的，并指给我关键文件。'
       }
-    }
+    },
+    autoReadAloud: '自动朗读',
+    autoReadAloudDesc: '通过文字转语音自动朗读助手回复',
+    selectModel: '选择模型',
+    noModel: '无模型',
+    noModelsAvailable: '没有可用模型',
+    loading: '加载中…'
   },
 
   updates: {

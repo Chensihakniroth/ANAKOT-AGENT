@@ -11,9 +11,11 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:backend\" \"npm:dev:electron\"",
+    "dev:desktop": "node scripts/dev-desktop.cjs",
     "dev:fake-boot": "cross-env ANAKOT_DESKTOP_BOOT_FAKE=1 ANAKOT_DESKTOP_BOOT_FAKE_STEP_MS=650 npm run dev",
     "dev:renderer": "node scripts/assert-root-install.cjs && vite --host 127.0.0.1 --port 5174",
+    "dev:backend": "anakot dashboard --host 127.0.0.1 --port 3002 --no-open",
     "dev:electron": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 ANAKOT_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
     "profile:main": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 ANAKOT_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron --inspect=9229 .",
     "profile:main:cpu": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof ANAKOT_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
@@ -46,7 +48,6 @@
   },
   "dependencies": {
     "@anakot/shared": "file:../shared",
-    "d3-force": "^3.0.0",
     "@assistant-ui/react": "^0.12.28",
     "@assistant-ui/react-streamdown": "^0.1.11",
     "@audiowave/react": "^0.6.2",
@@ -74,6 +75,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "d3-force": "^3.0.0",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-text": "^4.0.2",
     "ignore": "^7.0.5",
@@ -108,8 +110,8 @@
     "@eslint/js": "^9.39.4",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.3.2",
-    "@types/hast": "^3.0.4",
     "@types/d3-force": "^3.0.0",
+    "@types/hast": "^3.0.4",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

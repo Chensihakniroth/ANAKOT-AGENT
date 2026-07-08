@@ -31,6 +31,7 @@ import {
   Moon,
   Package,
   Palette,
+  PawPrint,
   Plus,
   Settings,
   Settings2,
@@ -40,8 +41,9 @@ import {
   Zap
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import { $commandPaletteOpen, closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
+import { closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
 import { type ThemeMode, useTheme } from '@/themes/context'
+import { PetPalettePage } from './pet-palette-page'
 
 import {
   AGENTS_ROUTE,
@@ -278,7 +280,14 @@ export function CommandPalette() {
           { icon: Package, id: 'nav-artifacts', label: cc.nav.artifacts.title, run: go(ARTIFACTS_ROUTE) },
           { icon: Clock, id: 'nav-cron', keywords: ['schedule', 'jobs'], label: t.shell.statusbar.cron, run: go(CRON_ROUTE) },
           { icon: Users, id: 'nav-profiles', label: t.profiles.title, run: go(PROFILES_ROUTE) },
-          { icon: Cpu, id: 'nav-agents', label: t.agents.title, run: go(AGENTS_ROUTE) }
+          { icon: Cpu, id: 'nav-agents', label: t.agents.title, run: go(AGENTS_ROUTE) },
+          {
+            icon: PawPrint,
+            id: 'nav-pets',
+            keywords: ['companion', 'pet', 'sprite', 'mascot'],
+            label: t.settings.appearance.pet.title,
+            to: 'pet'
+          }
         ]
       },
       {
@@ -473,8 +482,9 @@ export function CommandPalette() {
   )
 
   const activePage = page ? subPages[page] : null
-  const visibleGroups = activePage ? activePage.groups : groups
-  const placeholder = activePage ? activePage.placeholder : t.commandCenter.searchPlaceholder
+  const isPetPage = page === 'pet'
+  const visibleGroups = activePage && !isPetPage ? activePage.groups : groups
+  const placeholder = activePage && !isPetPage ? activePage.placeholder : t.commandCenter.searchPlaceholder
 
   const handleSelect = (item: PaletteItem) => {
     if (item.to) {
@@ -501,7 +511,7 @@ export function CommandPalette() {
         >
           <DialogPrimitive.Title className="sr-only">{t.commandCenter.paletteTitle}</DialogPrimitive.Title>
           <Command className="bg-transparent" loop>
-            {activePage && (
+            {activePage && !isPetPage && (
               <button
                 className="flex w-full items-center gap-1.5 border-b border-border px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => setPage(null)}
@@ -512,6 +522,32 @@ export function CommandPalette() {
                 <span className="text-muted-foreground/50">/</span>
                 <span className="font-medium text-foreground">{activePage.title}</span>
               </button>
+            )}
+            {isPetPage ? (
+              <>
+                <div className="flex items-center border-b border-border">
+                  <button
+                    className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setPage(null)}
+                    type="button"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    <span>{t.commandCenter.back}</span>
+                    <span className="text-muted-foreground/50">/</span>
+                    <span className="font-medium text-foreground">{t.settings.appearance.pet.title}</span>
+                  </button>
+                  <CommandInput
+                    onValueChange={setSearch}
+                    placeholder={placeholder}
+                    value={search}
+                  />
+                </div>
+                <CommandList className="max-h-[min(24rem,60vh)]">
+                  <PetPalettePage search={search} />
+                </CommandList>
+              </>
+            ) : (
+              <></>
             )}
             <CommandInput
               onKeyDown={event => {

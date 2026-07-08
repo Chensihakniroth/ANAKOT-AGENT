@@ -23,6 +23,36 @@ from anakot_constants import (
     set_anakot_home_override,
 )
 from anakot_cli.env_loader import load_anakot_dotenv
+from anakot_cli import pets as anakot_pets
+from agent.pet.store import (
+    InstalledPet,
+    installed_pets,
+    load_pet,
+    resolve_active_pet,
+    install_pet,
+    remove_pet,
+    rename_pet,
+    export_pet,
+    thumbnail_png,
+    pets_dir,
+    unique_slug,
+    slugify,
+    register_local_pet,
+)
+from agent.pet.render import state_frame_counts, PetRenderer, Cell
+from agent.pet.constants import (
+    FRAME_W,
+    FRAME_H,
+    FRAMES_PER_STATE,
+    DEFAULT_SCALE,
+    MIN_SCALE,
+    MAX_SCALE,
+    LOOP_MS,
+    PetState,
+    state_rows_for_grid,
+    cols_for_scale,
+    clamp_scale,
+)
 from utils import is_truthy_value
 from tui_gateway.transport import (
     StdioTransport,
@@ -181,6 +211,12 @@ _LONG_HANDLERS = frozenset(
         "shell.exec",
         "skills.manage",
         "slash.exec",
+        "pet.gallery",
+        "pet.select",
+        "pet.generate",
+        "pet.generate.status",
+        "pet.hatch",
+        "pet.cancel",
     }
 )
 
@@ -8606,3 +8642,319 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5002, "command timed out (30s)")
     except Exception as e:
         return _err(rid, 5003, str(e))
+
+
+# ── Methods: pet ──────────────────────────────────────────────────────
+
+
+def _pet_state_rows(sheet_path: str) -> tuple[list[str], int]:
+    """Return (row_names, row_count) inferred from the sheet height."""
+    from PIL import Image
+
+    try:
+        with Image.open(sheet_path) as im:
+            rows = max(1, im.height // FRAME_H)
+    except Exception:  # noqa: BLE001
+        rows = 0
+    return state_rows_for_grid(rows), rows
+
+
+def _pet_frame_counts(sheet_path: str) -> dict[str, int]:
+    """Map each PetState → its real frame count (padding-trimmed)."""
+    return state_frame_counts(sheet_path)
+
+
+def _pet_sprite_payload(slug: str, sheet_path: str) -> dict | None:
+    """Build the sprite metadata payload for one pet."""
+    import base64
+
+    rows, nrows = _pet_state_rows(sheet_path)
+    try:
+        sheet_bytes = Path(sheet_path).read_bytes()
+    except OSError:
+        return None
+    return {
+        "slug": slug,
+        "spritesheet": base64.b64encode(sheet_bytes).decode("ascii"),
+        "frameWidth": FRAME_W,
+        "frameHeight": FRAME_H,
+        "loopMs": LOOP_MS,
+        "framesPerState": FRAMES_PER_STATE,
+        "frameCounts": _pet_frame_counts(sheet_path),
+        "stateRows": rows,
+    }
+
+
+def _pet_info_active(profile: str | None = None) -> dict | None:
+    """Return the full sprite payload for the active installed pet, or None."""
+    cfg = anakot_pets.config()
+    slug = cfg.get("slug", "")
+    if not slug:
+        slug = ""
+    pet = resolve_active_pet(slug) if not slug else (load_pet(slug) or resolve_active_pet(slug))
+    if not pet or not pet.exists:
+        return None
+    payload = _pet_sprite_payload(pet.slug, str(pet.spritesheet))
+    if not payload:
+        return None
+    payload["displayName"] = pet.display_name
+    payload["scale"] = anakot_pets.active_scale()
+    payload["enabled"] = anakot_pets.active_enabled()
+    return payload
+
+
+@method("pet.info")
+def _(rid, params: dict) -> dict:
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            payload = _pet_info_active()
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        if payload is None:
+            return _ok(rid, {"slug": "", "scale": DEFAULT_SCALE, "enabled": False})
+        return _ok(rid, payload)
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.info.meta")
+def _(rid, params: dict) -> dict:
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            cfg = anakot_pets.config()
+            pet = resolve_active_pet(cfg.get("slug", ""))
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        return _ok(rid, {"slug": pet.slug if pet else "", "revision": ""})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.cells")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    state = params.get("state", "") if isinstance(params, dict) else ""
+    index = params.get("index", 0) if isinstance(params, dict) else 0
+    if not slug or not state:
+        return _err(rid, 4004, "slug and state are required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            pet = load_pet(slug)
+            if not pet or not pet.exists:
+                return _err(rid, 4040, f"pet '{slug}' not found")
+            renderer = PetRenderer(
+                str(pet.spritesheet),
+                mode="unicode",
+                scale=anakot_pets.active_scale(),
+            )
+            grid = renderer.cells(state, index)
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        return _ok(rid, {"state": state, "index": index, "cells": grid})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.gallery")
+def _(rid, params: dict) -> dict:
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            pets = installed_pets()
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+
+        from agent.pet.manifest import prefetch
+
+        prefetch()
+
+        gallery = [
+            {
+                "slug": p.slug,
+                "displayName": p.display_name,
+                "generated": p.generated,
+            }
+            for p in pets
+        ]
+        cfg = anakot_pets.config()
+        return _ok(
+            rid,
+            {
+                "pets": gallery,
+                "activeSlug": cfg.get("slug", ""),
+                "enabled": anakot_pets.active_enabled(),
+                "scale": anakot_pets.active_scale(),
+            },
+        )
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.select")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    if not slug:
+        return _err(rid, 4004, "slug is required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            pet = load_pet(slug)
+            if not pet or not pet.exists:
+                # Try to install from manifest
+                pet = install_pet(slug)
+            anakot_pets._set_active(pet.slug)
+            anakot_pets._set_enabled(True)
+            payload = _pet_sprite_payload(pet.slug, str(pet.spritesheet))
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        return _ok(
+            rid,
+            {
+                "slug": pet.slug,
+                "displayName": pet.display_name,
+                "payload": payload,
+            },
+        )
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.remove")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    if not slug:
+        return _err(rid, 4004, "slug is required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            anakot_pets._clear_active_if(slug)
+            removed = remove_pet(slug)
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        return _ok(rid, {"removed": removed, "slug": slug})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.thumb")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    source_url = params.get("sourceUrl", "") if isinstance(params, dict) else ""
+    if not slug:
+        return _err(rid, 4004, "slug is required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            png_data = thumbnail_png(slug, source_url=source_url)
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+
+        import base64
+
+        data_uri = ""
+        if png_data:
+            data_uri = "data:image/png;base64," + base64.b64encode(png_data).decode("ascii")
+        return _ok(rid, {"slug": slug, "dataUri": data_uri})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.export")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    if not slug:
+        return _err(rid, 4004, "slug is required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            fname, zdata = export_pet(slug)
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+
+        import base64
+
+        return _ok(rid, {"filename": fname, "archive": base64.b64encode(zdata).decode("ascii")})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.rename")
+def _(rid, params: dict) -> dict:
+    slug = params.get("slug", "") if isinstance(params, dict) else ""
+    name = params.get("displayName", "") if isinstance(params, dict) else ""
+    if not slug or not name:
+        return _err(rid, 4004, "slug and displayName are required")
+    try:
+        home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
+        token = set_anakot_home_override(home) if home else None
+        try:
+            result = rename_pet(slug, name)
+            if result:
+                anakot_pets._rename_active_if(slug, result)
+        finally:
+            if token is not None:
+                reset_anakot_home_override(token)
+        return _ok(rid, {"slug": result or slug, "renamed": bool(result)})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.disable")
+def _(rid, params: dict) -> dict:
+    try:
+        enabled = is_truthy_value(params.get("enabled", not params.get("disable", True)))
+        anakot_pets._set_enabled(enabled)
+        return _ok(rid, {"enabled": enabled})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.scale")
+def _(rid, params: dict) -> dict:
+    scale = float(params.get("scale", DEFAULT_SCALE)) if isinstance(params, dict) else DEFAULT_SCALE
+    scale = clamp_scale(scale)
+    try:
+        anakot_pets.set_pet_scale(scale)
+        return _ok(rid, {"scale": scale})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("pet.generate.status")
+def _(rid, params: dict) -> dict:
+    # Placeholder: generation requires the generate subpackage (not yet ported)
+    return _ok(rid, {"available": False, "generating": False})
+
+
+@method("pet.generate")
+def _(rid, params: dict) -> dict:
+    return _err(rid, 5010, "pet generation not yet available in this release")
+
+
+@method("pet.hatch")
+def _(rid, params: dict) -> dict:
+    return _err(rid, 5010, "pet hatching not yet available in this release")
+
+
+@method("pet.cancel")
+def _(rid, params: dict) -> dict:
+    return _ok(rid, {"cancelled": False, "note": "no generation in progress"})

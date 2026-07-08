@@ -58,6 +58,7 @@ import {
   onComposerInsertRequest
 } from './focus'
 import { HelpHint } from './help-hint'
+import { ModelSelector } from './model-selector'
 import { useAtCompletions } from './hooks/use-at-completions'
 import { useSlashCompletions } from './hooks/use-slash-completions'
 import { useVoiceConversation } from './hooks/use-voice-conversation'
@@ -1561,7 +1562,15 @@ export function ChatBar({
                       : 'grid-cols-[auto_1fr_auto] items-center gap-(--composer-control-gap) [grid-template-areas:"menu_input_controls"]'
                   )}
                 >
-                  <div className="flex items-center [grid-area:menu]">{contextMenu}</div>
+                  <div className="flex items-center gap-1 [grid-area:menu]">
+                    {contextMenu}
+                    {state.model.canSwitch && state.model.model && (
+                      <ModelSelector
+                        gateway={gateway}
+                        sessionId={sessionId}
+                      />
+                    )}
+                  </div>
                   <div className="min-w-0 [grid-area:input]">{input}</div>
                   <div className="flex items-center justify-end [grid-area:controls]">{controls}</div>
                 </div>

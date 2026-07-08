@@ -12,9 +12,37 @@ import {
   CodeCardSubtitle,
   CodeCardTitle
 } from '@/components/chat/code-card'
+import { DiffLines } from '@/components/chat/diff-lines'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useI18n } from '@/i18n'
 import { codiconForLanguage, isLikelyProseCodeBlock, sanitizeLanguageTag } from '@/lib/markdown-code'
+
+/**
+ * Detect if a code block contains diff markers (---/+++ at the start).
+ * Used to render unified diff output as a colored diff view instead of
+ * a plain syntax-highlighted code block.
+ */
+function isDiffBlock(language: string | undefined, code: string): boolean {
+  if (language === 'diff') return true
+  // Auto-detect: look for ---/+++ lines in the first few lines
+  if (!language || language === 'text' || language === 'plaintext') {
+    const lines = code.trim().split('\n')
+    let hasOldFile = false
+    let hasNewFile = false
+    for (let i = 0; i < Math.min(lines.length, 6); i++) {
+      const line = lines[i]!
+      if (line.startsWith('--- ')) hasOldFile = true
+      if (line.startsWith('+++ ')) hasNewFile = true
+    }
+    if (hasOldFile && hasNewFile) return true
+    // Also detect if most lines start with +, -, or @@
+    if (lines.length > 3) {
+      const diffCount = lines.filter(l => /^[+@-]/.test(l)).length
+      if (diffCount / lines.length > 0.5) return true
+    }
+  }
+  return false
+}
 
 /**
  * Streamdown's code adapter renders header + body as inline siblings, so we
@@ -56,6 +84,32 @@ export const SyntaxHighlighter: FC<AnakotSyntaxHighlighterProps> = ({
   // than a transient empty card.
   if (!trimmed.trim()) {
     return null
+  }
+
+  // Detect diff blocks and render them as a colored diff view
+  if (isDiffBlock(language, trimmed)) {
+    return (
+      <CodeCard data-streaming={defer ? 'true' : undefined}>
+        <CodeCardHeader>
+          <CodeCardTitle>
+            <CodeCardIcon name="diff" />
+            {t.assistant.tool.code}
+            <CodeCardSubtitle> · diff</CodeCardSubtitle>
+          </CodeCardTitle>
+          <CopyButton
+            appearance="inline"
+            className="-my-1 -mr-1 h-5 px-1 opacity-55 hover:opacity-100"
+            iconClassName="size-2.5"
+            label={t.assistant.tool.copyCode}
+            showLabel={false}
+            text={trimmed}
+          />
+        </CodeCardHeader>
+        <CodeCardBody>
+          <DiffLines text={trimmed} />
+        </CodeCardBody>
+      </CodeCard>
+    )
   }
 
   if (isLikelyProseCodeBlock(language, trimmed)) {

@@ -5,8 +5,8 @@ import { useI18n } from '@/i18n'
 import type { ModelOptionProvider, ModelOptionsResponse, ModelPricing } from '@/types/anakot'
 
 import type { AnakotGateway } from '../anakot'
-import { getGlobalModelOptions } from '../anakot'
 import { cn } from '../lib/utils'
+import { requestModelOptions } from '../lib/model-options'
 import { startManualOnboarding } from '../store/onboarding'
 
 import { InlineNotice } from './notifications'
@@ -55,15 +55,7 @@ export function ModelPickerDialog({
 
   const modelOptions = useQuery({
     queryKey: ['model-options', sessionId || 'global'],
-    queryFn: () => {
-      if (gw && sessionId) {
-        return gw.request<ModelOptionsResponse>('model.options', {
-          session_id: sessionId
-        })
-      }
-
-      return getGlobalModelOptions()
-    },
+    queryFn: () => requestModelOptions({ gateway: gw, sessionId }),
     enabled: open
   })
 

@@ -28,6 +28,10 @@ declare global {
       }
       api: <T>(request: AnakotApiRequest) => Promise<T>
       notify: (payload: AnakotNotification) => Promise<boolean>
+      setWindowOpacity: (opacity: number) => Promise<number | null>
+      getWindowOpacity: () => Promise<number>
+      getNotificationPrefs: () => Promise<NotificationPrefs>
+      setNotificationPrefs: (prefs: Partial<NotificationPrefs>) => Promise<NotificationPrefs>
       requestMicrophoneAccess: () => Promise<boolean>
       readFileDataUrl: (filePath: string) => Promise<string>
       readFileText: (filePath: string) => Promise<AnakotReadFileTextResult>
@@ -124,6 +128,14 @@ declare global {
         }
       }>
     }
+  }
+
+  interface NotificationPrefs {
+    message: boolean
+    task_complete: boolean
+    update: boolean
+    error: boolean
+    info: boolean
   }
 }
 
@@ -398,6 +410,7 @@ export interface AnakotNotification {
   title?: string
   body?: string
   silent?: boolean
+  type?: string
 }
 
 export interface AnakotPreviewTarget {

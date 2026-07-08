@@ -238,6 +238,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
       <div
         className="wrap-anywhere min-w-0 max-w-full overflow-hidden text-pretty text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground"
         data-slot="aui_assistant-message-content"
+        dir="auto"
       >
         {hoistedTodos.length > 0 && <HoistedTodoPanel todos={hoistedTodos} />}
         <MessagePrimitive.Parts components={MESSAGE_PARTS_COMPONENTS} />
@@ -907,7 +908,7 @@ const SystemMessage: FC = () => {
         <Codicon className="text-muted-foreground/55" name="compass" size="0.75rem" />
         <span className="text-muted-foreground/55">steered</span>
         <span className="text-muted-foreground/35">·</span>
-        <span className="whitespace-pre-wrap">{steerNote.groups.text.trim()}</span>
+        <span className="whitespace-pre-wrap" dir="auto">{steerNote.groups.text.trim()}</span>
       </MessagePrimitive.Root>
     )
   }
@@ -923,7 +924,7 @@ const SystemMessage: FC = () => {
       >
         <span className="font-mono text-muted-foreground/55">{slashStatus.groups.command}</span>
         <span className="mx-1.5 text-muted-foreground/35">·</span>
-        <span className="whitespace-pre-wrap">{slashStatus.groups.output.trim()}</span>
+        <span className="whitespace-pre-wrap" dir="auto">{slashStatus.groups.output.trim()}</span>
       </MessagePrimitive.Root>
     )
   }
@@ -934,7 +935,7 @@ const SystemMessage: FC = () => {
       data-role="system"
       data-slot="aui_system-message-root"
     >
-      <span className="whitespace-pre-wrap">{text}</span>
+      <span className="whitespace-pre-wrap" dir="auto">{text}</span>
     </MessagePrimitive.Root>
   )
 }

@@ -200,6 +200,7 @@ export interface Translations {
       keysTools: string
       keysSettings: string
       mcp: string
+      toolsets: string
       archivedChats: string
       about: string
     }
@@ -651,6 +652,7 @@ export interface Translations {
     allProfiles: string
     showAllProfiles: string
     switchToProfile: (name: string) => string
+    switchProfile: string
     manageProfiles: string
     actionsFor: (name: string) => string
     color: string
@@ -941,6 +943,12 @@ export interface Translations {
     snippets: Record<string, { label: string; description: string; text: string }>
     dropFiles: string
     dropSession: string
+    autoReadAloud: string
+    autoReadAloudDesc: string
+    selectModel: string
+    noModel: string
+    noModelsAvailable: string
+    loading: string
   }
 
   updates: {

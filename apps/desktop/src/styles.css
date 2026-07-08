@@ -877,7 +877,7 @@ canvas {
    virtualized items unmount, so :nth-last-child can't fire reliably. */
 
 [data-slot='aui_assistant-message-content'] {
-  padding-left: var(--message-text-indent);
+  padding-inline-start: var(--message-text-indent);
   font-size: var(--conversation-text-font-size);
   line-height: 1.5;
 }
@@ -1365,5 +1365,21 @@ canvas {
  * win by cascade order (the plugin's standalone-dashboard CSS loads first
  * for structure, then we override visually).
  * --------------------------------------------------------------------------- */
+
+/* ── RTL / bidirection text support ─────────────────────────────────────────
+   All chat message containers have dir="auto" so the browser auto-detects
+   text direction for Arabic, Hebrew, and other RTL scripts. Use CSS logical
+   properties (padding-inline-start, margin-inline-end, border-inline-start,
+   etc.) instead of physical left/right variants so layout adapts to
+   whatever direction the text content dictates. Tailwind logical utilities
+   (ps-*, pe-*, ms-*, me-*, border-s-*, border-e-*) are preferred for new
+   code; the fallbacks below cover existing rules that use physical
+   directional values. */
+[dir="auto"] {
+  /* Ensure blockquote border sits on the logical start edge. */
+  border-inline-start-width: inherit;
+  /* Restore normal word/letter-spacing; some RTL fonts need it. */
+  word-spacing: normal;
+}
 
 

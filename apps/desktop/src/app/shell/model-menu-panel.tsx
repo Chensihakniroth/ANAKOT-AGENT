@@ -15,9 +15,9 @@ import {
   DropdownMenuSubTrigger
 } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { AnakotGateway } from '@/anakot'
-import { getGlobalModelOptions } from '@/anakot'
+import { getGlobalModelOptions, type AnakotGateway } from '@/anakot'
 import { useI18n } from '@/i18n'
+import { requestModelOptions } from '@/lib/model-options'
 import { displayModelName, modelDisplayParts, reasoningEffortLabel } from '@/lib/model-status-label'
 import { cn } from '@/lib/utils'
 import {
@@ -66,13 +66,10 @@ export function ModelMenuPanel({ gateway, onSelectModel, requestGateway }: Model
 
   const modelOptions = useQuery({
     queryKey: ['model-options', activeSessionId || 'global'],
-    queryFn: (): Promise<ModelOptionsResponse> => {
-      if (gateway && activeSessionId) {
-        return gateway.request<ModelOptionsResponse>('model.options', { session_id: activeSessionId })
-      }
-
-      return getGlobalModelOptions()
-    }
+    // Gateway-first even with no session yet: a connected (possibly remote)
+    // gateway owns the model catalog, including virtual providers like `moa`
+    // that the local REST fallback can't know about.
+    queryFn: (): Promise<ModelOptionsResponse> => requestModelOptions({ gateway, sessionId: activeSessionId })
   })
 
   const optionsModel = String(modelOptions.data?.model ?? currentModel ?? '')

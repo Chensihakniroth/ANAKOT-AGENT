@@ -11,10 +11,13 @@
 
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
+import { useStore } from '@nanostores/react'
+
 import { matchesQuery, useMediaQuery } from '@/hooks/use-media-query'
 
 import { BUILTIN_THEME_LIST, BUILTIN_THEMES, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme } from './presets'
 import type { DesktopTheme, DesktopThemeColors } from './types'
+import { $customThemes } from './custom-themes-store'
 
 const SKIN_KEY = 'anakot-desktop-theme-v2'
 const MODE_KEY = 'anakot-desktop-mode-v1'
@@ -28,7 +31,7 @@ const resolveMode = (mode: ThemeMode, systemDark = matchesQuery('(prefers-color-
   mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
 
 const normalizeSkin = (name: string | null | undefined): string =>
-  name && BUILTIN_THEMES[name] && !RETIRED_SKINS.has(name) ? name : DEFAULT_SKIN_NAME
+  name && (BUILTIN_THEMES[name] || $customThemes.get()[name]) && !RETIRED_SKINS.has(name) ? name : DEFAULT_SKIN_NAME
 
 // ─── Color math (for synthesised light variants of dark-only skins) ────────
 
@@ -108,7 +111,7 @@ function synthLightColors(seed: DesktopTheme): DesktopThemeColors {
 
 /** Returns the seed palette for a given skin + mode (no overrides applied). */
 export function getBaseColors(skinName: string, mode: 'light' | 'dark'): DesktopThemeColors {
-  const seed = BUILTIN_THEMES[skinName] ?? nousTheme
+  const seed = BUILTIN_THEMES[skinName] ?? $customThemes.get()[skinName] ?? nousTheme
 
   if (mode === 'dark') {
     return seed.darkColors ?? seed.colors
@@ -118,13 +121,13 @@ export function getBaseColors(skinName: string, mode: 'light' | 'dark'): Desktop
 }
 
 function deriveTheme(skinName: string, mode: 'light' | 'dark'): DesktopTheme {
-  const seed = BUILTIN_THEMES[skinName] ?? nousTheme
+  const seed = BUILTIN_THEMES[skinName] ?? $customThemes.get()[skinName] ?? nousTheme
 
   return {
     ...seed,
     name: `${skinName}-${mode}`,
     label: `${seed.label} ${mode === 'light' ? 'Light' : 'Dark'}`,
-    description: `${seed.label} ${mode} palette`,
+    description: `${seed.description} ${mode} palette`,
     colors: getBaseColors(skinName, mode)
   }
 }
@@ -276,6 +279,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolvedMode = resolveMode(mode, systemDark)
   const activeTheme = useMemo(() => deriveTheme(themeName, resolvedMode), [themeName, resolvedMode])
 
+  const customThemes = useStore($customThemes)
+
+  const availableThemes = useMemo(() => {
+    const custom = Object.values(customThemes).map(({ name, label, description }) => ({
+      name,
+      label,
+      description
+    }))
+    return [...SKIN_LIST, ...custom]
+  }, [customThemes])
+
   useEffect(() => applyTheme(activeTheme, resolvedMode), [activeTheme, resolvedMode])
 
   const setTheme = useCallback((name: string) => {
@@ -297,8 +311,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // (`appearance.toggleMode`) so it shows up in the hotkey map and is rebindable.
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ theme: activeTheme, themeName, mode, resolvedMode, availableThemes: SKIN_LIST, setTheme, setMode }),
-    [activeTheme, themeName, mode, resolvedMode, setTheme, setMode]
+    () => ({ theme: activeTheme, themeName, mode, resolvedMode, availableThemes, setTheme, setMode }),
+    [activeTheme, themeName, mode, resolvedMode, availableThemes, setTheme, setMode]
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
@@ -309,7 +323,7 @@ export const useTheme = (): ThemeContextValue => useContext(ThemeContext)
 /** Sync the desktop skin with the active Anakot backend theme on connect. */
 export function useSyncThemeFromBackend(backendThemeName: string | undefined, setTheme: (name: string) => void) {
   useEffect(() => {
-    if (backendThemeName && BUILTIN_THEMES[backendThemeName]) {
+    if (backendThemeName && (BUILTIN_THEMES[backendThemeName] || $customThemes.get()[backendThemeName])) {
       setTheme(backendThemeName)
     }
   }, [backendThemeName, setTheme])

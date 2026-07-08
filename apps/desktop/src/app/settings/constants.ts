@@ -306,6 +306,7 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
   stt: {
     enabled: 'Speech To Text',
     provider: 'Speech-To-Text Provider',
+    echoTranscripts: 'Echo Transcripts',
     local: {
       model: 'Local Transcription Model',
       language: 'Transcription Language'
@@ -410,6 +411,7 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   },
   stt: {
     enabled: 'Enable local or provider-backed speech transcription.',
+    echoTranscripts: 'Display live speech-to-text transcript in the chat as you speak.',
     elevenlabs: {
       languageCode: 'Optional ISO-639-3 language code. Blank lets ElevenLabs auto-detect.'
     }
@@ -496,6 +498,7 @@ export const SECTIONS: DesktopConfigSection[] = [
       'tts.provider',
       'stt.enabled',
       'stt.provider',
+      'stt.echo_transcripts',
       'voice.auto_tts',
       'tts.edge.voice',
       'tts.openai.model',

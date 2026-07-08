@@ -18,6 +18,10 @@ export function SettingsContent({ children }: { children: ReactNode }) {
   )
 }
 
+export function SettingsSection({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('mb-6', className)}>{children}</div>
+}
+
 export function Pill({ tone = 'muted', children }: { tone?: 'muted' | 'primary'; children: ReactNode }) {
   return <Badge variant={tone === 'primary' ? 'default' : 'muted'}>{children}</Badge>
 }

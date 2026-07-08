@@ -12,7 +12,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { $terminalSettings } from '@/store/terminal-settings'
 import { useTheme } from '@/themes/context'
 
-import { isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel } from './selection'
+import { buildTerminalTheme, isAddSelectionShortcut, terminalSelectionAnchor, terminalSelectionLabel } from './selection'
 
 /** Read the fully-resolved background color from a DOM element that has the CSS var applied.
  *  getComputedStyle().backgroundColor resolves color-mix() chains into plain rgb()/rgba()
@@ -323,29 +323,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       letterSpacing: settings.letterSpacing,
       macOptionIsMeta: true,
       scrollback: settings.scrollback,
-      theme: {
-        background: themeBg,
-        foreground: themeFg,
-        cursor: themeFg,
-        cursorAccent: themeBg,
-        selectionBackground: '#586e7555',
-        black: '#073642',
-        red: '#dc322f',
-        green: '#859900',
-        yellow: '#b58900',
-        blue: '#268bd2',
-        magenta: '#d33682',
-        cyan: '#2aa198',
-        white: '#eee8d5',
-        brightBlack: '#586e75',
-        brightRed: '#f25c54',
-        brightGreen: '#b3d437',
-        brightYellow: '#f7c948',
-        brightBlue: '#5fb3ff',
-        brightMagenta: '#ff6ab4',
-        brightCyan: '#5cd9c8',
-        brightWhite: '#fdf6e3'
-      }
+      theme: buildTerminalTheme(themeBg, themeFg)
     })
 
     const fit = new FitAddon()
@@ -623,11 +601,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
 
       term.options.theme = {
-        ...term.options.theme,
-        background: newBg,
-        foreground: newFg,
-        cursor: newFg,
-        cursorAccent: newBg
+        ...buildTerminalTheme(newBg, newFg, term.options.theme)
       }
     })
   }, [themeCtx.resolvedMode, themeCtx.themeName])

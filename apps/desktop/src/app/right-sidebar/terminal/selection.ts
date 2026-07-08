@@ -1,38 +1,78 @@
 import type { ITheme, Terminal } from '@xterm/xterm'
 import type { CSSProperties } from 'react'
 
-// Solarized-derived palette, but with bright ANSI 8–15 promoted to real
-// accent variants instead of Schoonover's UI grays. Anakot' TUI skins (gold,
-// crimson, ...) emit bright SGR codes that would otherwise wash out to gray.
-// We always render the dark canvas — the app's light surfaces can't host the
-// default skin without dropping below readable contrast.
-export const TERMINAL_BG = '#002b36'
-
-const THEME: ITheme = {
-  background: TERMINAL_BG,
-  foreground: '#839496',
-  cursor: '#93a1a1',
-  cursorAccent: TERMINAL_BG,
-  selectionBackground: '#586e7555',
-  black: '#073642',
-  red: '#dc322f',
-  green: '#859900',
-  yellow: '#b58900',
-  blue: '#268bd2',
-  magenta: '#d33682',
-  cyan: '#2aa198',
-  white: '#eee8d5',
-  brightBlack: '#586e75',
-  brightRed: '#f25c54',
-  brightGreen: '#b3d437',
-  brightYellow: '#f7c948',
-  brightBlue: '#5fb3ff',
-  brightMagenta: '#ff6ab4',
-  brightCyan: '#5cd9c8',
-  brightWhite: '#fdf6e3'
+// Default VS Code Dark+ inspired terminal palette
+export const VSCODE_TERMINAL_COLORS: ITheme = {
+  background: '#1e1e1e',
+  foreground: '#d4d4d4',
+  cursor: '#aeafad',
+  cursorAccent: '#1e1e1e',
+  selectionBackground: '#264f7855',
+  black: '#000000',
+  red: '#cd3131',
+  green: '#0dbc79',
+  yellow: '#e5e510',
+  blue: '#2472c8',
+  magenta: '#bc3fbc',
+  cyan: '#11b8bd',
+  white: '#e5e5e5',
+  brightBlack: '#666666',
+  brightRed: '#f14c4c',
+  brightGreen: '#23d18b',
+  brightYellow: '#f5f543',
+  brightBlue: '#3b8eea',
+  brightMagenta: '#d670d6',
+  brightCyan: '#29b8db',
+  brightWhite: '#ffffff'
 }
 
-export const terminalTheme = (): ITheme => THEME
+/**
+ * Build an ITheme palette that blends the current desktop theme with
+ * VS Code Dark+ inspired ANSI colors. Reads CSS variables if they exist,
+ * otherwise uses the imported defaults.
+ */
+export function buildTerminalTheme(
+  bg: string,
+  fg: string,
+  overrides?: Partial<ITheme>
+): ITheme {
+  const root = typeof document !== 'undefined' ? document.documentElement : null
+
+  const readVar = (varName: string, fallback: string): string => {
+    if (!root) return fallback
+    const val = getComputedStyle(root).getPropertyValue(varName).trim()
+    return val || fallback
+  }
+
+  return {
+    background: bg,
+    foreground: fg,
+    cursor: fg,
+    cursorAccent: bg,
+    selectionBackground: '#264f7855',
+    black: readVar('--vscode-terminal-ansiBlack', VSCODE_TERMINAL_COLORS.black!),
+    red: readVar('--vscode-terminal-ansiRed', VSCODE_TERMINAL_COLORS.red!),
+    green: readVar('--vscode-terminal-ansiGreen', VSCODE_TERMINAL_COLORS.green!),
+    yellow: readVar('--vscode-terminal-ansiYellow', VSCODE_TERMINAL_COLORS.yellow!),
+    blue: readVar('--vscode-terminal-ansiBlue', VSCODE_TERMINAL_COLORS.blue!),
+    magenta: readVar('--vscode-terminal-ansiMagenta', VSCODE_TERMINAL_COLORS.magenta!),
+    cyan: readVar('--vscode-terminal-ansiCyan', VSCODE_TERMINAL_COLORS.cyan!),
+    white: readVar('--vscode-terminal-ansiWhite', VSCODE_TERMINAL_COLORS.white!),
+    brightBlack: readVar('--vscode-terminal-ansiBrightBlack', VSCODE_TERMINAL_COLORS.brightBlack!),
+    brightRed: readVar('--vscode-terminal-ansiBrightRed', VSCODE_TERMINAL_COLORS.brightRed!),
+    brightGreen: readVar('--vscode-terminal-ansiBrightGreen', VSCODE_TERMINAL_COLORS.brightGreen!),
+    brightYellow: readVar('--vscode-terminal-ansiBrightYellow', VSCODE_TERMINAL_COLORS.brightYellow!),
+    brightBlue: readVar('--vscode-terminal-ansiBrightBlue', VSCODE_TERMINAL_COLORS.brightBlue!),
+    brightMagenta: readVar('--vscode-terminal-ansiBrightMagenta', VSCODE_TERMINAL_COLORS.brightMagenta!),
+    brightCyan: readVar('--vscode-terminal-ansiBrightCyan', VSCODE_TERMINAL_COLORS.brightCyan!),
+    brightWhite: readVar('--vscode-terminal-ansiBrightWhite', VSCODE_TERMINAL_COLORS.brightWhite!),
+    ...overrides
+  }
+}
+
+export const TERMINAL_BG = '#1e1e1e'
+
+export const terminalTheme = (): ITheme => VSCODE_TERMINAL_COLORS
 
 export const isMacPlatform = () => navigator.platform.toLowerCase().includes('mac')
 

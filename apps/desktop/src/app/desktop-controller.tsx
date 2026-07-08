@@ -85,7 +85,7 @@ import { useKeybinds } from './hooks/use-keybinds'
 import { ModelPickerOverlay } from './model-picker-overlay'
 import { ModelVisibilityOverlay } from './model-visibility-overlay'
 import { RightSidebarPane } from './right-sidebar'
-import { TerminalTab } from './right-sidebar/terminal'
+import { MultiTerminalPanel } from './right-sidebar/terminal/multi-terminal'
 import { $terminalTakeover } from './right-sidebar/store'
 import { NEW_CHAT_ROUTE, registerPluginPaths, routeSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
 import { useContextSuggestions } from './session/hooks/use-context-suggestions'
@@ -108,6 +108,10 @@ import type { TitlebarTool } from './shell/titlebar-controls'
 import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
 import { OverlayModal } from './overlays/overlay-modal'
+
+import { PetGenerateOverlay } from '@/app/pet-generate/pet-generate-overlay'
+import { $petOverlayActive } from '@/store/pet-overlay'
+import { $petInfo } from '@/store/pet'
 
 const AgentsView = lazy(async () => ({ default: (await import('./agents')).AgentsView }))
 const ArtifactsView = lazy(async () => ({ default: (await import('./artifacts')).ArtifactsView }))
@@ -673,6 +677,7 @@ export function DesktopController() {
       <GatewayConnectingOverlay />
       <BootFailureOverlay />
       <CommandPalette />
+      <PetGenerateOverlay />
 
       {settingsOpen && (
         <Suspense fallback={null}>
@@ -800,7 +805,7 @@ export function DesktopController() {
 
   const takeoverTerminalView = (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
-      <TerminalTab cwd={currentCwd} onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
+      <MultiTerminalPanel cwd={currentCwd} onAddSelectionToChat={composer.addTerminalSelectionAttachment} />
     </div>
   )
 

@@ -1,16 +1,20 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { AnakotGateway } from '@/anakot'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import { Button } from '@/components/ui/button'
 import { SegmentedControl } from '@/components/ui/segmented-control'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Check, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
+import { Check, Download, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
 import { useTheme } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
+import { VscodeThemeBrowser } from '@/themes/vscode-theme-browser'
+import { unregisterCustomTheme } from '@/themes/custom-themes-store'
 
 import { MODE_OPTIONS } from './constants'
 import {
@@ -448,41 +452,72 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
                   const active = themeName === theme.name
 
                   return (
-                    <button
-                      className={cn(
-                        'rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-2 text-left transition hover:bg-(--chrome-action-hover)',
-                        active && 'border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary)'
-                      )}
-                      key={theme.name}
-                      onClick={() => {
-                        triggerHaptic('crisp')
-                        applyTheme(theme.name)
-                      }}
-                      type="button"
-                    >
-                      <ThemePreview name={theme.name} />
-                      <div className="mt-3 flex items-start justify-between gap-3 px-1">
-                        <div className="min-w-0">
-                          <div className="truncate text-[length:var(--conversation-text-font-size)] font-medium">
-                            {theme.label}
-                          </div>
-                          <div className="mt-0.5 line-clamp-2 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
-                            {theme.description}
-                          </div>
-                        </div>
-                        {active && (
-                          <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
-                            <Check className="size-3.5" />
-                          </span>
+                    <div className="group relative">
+                      <button
+                        className={cn(
+                          'w-full rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-2 text-left transition hover:bg-(--chrome-action-hover)',
+                          active && 'border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary)'
                         )}
-                      </div>
-                    </button>
+                        key={theme.name}
+                        onClick={() => {
+                          triggerHaptic('crisp')
+                          applyTheme(theme.name)
+                        }}
+                        type="button"
+                      >
+                        <ThemePreview name={theme.name} />
+                        <div className="mt-3 flex items-start justify-between gap-3 px-1">
+                          <div className="min-w-0">
+                            <div className="truncate text-[length:var(--conversation-text-font-size)] font-medium">
+                              {theme.label}
+                            </div>
+                            <div className="mt-0.5 line-clamp-2 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+                              {theme.description}
+                            </div>
+                          </div>
+                          {active && (
+                            <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                              <Check className="size-3.5" />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      {theme.name.startsWith('vsc:') && (
+                        <button
+                          className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-md bg-background/80 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                          onClick={e => {
+                            e.stopPropagation()
+                            triggerHaptic('selection')
+                            unregisterCustomTheme(theme.name)
+                            if (active) {
+                              applyTheme('custom')
+                            }
+                          }}
+                          title="Delete installed theme"
+                          type="button"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
               </div>
             }
             description={a.themeDesc}
             title={a.themeTitle}
+            wide
+          />
+
+          {/* VS Code Theme Marketplace */}
+          <ListRow
+            below={
+              <div className="mt-3 max-h-[460px] overflow-y-auto">
+                <VscodeThemeBrowser />
+              </div>
+            }
+            description="Browse and install themes from the VS Code Marketplace. Download a theme and it will appear in the built-in list above."
+            title="VS Code MarketPlace Themes"
             wide
           />
 
@@ -502,8 +537,122 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
             description={a.toolViewDesc}
             title={a.toolViewTitle}
           />
+
+          {/* Window Translucency */}
+          <WindowOpacitySlider />
+
+          {/* Notification Type Toggles */}
+          <NotificationToggleList />
         </div>
       </div>
     </SettingsContent>
+  )
+}
+
+function WindowOpacitySlider() {
+  const [opacity, setOpacity] = useState(1)
+  const [loaded, setLoaded] = useState(false)
+
+  // Load initial opacity from main process
+  useEffect(() => {
+    window.anakotDesktop.getWindowOpacity().then(val => {
+      setOpacity(val)
+      setLoaded(true)
+    }).catch(() => {
+      setLoaded(true)
+    })
+  }, [])
+
+  const handleChange = useCallback((value: number) => {
+    const clamped = Math.round(value * 100) / 100
+    setOpacity(clamped)
+    window.anakotDesktop.setWindowOpacity(clamped).catch(() => {})
+    triggerHaptic('crisp')
+  }, [])
+
+  if (!loaded) return null
+
+  return (
+    <ListRow
+      action={
+        <div className="flex items-center gap-2">
+          <input
+            className="h-1.5 w-32 cursor-pointer appearance-none rounded-full bg-(--ui-bg-tertiary) accent-primary [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-sm"
+            max={1}
+            min={0.2}
+            onChange={e => handleChange(parseFloat(e.target.value))}
+            step={0.05}
+            type="range"
+            value={opacity}
+          />
+          <span className="min-w-8 text-right font-mono text-xs text-muted-foreground tabular-nums">
+            {Math.round(opacity * 100)}%
+          </span>
+        </div>
+      }
+      description="Adjust the transparency level of the application window (20% – 100%)"
+      title="Window Opacity"
+    />
+  )
+}
+
+function NotificationToggleList() {
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null)
+
+  useEffect(() => {
+    window.anakotDesktop.getNotificationPrefs().then(setPrefs).catch(() => {})
+  }, [])
+
+  const handleToggle = useCallback((type: keyof NotificationPrefs, value: boolean) => {
+    const next = { ...prefs!, [type]: value }
+    setPrefs(next)
+    window.anakotDesktop.setNotificationPrefs(next).catch(() => {})
+    triggerHaptic('selection')
+  }, [prefs])
+
+  if (!prefs) return null
+
+  const labels: Record<keyof NotificationPrefs, string> = {
+    message: 'Messages',
+    task_complete: 'Task Complete',
+    update: 'Updates',
+    error: 'Errors',
+    info: 'Info'
+  }
+
+  const descriptions: Record<keyof NotificationPrefs, string> = {
+    message: 'New messages and assistant replies',
+    task_complete: 'When background tasks complete',
+    update: 'App update notifications',
+    error: 'Error alerts',
+    info: 'Informational notifications'
+  }
+
+  return (
+    <ListRow
+      below={
+        <div className="mt-3 grid gap-2">
+          {(Object.keys(prefs) as Array<keyof NotificationPrefs>).map(type => (
+            <div
+              className="flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2"
+              key={type}
+            >
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-foreground">{labels[type]}</div>
+                <div className="text-[0.65rem] leading-tight text-muted-foreground">{descriptions[type]}</div>
+              </div>
+              <Switch
+                checked={prefs[type]}
+                onCheckedChange={v => handleToggle(type, v)}
+                size="xs"
+              />
+            </div>
+          ))}
+        </div>
+      }
+      description="Enable or disable native OS notifications for each type of event"
+      title="Notifications"
+      wide
+    />
   )
 }

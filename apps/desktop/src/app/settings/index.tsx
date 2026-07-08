@@ -23,6 +23,7 @@ import { McpSettings } from './mcp-settings'
 import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './providers-settings'
 import { SessionsSettings } from './sessions-settings'
 import { TerminalSettings } from './terminal-settings'
+import { ToolsetsSettings } from './toolsets-settings'
 import type { SettingsPageProps, SettingsView as SettingsViewId } from './types'
 
 const SETTINGS_VIEWS: readonly SettingsViewId[] = [
@@ -31,6 +32,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'gateway',
   'keys',
   'mcp',
+  'toolsets',
   'sessions',
   'about'
 ]
@@ -164,6 +166,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('mcp')}
           />
           <OverlayNavItem
+            active={activeView === 'toolsets'}
+            icon={Wrench}
+            label={t.settings.nav.toolsets ?? 'Tool Backends'}
+            onClick={() => setActiveView('toolsets')}
+          />
+          <OverlayNavItem
             active={activeView === 'sessions'}
             icon={Archive}
             label={t.settings.nav.archivedChats}
@@ -227,6 +235,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <ProvidersSettings onViewChange={setProviderView} view={providerView} />
           ) : activeView === 'keys' ? (
             <KeysSettings view={keysView} />
+          ) : activeView === 'toolsets' ? (
+            <ToolsetsSettings />
           ) : activeView === 'mcp' ? (
             <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
           ) : (

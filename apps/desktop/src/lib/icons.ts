@@ -97,7 +97,12 @@ import {
   IconX as X,
   IconX as XIcon,
   IconBolt as Zap,
-  IconBoltFilled as ZapFilled
+  IconBoltFilled as ZapFilled,
+  IconMail as Mail,
+  IconStar as Star,
+  IconStarFilled as StarFilled,
+  IconEgg as Egg,
+  IconPaw as PawPrint
 } from '@tabler/icons-react'
 
 export {
@@ -199,7 +204,12 @@ export {
   X,
   XIcon,
   Zap,
-  ZapFilled
+  ZapFilled,
+  Star,
+  StarFilled,
+  Mail,
+  Egg,
+  PawPrint
 }
 
 export type { Icon as IconComponent } from '@tabler/icons-react'

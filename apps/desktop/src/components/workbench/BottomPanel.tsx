@@ -3,6 +3,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
 import { TerminalTab, type TerminalTabHandle } from '@/app/right-sidebar/terminal'
+import { MultiTerminalPanel } from '@/app/right-sidebar/terminal/multi-terminal'
 import { $currentCwd } from '@/store/session'
 import { $gitLog } from '@/store/git-log'
 import { GitOutputPanel } from './GitOutputPanel'
@@ -176,7 +177,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {/* Panel content — always mount all tabs so TerminalTab stays alive */}
       <div ref={contentRef} className="relative flex flex-1 flex-col overflow-hidden" style={{ minHeight: 0, minWidth: 0 }}>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%', height: '100%' }}>
-          <TerminalTab ref={terminalRef} cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} shell={selectedShell} />
+          <MultiTerminalPanel cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} />
         </div>
         <div style={{ display: activeTab === 'output' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, width: '100%' }}>
           <GitOutputPanel />

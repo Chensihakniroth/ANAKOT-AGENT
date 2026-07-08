@@ -1,10 +1,13 @@
+import { useStore } from '@nanostores/react'
+
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { AudioLines, Layers3, Loader2, Square, SteeringWheel } from '@/lib/icons'
+import { AudioLines, Layers3, Loader2, Square, SteeringWheel, Volume2Icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { $autoReadAloud, toggleAutoReadAloud } from '@/store/auto-read-aloud'
 
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import type { ChatBarState, VoiceStatus } from './types'
@@ -71,6 +74,7 @@ export function ComposerControls({
 
   return (
     <div className="ml-auto flex shrink-0 items-center gap-(--composer-control-gap)">
+      <AutoReadAloudToggle />
       <DictationButton disabled={disabled} onToggle={onDictate} state={state.voice} status={voiceStatus} />
       {canSteer && (
         <Tip label={c.steer}>
@@ -233,6 +237,29 @@ function ConversationIndicator({
         return <span className="w-0.5 rounded-full bg-current" key={index} style={{ height: `${height * 100}%` }} />
       })}
     </span>
+  )
+}
+
+function AutoReadAloudToggle() {
+  const { t } = useI18n()
+  const c = t.composer
+  const enabled = useStore($autoReadAloud)
+
+  return (
+    <Tip label={enabled ? c.autoReadAloudDesc : c.autoReadAloud}>
+      <Button
+        aria-label={c.autoReadAloud}
+        aria-pressed={enabled}
+        className={GHOST_ICON_BTN}
+        data-active={enabled}
+        onClick={toggleAutoReadAloud}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <Volume2Icon className={cn('size-4', !enabled && 'opacity-50')} />
+      </Button>
+    </Tip>
   )
 }
 

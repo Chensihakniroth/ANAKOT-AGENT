@@ -176,6 +176,7 @@ export const ja = defineLocale({
       keysTools: 'ツール',
       keysSettings: '設定',
       mcp: 'MCP',
+      toolsets: 'ツールセット',
       archivedChats: 'アーカイブ済みチャット',
       about: '情報'
     },
