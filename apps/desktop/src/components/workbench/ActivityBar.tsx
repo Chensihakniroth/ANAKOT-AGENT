@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { $sidebarPanel, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
 import { $sidebarOpen } from '@/store/layout'
 import { $gitStatus } from '@/store/git'
-import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, CRON_ROUTE, PROFILES_ROUTE, AGENTS_ROUTE, COMMAND_CENTER_ROUTE, PLUGINS_ROUTE } from '../../app/routes'
+import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, PROFILES_ROUTE, PLUGINS_ROUTE } from '../../app/routes'
 
 interface ActivityBarItem {
   id: string
@@ -26,9 +26,6 @@ const GLOBAL_VIEW_ITEMS: ActivityBarItem[] = [
   { id: 'skills', icon: 'symbol-misc', label: 'Skills & Tools', route: SKILLS_ROUTE },
   { id: 'messaging', icon: 'comment', label: 'Messaging', route: MESSAGING_ROUTE },
   { id: 'artifacts', icon: 'files', label: 'Artifacts', route: ARTIFACTS_ROUTE },
-  { id: 'cron', icon: 'clock', label: 'Cron', route: CRON_ROUTE },
-  { id: 'agents', icon: 'robot', label: 'Agents', route: AGENTS_ROUTE },
-  { id: 'command-center', icon: 'terminal', label: 'Command Center', route: COMMAND_CENTER_ROUTE },
   { id: 'profiles', icon: 'person', label: 'Profiles', route: PROFILES_ROUTE },
   { id: 'plugins', icon: 'plug', label: 'Plugins', route: PLUGINS_ROUTE },
 ]

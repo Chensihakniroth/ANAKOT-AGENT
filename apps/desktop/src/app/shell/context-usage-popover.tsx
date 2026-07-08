@@ -1,10 +1,9 @@
 /**
- * ContextUsagePopover — detailed token usage breakdown in a statusbar popover.
+ * ContextUsagePopover — detailed token usage breakdown for the statusbar popover.
  *
  * Shows input tokens, output tokens, total, API calls, and context-window
  * utilisation (when the backend reports context_max).
  */
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
 import { formatK } from '@/lib/statusbar'
 import { cn } from '@/lib/utils'
@@ -12,7 +11,6 @@ import type { UsageStats } from '@/types/anakot'
 
 interface ContextUsagePopoverProps {
   usage: UsageStats
-  children?: React.ReactNode
 }
 
 function StatRow({
@@ -36,7 +34,7 @@ function Separator() {
   return <div className="my-1 h-px bg-border/40" />
 }
 
-export function ContextUsagePopover({ usage, children }: ContextUsagePopoverProps) {
+export function ContextUsagePopover({ usage }: ContextUsagePopoverProps) {
   const { t } = useI18n()
   const copy = t.shell.statusbar
 
@@ -56,60 +54,57 @@ export function ContextUsagePopover({ usage, children }: ContextUsagePopoverProp
       : null
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="end" className="w-64" side="top" sideOffset={6}>
-        <div className="px-1 pb-1 pt-0.5">
-          <span className="text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/60">
-            {copy.contextUsage}
-          </span>
-        </div>
+    <>
+      <div className="px-1 pb-1 pt-0.5">
+        <span className="text-[0.65rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground/60">
+          {copy.contextUsage}
+        </span>
+      </div>
 
-        <StatRow label={copy.contextInput} value={inputFormatted} />
-        <StatRow label={copy.contextOutput} value={outputFormatted} />
-        <StatRow label={copy.contextTotal} value={totalFormatted} color="text-foreground" />
-        <Separator />
-        <StatRow label={copy.contextCalls} value={callsFormatted} />
+      <StatRow label={copy.contextInput} value={inputFormatted} />
+      <StatRow label={copy.contextOutput} value={outputFormatted} />
+      <StatRow label={copy.contextTotal} value={totalFormatted} color="text-foreground" />
+      <Separator />
+      <StatRow label={copy.contextCalls} value={callsFormatted} />
 
-        {hasContextMax && contextPercent !== null && (
-          <>
-            <Separator />
-            <StatRow label={copy.contextWindow} value={`${contextUsedFormatted} / ${contextMaxFormatted}`} />
-            <StatRow
-              label={copy.contextUtilisation}
-              value={`${contextPercent}%`}
-              color={
+      {hasContextMax && contextPercent !== null && (
+        <>
+          <Separator />
+          <StatRow label={copy.contextWindow} value={`${contextUsedFormatted} / ${contextMaxFormatted}`} />
+          <StatRow
+            label={copy.contextUtilisation}
+            value={`${contextPercent}%`}
+            color={
+              contextPercent > 90
+                ? 'text-amber-500'
+                : contextPercent > 75
+                  ? 'text-amber-400/80'
+                  : undefined
+            }
+          />
+          {/* Mini bar */}
+          <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border/50">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all',
                 contextPercent > 90
-                  ? 'text-amber-500'
+                  ? 'bg-amber-500'
                   : contextPercent > 75
-                    ? 'text-amber-400/80'
-                    : undefined
-              }
+                    ? 'bg-amber-400/70'
+                    : 'bg-primary/60'
+              )}
+              style={{ width: `${Math.min(100, contextPercent)}%` }}
             />
-            {/* Mini bar */}
-            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border/50">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all',
-                  contextPercent > 90
-                    ? 'bg-amber-500'
-                    : contextPercent > 75
-                      ? 'bg-amber-400/70'
-                      : 'bg-primary/60'
-                )}
-                style={{ width: `${Math.min(100, contextPercent)}%` }}
-              />
-            </div>
-          </>
-        )}
+          </div>
+        </>
+      )}
 
-        {costFormatted && (
-          <>
-            <Separator />
-            <StatRow label={copy.contextCost} value={costFormatted} />
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+      {costFormatted && (
+        <>
+          <Separator />
+          <StatRow label={copy.contextCost} value={costFormatted} />
+        </>
+      )}
+    </>
   )
 }
