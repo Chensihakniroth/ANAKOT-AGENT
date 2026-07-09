@@ -485,6 +485,7 @@ const STREAMABLE_MEDIA_EXTS = new Set([
 ])
 
 const PLUGIN_PROTOCOL = 'anakot-plugin'
+const RENDERER_PROTOCOL = 'anakot-app'
 protocol.registerSchemesAsPrivileged([
   {
     scheme: MEDIA_PROTOCOL,
@@ -502,6 +503,16 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       supportFetchAPI: true,
       corsEnabled: true
+    }
+  },
+  {
+    scheme: RENDERER_PROTOCOL,
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
     }
   }
 ])
@@ -553,6 +564,43 @@ function registerPluginProtocol() {
     } catch (error) {
       console.error(`[anakot-plugin] Failed to load ${request.url}:`, error)
       return new Response('Plugin asset not found', { status: 404 })
+    }
+  })
+}
+
+// ── anakot-app protocol: stable renderer origin for localStorage ───────────
+// Production loads from anakot-app://localhost instead of file:// so that
+// localStorage (UI preferences) survives app restarts. Dev mode keeps using
+// the Vite HTTP dev server as-is.
+// ponytail: production-only; dev unchanged.
+const RENDERER_MIME = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.woff2': 'font/woff2',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+}
+function registerRendererProtocol() {
+  const distDir = path.dirname(resolveRendererIndex())
+  protocol.handle(RENDERER_PROTOCOL, async request => {
+    try {
+      const url = new URL(request.url)
+      let filePath = decodeURIComponent(url.pathname)
+      if (filePath === '/' || filePath === '') filePath = '/index.html'
+      const fullPath = path.join(distDir, filePath)
+      const data = await fs.promises.readFile(fullPath)
+      const ext = path.extname(fullPath).toLowerCase()
+      return new Response(data, {
+        status: 200,
+        headers: { 'Content-Type': RENDERER_MIME[ext] || 'application/octet-stream' }
+      })
+    } catch {
+      return new Response('Not found', { status: 404 })
     }
   })
 }
@@ -4889,7 +4937,7 @@ function petOverlayUrl() {
   if (DEV_SERVER) {
     return DEV_SERVER + '/index.html?win=overlay#/'
   }
-  return pathToFileURL(resolveRendererIndex()).toString() + '?win=overlay#/'
+  return `${RENDERER_PROTOCOL}://localhost/index.html?win=overlay#/`
 }
 
 function spawnPetOverlayWindow(bounds) {
@@ -5084,7 +5132,7 @@ function createWindow() {
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith('file:'))) {
+    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith(`${RENDERER_PROTOCOL}://localhost`))) {
       return
     }
 
@@ -5137,11 +5185,11 @@ function createWindow() {
     rememberLog(`[renderer console] ${text} (${src}:${lineNo})`)
   })
 
-  // Use DEV_SERVER (Vite) in dev or file:// in production for localStorage compatibility
+  // Use anakot-app://localhost (stable) instead of file:// (unreliable localStorage)
   if (DEV_SERVER) {
     mainWindow.loadURL(DEV_SERVER)
   } else {
-    mainWindow.loadURL(pathToFileURL(resolveRendererIndex()).toString())
+    mainWindow.loadURL(`${RENDERER_PROTOCOL}://localhost`)
   }
 
   mainWindow.webContents.once('did-finish-load', () => {
@@ -6922,6 +6970,7 @@ app.whenReady().then(() => {
   installMediaPermissions()
   registerMediaProtocol()
   registerPluginProtocol()
+  registerRendererProtocol()
   ensureWslWindowsFonts()
   configureSpellChecker()
   registerPowerResumeListeners()

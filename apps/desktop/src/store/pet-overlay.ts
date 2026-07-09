@@ -134,7 +134,9 @@ function currentPayload(): PetOverlayStatePayload {
 }
 
 function pushNow(): void {
-  window.anakotDesktop?.petOverlay?.pushState(currentPayload())
+  const payload = currentPayload()
+  console.log('[pet-overlay] pushNow: pushing state', { rev: payload.info.spritesheetRevision, slug: payload.info.slug, enabled: payload.info.enabled })
+  window.anakotDesktop?.petOverlay?.pushState(payload)
 }
 
 /**
@@ -149,13 +151,16 @@ function openOverlay(request: PetOverlayOpenRequest): void {
     return
   }
 
-  $petOverlayActive.set(true)
   void api.open(request).then(res => {
+    $petOverlayActive.set(true)
+
     if (res?.bounds) {
       saveBounds(res.bounds)
     }
 
     pushNow()
+  }).catch(() => {
+    $petOverlayActive.set(false)
   })
 
   // Mirror live state into the overlay. subscribe() fires immediately, so the

@@ -8665,6 +8665,15 @@ def _pet_state_rows(sheet_path: str) -> tuple[list[str], int]:
     return state_rows_for_grid(rows), rows
 
 
+def _pet_sheet_revision(spritesheet: Path) -> str:
+    """Stable revision id for one spritesheet file. Mirrors Hermes upstream."""
+    try:
+        st = spritesheet.stat()
+        return f"{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        return "0:0"
+
+
 def _pet_frame_counts(sheet_path: str) -> dict[str, int]:
     """Map each PetState → its real frame count (padding-trimmed)."""
     return state_frame_counts(sheet_path)
@@ -8674,19 +8683,21 @@ def _pet_sprite_payload(slug: str, sheet_path: str) -> dict | None:
     """Build the sprite metadata payload for one pet."""
     import base64
 
+    sheet = Path(sheet_path)
     rows, nrows = _pet_state_rows(sheet_path)
     try:
-        sheet_bytes = Path(sheet_path).read_bytes()
+        sheet_bytes = sheet.read_bytes()
     except OSError:
         return None
     return {
         "slug": slug,
-        "spritesheet": base64.b64encode(sheet_bytes).decode("ascii"),
-        "frameWidth": FRAME_W,
-        "frameHeight": FRAME_H,
+        "spritesheetBase64": base64.b64encode(sheet_bytes).decode("ascii"),
+        "spritesheetRevision": _pet_sheet_revision(sheet),
+        "frameW": FRAME_W,
+        "frameH": FRAME_H,
         "loopMs": LOOP_MS,
         "framesPerState": FRAMES_PER_STATE,
-        "frameCounts": _pet_frame_counts(sheet_path),
+        "framesByState": _pet_frame_counts(sheet_path),
         "stateRows": rows,
     }
 
@@ -8721,6 +8732,8 @@ def _(rid, params: dict) -> dict:
                 reset_anakot_home_override(token)
         if payload is None:
             return _ok(rid, {"slug": "", "scale": DEFAULT_SCALE, "enabled": False})
+        import logging
+        logging.getLogger("pet").info("pet.info rev=%s slug=%s", payload.get("spritesheetRevision"), payload.get("slug"))
         return _ok(rid, payload)
     except Exception as e:
         return _err(rid, 5030, str(e))
@@ -8734,10 +8747,15 @@ def _(rid, params: dict) -> dict:
         try:
             cfg = anakot_pets.config()
             pet = resolve_active_pet(cfg.get("slug", ""))
+            rev = ""
+            if pet and pet.exists:
+                rev = _pet_sheet_revision(Path(str(pet.spritesheet)))
         finally:
             if token is not None:
                 reset_anakot_home_override(token)
-        return _ok(rid, {"slug": pet.slug if pet else "", "revision": ""})
+        import logging
+        logging.getLogger("pet").info("pet.info.meta rev=%s slug=%s", rev, pet.slug if pet else "")
+        return _ok(rid, {"slug": pet.slug if pet else "", "enabled": anakot_pets.active_enabled(), "spritesheetRevision": rev})
     except Exception as e:
         return _err(rid, 5030, str(e))
 

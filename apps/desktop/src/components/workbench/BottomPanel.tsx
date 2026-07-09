@@ -9,6 +9,8 @@ import { $gitLog } from '@/store/git-log'
 import { GitOutputPanel } from './GitOutputPanel'
 import { useEffect, useState, useCallback, useRef } from 'react'
 
+import { $activeTerminalTab, updateTerminalTabShell } from '@/store/terminal-tabs'
+
 type ShellType = 'powershell' | 'git-bash' | 'cmd'
 
 const SHELL_OPTIONS: { id: ShellType; label: string; icon: string }[] = [
@@ -25,7 +27,10 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   const activeTab = useStore($bottomPanelTab)
   const isOpen = useStore($bottomPanelOpen)
   const cwd = useStore($currentCwd)
-  const [selectedShell, setSelectedShell] = useState<ShellType>('powershell')
+  const activeTerminalTab = useStore($activeTerminalTab)
+  const [selectedShell, setSelectedShell] = useState<ShellType>(
+    (activeTerminalTab?.shell as ShellType) ?? 'powershell'
+  )
   const [showShellPicker, setShowShellPicker] = useState(false)
   const [panelHeight, setPanelHeight] = useState(300)
   const resizeRef = useRef<HTMLDivElement>(null)
@@ -37,7 +42,12 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
   // Only commits to React state on mouseup (so the rest of the UI sees the final size).
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // Debug: log content area dimensions
+  // Sync selectedShell when the active terminal tab changes (tab switch or shell update from elsewhere)
+  useEffect(() => {
+    if (activeTerminalTab?.shell) {
+      setSelectedShell(activeTerminalTab.shell as ShellType)
+    }
+  }, [activeTerminalTab?.id, activeTerminalTab?.shell])
   useEffect(() => {
     if (contentRef.current && isOpen) {
       const rect = contentRef.current.getBoundingClientRect()
@@ -151,6 +161,9 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
                       key={shell.id}
                       className={`flex w-full items-center gap-2 px-2 py-1 text-[0.65rem] transition-colors hover:bg-(--ui-control-hover-background) ${selectedShell === shell.id ? 'text-foreground' : 'text-muted-foreground'}`}
                       onClick={() => {
+                        if (activeTerminalTab) {
+                          updateTerminalTabShell(activeTerminalTab.id, shell.id)
+                        }
                         setSelectedShell(shell.id)
                         setShowShellPicker(false)
                       }}
@@ -177,7 +190,7 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {/* Panel content — always mount all tabs so TerminalTab stays alive */}
       <div ref={contentRef} className="relative flex flex-1 flex-col overflow-hidden" style={{ minHeight: 0, minWidth: 0 }}>
         <div style={{ display: activeTab === 'terminal' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden', width: '100%', height: '100%' }}>
-          <MultiTerminalPanel cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} />
+          <MultiTerminalPanel cwd={cwd} onAddSelectionToChat={onAddSelectionToChat} terminalRef={terminalRef} />
         </div>
         <div style={{ display: activeTab === 'output' ? 'flex' : 'none', flex: 1, minHeight: 0, minWidth: 0, width: '100%' }}>
           <GitOutputPanel />

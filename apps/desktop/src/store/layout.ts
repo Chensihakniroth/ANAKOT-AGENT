@@ -28,6 +28,9 @@ export const CHAT_SIDEBAR_PANE_ID = 'chat-sidebar'
 export const FILE_BROWSER_PANE_ID = 'file-browser'
 export const RIGHT_RAIL_PREVIEW_TAB_ID = 'preview'
 
+/** Toggle the chat timeline rail open/closed. */
+export const $timelineOpen = atom(true)
+
 export const RIGHT_RAIL_CODE_REVIEW_TAB_ID = 'code-review'
 export const RIGHT_RAIL_GIT_COMMIT_TAB_ID = 'git-commit'
 

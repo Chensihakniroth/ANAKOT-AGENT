@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useRef } from 'react'
+import { type Ref, useRef } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
@@ -12,15 +12,17 @@ import {
   addTerminalTab,
   closeTerminalTab,
   setActiveTerminalTab,
+  updateTerminalTabShell,
   type TerminalTabInfo
 } from '@/store/terminal-tabs'
 
 interface MultiTerminalPanelProps {
   cwd: string
   onAddSelectionToChat: (text: string, label?: string) => void
+  terminalRef?: Ref<TerminalTabHandle>
 }
 
-export function MultiTerminalPanel({ cwd, onAddSelectionToChat }: MultiTerminalPanelProps) {
+export function MultiTerminalPanel({ cwd, onAddSelectionToChat, terminalRef }: MultiTerminalPanelProps) {
   const tabs = useStore($terminalTabs)
   const activeId = useStore($activeTerminalTabId)
 
@@ -41,11 +43,12 @@ export function MultiTerminalPanel({ cwd, onAddSelectionToChat }: MultiTerminalP
             style={{ display: tab.id === activeId ? 'flex' : 'none' }}
           >
             <TerminalTab
+              ref={tab.id === activeId ? terminalRef as any : undefined}
               cwd={cwd}
               onAddSelectionToChat={onAddSelectionToChat}
               shell={tab.shell}
             />
-          </div>
+          </div>  
         ))}
       </div>
     </div>
@@ -113,9 +116,7 @@ function TerminalTabButton({ active, label, onClose, onSelect, showClose = true 
       role="tab"
       aria-selected={active}
     >
-      <Codicon name="terminal" size="0.65rem" />
-      <span className="max-w-24 truncate">{label}</span>
-      {showClose && (
+      <Codicon name="terminal" size="0.65rem" />{showClose && (
         <button
           className="ml-0.5 flex size-3.5 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-(--ui-control-hover-background)"
           onClick={e => {

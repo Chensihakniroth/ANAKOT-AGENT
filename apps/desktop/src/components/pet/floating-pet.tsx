@@ -137,6 +137,7 @@ export function FloatingPet() {
     let cancelled = false
 
     const pull = async () => {
+      console.log('[FloatingPet] pull: running', { active, hasBase64: Boolean(info.spritesheetBase64) })
       try {
         if (active) {
           try {
@@ -147,15 +148,20 @@ export function FloatingPet() {
             }
 
             if (!meta.enabled) {
+              console.log('[FloatingPet] pull: meta says disabled, clearing')
               setPetInfo({ enabled: false })
 
               return
             }
 
-            if (samePetRevision($petInfo.get(), meta)) {
+            const currentRevsame = samePetRevision($petInfo.get(), meta)
+            console.log('[FloatingPet] pull: meta check', { rev: meta.spritesheetRevision, same: currentRevsame, slug: meta.slug })
+
+            if (currentRevsame) {
               return
             }
           } catch {
+            console.log('[FloatingPet] pull: meta call failed (falling back to pet.info)')
             // Older gateways may not have pet.info.meta yet; fall back to pet.info.
           }
         }
@@ -174,9 +180,14 @@ export function FloatingPet() {
             current.spritesheetRevision &&
             current.spritesheetRevision === next.spritesheetRevision
           ) {
+            console.log('[FloatingPet] pull: full guard PASSED (skipping setPetInfo)', { curRev: current.spritesheetRevision, nextRev: next.spritesheetRevision })
             return
           }
 
+          console.log('[FloatingPet] pull: GUARD FAILED — calling setPetInfo', {
+            cur: { slug: current.slug, rev: current.spritesheetRevision, enabled: current.enabled },
+            next: { slug: next.slug, rev: next.spritesheetRevision, enabled: next.enabled }
+          })
           setPetInfo(next)
         }
       } catch {

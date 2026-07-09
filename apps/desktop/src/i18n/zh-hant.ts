@@ -141,7 +141,9 @@ export const zhHant = defineLocale({
     showRightSidebar: '顯示右側邊欄',
     muteHaptics: '靜音觸感回饋',
     unmuteHaptics: '開啟觸感回饋',
-    openSettings: '開啟設定'
+    openSettings: '開啟設定',
+    showTimeline: '顯示時間軸',
+    hideTimeline: '隱藏時間軸'
   },
 
   language: {

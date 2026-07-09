@@ -600,8 +600,12 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       const newFg = themeCtx.theme.colors.foreground || '#839496'
       console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
 
+      // Strip old background/foreground from overrides so they don't
+      // clobber the freshly-resolved newBg/newFg (buildTerminalTheme
+      // spreads ...overrides after setting background/foreground).
+      const { background: _ob, foreground: _of, ...rest } = term.options.theme ?? {}
       term.options.theme = {
-        ...buildTerminalTheme(newBg, newFg, term.options.theme)
+        ...buildTerminalTheme(newBg, newFg, rest)
       }
     })
   }, [themeCtx.resolvedMode, themeCtx.themeName])
