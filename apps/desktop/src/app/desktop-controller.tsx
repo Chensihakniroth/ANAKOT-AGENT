@@ -109,7 +109,6 @@ import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
 import { OverlayModal } from './overlays/overlay-modal'
 
-import { PetGenerateOverlay } from '@/app/pet-generate/pet-generate-overlay'
 import { $petOverlayActive } from '@/store/pet-overlay'
 import { $petInfo } from '@/store/pet'
 
@@ -677,8 +676,6 @@ export function DesktopController() {
       <GatewayConnectingOverlay />
       <BootFailureOverlay />
       <CommandPalette />
-      <PetGenerateOverlay />
-
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsView

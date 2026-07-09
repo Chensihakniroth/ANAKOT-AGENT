@@ -203,6 +203,7 @@ export interface Translations {
       keysSettings: string
       mcp: string
       toolsets: string
+      pets: string
       archivedChats: string
       about: string
     }
@@ -258,6 +259,12 @@ export interface Translations {
         renameTitle: string
         renamePlaceholder: string
         renameSave: string
+        popOutTitle: string
+        popOutDesc: string
+        opacityTitle: string
+        opacityDesc: string
+        anchorTitle: string
+        anchorDesc: string
       }
     }
     fieldLabels: Record<string, string>
@@ -595,7 +602,7 @@ export interface Translations {
     archivedChats: string
     sections: Record<'sessions' | 'system' | 'usage', string>
     sectionDescriptions: Record<'sessions' | 'system' | 'usage', string>
-    nav: Record<'newChat' | 'settings' | 'skills' | 'messaging' | 'artifacts', { title: string; detail: string }>
+    nav: Record<'newChat' | 'settings' | 'skills' | 'messaging' | 'artifacts' | 'pets', { title: string; detail: string }>
     sectionEntries: Record<'sessions' | 'system' | 'usage', { title: string; detail: string }>
     providerNavigate: string
     providerSessions: string
@@ -637,32 +644,6 @@ export interface Translations {
     topSkills: string
     noSkillActivity: string
     actions: (count: string) => string
-    generatePet: {
-    genericError: string
-    backgroundHint: string
-    slowProviderHint: string
-    title: string
-    spawning: string
-    hatched: string
-    placeholder: string
-    generate: string
-    staleBackend: string
-    referenceImageTooLarge: string
-    referenceImageInvalid: string
-    referenceImageTaken: string
-    remix: string
-    remixConfirmBody: string
-    remixConfirmTitle: string
-    namePlaceholder: string
-    startOver: string
-    adopt: string
-    generating: string
-    hatch: string
-    hatchRow: (state: string, done: number, total: number) => string
-    hatchComposing: string
-    hatchSaving: string
-    hatchingSub: string
-    }
     pets: {
       title: string
       loading: string
@@ -679,6 +660,12 @@ export interface Translations {
       generatedTag: string
       installed: string
       generateFailed: string
+      popOutTitle: string
+      popOutDesc: string
+      opacityTitle: string
+      opacityDesc: string
+      anchorTitle: string
+      anchorDesc: string
     }
   }
 

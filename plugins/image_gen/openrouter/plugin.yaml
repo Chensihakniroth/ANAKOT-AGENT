@@ -1,0 +1,7 @@
+name: openrouter
+version: 1.0.0
+description: "OpenRouter image generation backend (gemini-2.5-flash-image, gemini-3-pro-image, etc.). Routes through the user's OpenRouter API key for pay-per-use pricing."
+author: anakot
+kind: backend
+requires_env:
+  - OPENROUTER_API_KEY

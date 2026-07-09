@@ -224,6 +224,32 @@ export function restorePetOverlay(): void {
   openOverlay({ bounds: saved, screen: true })
 }
 
+/**
+ * Pop the pet into the overlay window from a settings panel where we don't have
+ * the DOM rect. Uses saved bounds if available; otherwise places the window
+ * centered at the bottom of the screen.
+ */
+export function popOutPetFromSettings(): void {
+  if ($petOverlayActive.get() || stateUnsubs.length) {
+    return
+  }
+
+  const saved = loadSavedBounds()
+
+  if (saved) {
+    openOverlay({ bounds: saved, screen: true })
+    return
+  }
+
+  // Center the overlay near the bottom of the screen as a sensible default.
+  const pet = $petInfo.get()
+  const { width, height } = overlayWindowSize(pet.frameW ?? 192, pet.frameH ?? 208, pet.scale ?? 0.33)
+  const x = Math.round((window.innerWidth - width) / 2)
+  const y = Math.round(window.innerHeight - height - 40)
+
+  openOverlay({ bounds: { height, width, x, y }, screen: false })
+}
+
 /** Pop the pet back into the window (closes the overlay window). */
 export function popInPet(): void {
   for (const off of stateUnsubs) {

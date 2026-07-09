@@ -7148,7 +7148,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
     # graph (including apps/desktop with its Electron + node-pty deps) is never
     # resolved here.  Without --workspace the root package.json's apps/* glob
     # would pull in desktop on every web build. See #38772.
-    npm_workspace_args: tuple[str, ...] = ("--workspace", "web")
+    npm_workspace_args: tuple[str, ...] = ("--workspace", "WEB_VERSION")
     if _is_termux_startup_environment():
         npm_cwd, npm_workspace_args = _termux_workspace_install_context(web_dir)
     r1 = _run_npm_install_deterministic(
@@ -7163,7 +7163,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
         )
         _relay(r1)
         if fatal:
-            _say("  Run manually:  npm install --workspace web && npm run build -w web")
+            _say("  Run manually:  npm install --workspace WEB_VERSION && npm run build -w WEB_VERSION")
         return False
     # First attempt — stream output via idle-timeout helper (issue #33788).
     # capture_output=True on a long Vite build looks identical to a hang;
@@ -12458,7 +12458,7 @@ def cmd_dashboard(args):
     # PROJECT_ROOT/web and we run npm. In a system-wide install the dist
     # should already be pre-built; skip the npm step and just verify.
     if "ANAKOT_WEB_DIST" not in os.environ and not getattr(args, "skip_build", False):
-        _web_src = PROJECT_ROOT / "web"
+        _web_src = PROJECT_ROOT / "WEB_VERSION"
         if _web_src.exists():
             if not _build_web_ui(_web_src, fatal=True):
                 sys.exit(1)

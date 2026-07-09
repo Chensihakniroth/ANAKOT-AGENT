@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores'
 
-import { persistBoolean, storedBoolean } from '@/lib/storage'
+import { persistBoolean, persistString, storedBoolean, storedString } from '@/lib/storage'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $busy } from '@/store/session'
 
@@ -170,6 +170,34 @@ export const $petRoam = atom<boolean>(storedBoolean(ROAM_KEY, false))
 export const setPetRoam = (on: boolean) => {
   $petRoam.set(on)
   persistBoolean(ROAM_KEY, on)
+}
+
+/** Pet opacity 0.1–1.0, persisted to localStorage. */
+const OPACITY_KEY = 'hermes.desktop.pet-opacity.v1'
+function loadPetOpacity(): number {
+  try {
+    const raw = storedString(OPACITY_KEY)
+    if (raw) {
+      const v = Number(raw)
+      if (!Number.isNaN(v) && v >= 0.1 && v <= 1) return v
+    }
+  } catch { /* fall through */ }
+  return 1
+}
+export const $petOpacity = atom<number>(loadPetOpacity())
+export const setPetOpacity = (v: number) => {
+  const clamped = Math.max(0.1, Math.min(1, v))
+  $petOpacity.set(clamped)
+  persistString(OPACITY_KEY, String(clamped))
+}
+
+/** Pet anchor position — corner or free (draggable). */
+export type PetAnchor = 'free' | 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
+const ANCHOR_KEY = 'hermes.desktop.pet-anchor.v1'
+export const $petAnchor = atom<PetAnchor>(storedString(ANCHOR_KEY) as PetAnchor || 'free')
+export const setPetAnchor = (v: PetAnchor) => {
+  $petAnchor.set(v)
+  persistString(ANCHOR_KEY, v)
 }
 
 /**

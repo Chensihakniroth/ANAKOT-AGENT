@@ -258,6 +258,7 @@ export const en: Translations = {
       keysSettings: 'Settings',
       mcp: 'MCP',
       toolsets: 'Tool Backends',
+      pets: 'Pets',
       archivedChats: 'Archived Chats',
       about: 'About'
     },
@@ -333,7 +334,13 @@ export const en: Translations = {
         deleteTitle: (name: string) => `Delete ${name}?`,
         renameTitle: 'Rename pet',
         renamePlaceholder: 'Enter a new name…',
-        renameSave: 'Save'
+        renameSave: 'Save',
+        popOutTitle: 'Pop-out window',
+        popOutDesc: 'Display the pet in a separate, always-on-top window.',
+        opacityTitle: 'Pet opacity',
+        opacityDesc: 'Adjust the transparency of the floating pet.',
+        anchorTitle: 'Pet position',
+        anchorDesc: 'Snap the pet to a corner or keep it free-draggable.'
       }
     },
     fieldLabels: FIELD_LABELS,
@@ -700,7 +707,8 @@ export const en: Translations = {
       settings: { title: 'Settings', detail: 'Configure Anakot desktop' },
       skills: { title: 'Skills & Tools', detail: 'Enable skills, toolsets, and providers' },
       messaging: { title: 'Messaging', detail: 'Set up Telegram, Slack, Discord, and more' },
-      artifacts: { title: 'Artifacts', detail: 'Browse generated outputs' }
+      artifacts: { title: 'Artifacts', detail: 'Browse generated outputs' },
+      pets: { title: 'Pets', detail: 'Manage your desktop pet' }
     },
     sectionEntries: {
       sessions: { title: 'Sessions panel', detail: 'Search, pin, and manage sessions' },
@@ -747,33 +755,6 @@ export const en: Translations = {
     topSkills: 'Top skills',
     noSkillActivity: 'No skill activity yet.',
     actions: count => `${count} actions`,
-    generatePet: {
-      genericError: 'Could not generate pet. Try again.',
-      backgroundHint:
-        'Give it a moment — the request is still running. Some providers take a while.',
-      slowProviderHint: 'This might take a while. The provider is thinking.',
-      title: 'Generate Pet',
-      spawning: 'Spawning...',
-      hatched: 'Hatched!',
-      placeholder: 'Describe the pet you want...',
-      generate: 'Generate',
-      staleBackend: 'The backend has been updated. Close and reopen the overlay.',
-      referenceImageTooLarge: 'The reference image is too large.',
-      referenceImageInvalid: 'The reference image is invalid.',
-      referenceImageTaken: 'Reference image added.',
-      remix: 'Remix',
-      remixConfirmBody: 'This will replace all current drafts. Continue?',
-      remixConfirmTitle: 'Remix pet',
-      namePlaceholder: 'Enter a name',
-      startOver: 'Start over',
-      adopt: 'Adopt',
-      generating: 'Generating...',
-      hatch: 'Hatch',
-      hatchRow: (state, done, total) => `Hatching... ${done}/${total} (${state})`,
-      hatchComposing: 'Composing your pet…',
-      hatchSaving: 'Saving your pet…',
-      hatchingSub: 'Your pet is being generated. This may take a moment.'
-    },
     pets: {
       title: 'Pets',
       loading: 'Loading pets...',
@@ -789,10 +770,15 @@ export const en: Translations = {
       renameFailed: slug => `Could not rename ${slug}.`,
       generatedTag: 'generated',
       installed: 'installed',
-      generateFailed: 'Could not generate pet.'
+      generateFailed: 'Could not generate pet.',
+      popOutTitle: 'Pop-out window',
+      popOutDesc: 'Display the pet in a separate, always-on-top window.',
+      opacityTitle: 'Pet opacity',
+      opacityDesc: 'Adjust the transparency of the floating pet.',
+      anchorTitle: 'Pet position',
+      anchorDesc: 'Snap the pet to a corner or keep it free-draggable.'
     }
   },
-
   messaging: {
     search: 'Search messaging...',
     loading: 'Loading messaging platforms...',

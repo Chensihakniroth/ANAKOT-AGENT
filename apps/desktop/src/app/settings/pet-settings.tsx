@@ -10,10 +10,25 @@ import { Input } from '@/components/ui/input'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Download, Loader2, PawPrint, Pencil, Trash2 } from '@/lib/icons'
+import {
+  Download,
+  Loader2,
+  PawPrint,
+  Pencil,
+  Trash2
+} from '@/lib/icons'
 import { selectableCardClass } from '@/lib/selectable-card'
 import { cn } from '@/lib/utils'
-import { $petInfo, $petRoam, setPetRoam } from '@/store/pet'
+import {
+  $petAnchor,
+  $petInfo,
+  $petOpacity,
+  $petRoam,
+  setPetAnchor,
+  setPetOpacity,
+  setPetRoam,
+  type PetAnchor
+} from '@/store/pet'
 import {
   $petBusy,
   $petGallery,
@@ -33,6 +48,7 @@ import {
   setPetEnabled,
   setPetScale
 } from '@/store/pet-gallery'
+import { $petOverlayActive, popInPet, popOutPetFromSettings } from '@/store/pet-overlay'
 import { $gatewayState } from '@/store/session'
 
 import { ListRow, SectionHeading } from './primitives'
@@ -55,6 +71,9 @@ export function PetSettings() {
   const busySlug = useStore($petBusy)
   const petInfo = useStore($petInfo)
   const roam = useStore($petRoam)
+  const overlayActive = useStore($petOverlayActive)
+  const opacity = useStore($petOpacity)
+  const anchor = useStore($petAnchor)
   const [query, setQuery] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<GalleryPet | null>(null)
   const [renameTarget, setRenameTarget] = useState<GalleryPet | null>(null)
@@ -298,6 +317,88 @@ export function PetSettings() {
             }
             description={copy.roamDesc}
             title={copy.roamTitle}
+          />
+        )}
+
+        {enabled && (
+          <ListRow
+            action={
+              <SegmentedControl
+                onChange={id => {
+                  if (id === 'on') {
+                    popOutPetFromSettings()
+                  } else {
+                    popInPet()
+                  }
+                  triggerHaptic('crisp')
+                }}
+                options={[
+                  { id: 'off', label: copy.off },
+                  { id: 'on', label: copy.on }
+                ]}
+                value={overlayActive ? 'on' : 'off'}
+              />
+            }
+            description={copy.popOutDesc}
+            title={copy.popOutTitle}
+          />
+        )}
+
+        {enabled && (
+          <ListRow
+            action={
+              <div className="flex items-center gap-3">
+                <input
+                  aria-label={copy.opacityTitle}
+                  className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
+                  max={1}
+                  min={0.1}
+                  onChange={event => {
+                    triggerHaptic('selection')
+                    setPetOpacity(Number(event.target.value))
+                  }}
+                  step={0.05}
+                  style={{ accentColor: 'var(--dt-primary)' }}
+                  type="range"
+                  value={opacity}
+                />
+                <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
+                  {`${Math.round(opacity * 100)}%`}
+                </span>
+              </div>
+            }
+            description={copy.opacityDesc}
+            title={copy.opacityTitle}
+          />
+        )}
+
+        {enabled && (
+          <ListRow
+            action={
+              <div className="flex gap-1">
+                {(['free', 'bottom-left', 'bottom-right', 'top-left', 'top-right'] as PetAnchor[]).map(a => (
+                  <button
+                    aria-label={a}
+                    className={cn(
+                      'flex size-7 items-center justify-center rounded-md text-xs font-medium transition',
+                      anchor === a
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-(--ui-bg-quinary) text-(--ui-text-tertiary) hover:bg-(--ui-bg-elevated)'
+                    )}
+                    key={a}
+                    onClick={() => {
+                      setPetAnchor(a)
+                      triggerHaptic('crisp')
+                    }}
+                    type="button"
+                  >
+                    {a === 'free' ? '↔' : a === 'bottom-left' ? '◢' : a === 'bottom-right' ? '◣' : a === 'top-left' ? '◤' : '◥'}
+                  </button>
+                ))}
+              </div>
+            }
+            description={copy.anchorDesc}
+            title={copy.anchorTitle}
           />
         )}
       </div>

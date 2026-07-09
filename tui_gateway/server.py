@@ -8853,6 +8853,7 @@ def _(rid, params: dict) -> dict:
             },
         )
     except Exception as e:
+        logger.error("pet.select failed for slug %r: %s", slug, e)
         return _err(rid, 5030, str(e))
 
 

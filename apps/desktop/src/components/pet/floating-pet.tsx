@@ -4,13 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { persistString, storedString } from '@/lib/storage'
 import {
+  $petAnchor,
   $petAtRest,
   $petInfo,
+  $petOpacity,
   $petRoam,
   $petRoamDir,
   clearPetUnread,
+  type PetAnchor,
   type PetInfo,
   petProfile,
+  setPetAnchor,
   setPetInfo
 } from '@/store/pet'
 import { resetPetGallery, setPetScale } from '@/store/pet-gallery'
@@ -103,6 +107,8 @@ export function FloatingPet() {
   const roamEnabled = useStore($petRoam)
   const atRest = useStore($petAtRest)
   const roamDir = useStore($petRoamDir)
+  const opacity = useStore($petOpacity)
+  const anchor = useStore($petAnchor)
 
   const [position, setPosition] = useState<Point>(loadPosition)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -260,6 +266,36 @@ export function FloatingPet() {
     return () => window.removeEventListener('resize', reclamp)
   }, [clamp])
 
+  // Snap the pet to the chosen corner when anchor changes (not free).
+  useEffect(() => {
+    if (anchor === 'free') return
+
+    const snap = (): Point => {
+      const margin = 24
+      const w = petW
+      const h = petH
+      const vw = window.innerWidth || 800
+      const vh = window.innerHeight || 600
+
+      switch (anchor) {
+        case 'bottom-left':
+          return { x: margin, y: vh - h - margin }
+        case 'bottom-right':
+          return { x: vw - w - margin, y: vh - h - margin }
+        case 'top-left':
+          return { x: margin, y: margin }
+        case 'top-right':
+          return { x: vw - w - margin, y: margin }
+        default:
+          return { x: margin, y: vh - h - margin }
+      }
+    }
+
+    const next = clamp(snap())
+    setPosition(next)
+    persistString(POSITION_KEY, JSON.stringify(next))
+  }, [anchor, petW, petH, clamp])
+
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const el = containerRef.current
 
@@ -274,6 +310,11 @@ export function FloatingPet() {
       popOutPet({ height: rect.height, width: rect.width, x: rect.left, y: rect.top })
 
       return
+    }
+
+    // Dragging frees the pet from its anchored position.
+    if ($petAnchor.get() !== 'free') {
+      setPetAnchor('free')
     }
 
     dragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, x: rect.left, y: rect.top }
@@ -383,6 +424,7 @@ export function FloatingPet() {
       style={{
         cursor: 'grab',
         left: position.x,
+        opacity,
         pointerEvents: 'auto',
         position: 'fixed',
         top: position.y,

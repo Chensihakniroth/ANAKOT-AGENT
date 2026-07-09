@@ -1,0 +1,49 @@
+import './styles.css'
+import './custom-styles.css'
+
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createRoot } from 'react-dom/client'
+import { HashRouter } from 'react-router-dom'
+
+import App from './app'
+import { ErrorBoundary } from './components/error-boundary'
+import { HapticsProvider } from './components/haptics-provider'
+import { I18nProvider } from './i18n'
+import { installClipboardShim } from './lib/clipboard'
+import { queryClient } from './lib/query-client'
+import { ThemeProvider } from './themes/context'
+import { exposePluginSDK } from './app/plugins/registry'
+
+// ── Install the web IPC shim ──────────────────────────────────────────────
+// Replaces Electron's `window.anakotDesktop` with a browser-compatible
+// implementation that talks to the same Python backend via fetch().
+// Must run before any component that references `window.anakotDesktop`.
+import { installWebAnakotDesktop } from './lib/web-anakot-desktop-bootstrap'
+installWebAnakotDesktop()
+
+installClipboardShim()
+exposePluginSDK()
+
+// Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
+// scripts/ harnesses can drive a synthetic stream + record render cost.
+// Tree-shaken out of production builds.
+if (import.meta.env.MODE !== 'production') {
+  import('./app/chat/perf-probe')
+}
+
+// Web version: always render the app (no pet overlay window).
+createRoot(document.getElementById('root')!).render(
+  <ErrorBoundary label="root">
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider>
+        <ThemeProvider>
+          <HapticsProvider>
+            <HashRouter>
+              <App />
+            </HashRouter>
+          </HapticsProvider>
+        </ThemeProvider>
+      </I18nProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
+)

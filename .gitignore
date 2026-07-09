@@ -69,6 +69,16 @@ apps/desktop/dist/
 apps/desktop/release/
 apps/desktop/*.tsbuildinfo
 
+# Standalone WEB_VERSION Vite build
+WEB_VERSION/dist/
+WEB_VERSION/*.tsbuildinfo
+
+# TUI build output
+ui-tui/dist/
+
+# Root-level generated artifacts
+/dist/
+
 # Web UI assets — synced from @nous-research/ui at build time via
 # `npm run sync-assets` (see web/package.json).
 web/public/fonts/
@@ -96,6 +106,7 @@ models-dev-upstream/
 .cursor/
 .gemini/
 .zed/
+.kilo/
 .mcp.json
 opencode.json
 config/mcporter.json

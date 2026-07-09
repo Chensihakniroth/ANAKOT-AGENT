@@ -1,0 +1,640 @@
+export {}
+
+declare global {
+  interface Window {
+    anakotDesktop: {
+      // Resolve a backend connection. Omit `profile` (or pass the primary) for
+      // the window's backend; pass a named profile to lazily spawn/reuse that
+      // profile's backend from the pool.
+      getConnection: (profile?: string | null) => Promise<AnakotConnection>
+      // Keepalive: mark a pool profile backend as recently used so the idle
+      // reaper spares it while its chat is active.
+      touchBackend: (profile?: string | null) => Promise<{ ok: boolean }>
+      getGatewayWsUrl: (profile?: null | string) => Promise<string>
+      getBootProgress: () => Promise<DesktopBootProgress>
+      getConnectionConfig: (profile?: null | string) => Promise<DesktopConnectionConfig>
+      saveConnectionConfig: (payload: DesktopConnectionConfigInput) => Promise<DesktopConnectionConfig>
+      applyConnectionConfig: (payload: DesktopConnectionConfigInput) => Promise<DesktopConnectionConfig>
+      testConnectionConfig: (payload: DesktopConnectionConfigInput) => Promise<DesktopConnectionTestResult>
+      probeConnectionConfig: (remoteUrl: string) => Promise<DesktopConnectionProbeResult>
+      oauthLoginConnectionConfig: (remoteUrl: string) => Promise<DesktopOauthLoginResult>
+      oauthLogoutConnectionConfig: (remoteUrl?: string) => Promise<DesktopOauthLogoutResult>
+      profile: {
+        get: () => Promise<DesktopActiveProfile>
+        // Persists the desktop's profile choice and relaunches the local
+        // backend under the new ANAKOT_HOME (reloads the window). Pass null to
+        // clear the preference.
+        set: (name: string | null) => Promise<DesktopActiveProfile>
+      }
+      api: <T>(request: AnakotApiRequest) => Promise<T>
+      notify: (payload: AnakotNotification) => Promise<boolean>
+      setWindowOpacity: (opacity: number) => Promise<number | null>
+      getWindowOpacity: () => Promise<number>
+      getNotificationPrefs: () => Promise<NotificationPrefs>
+      setNotificationPrefs: (prefs: Partial<NotificationPrefs>) => Promise<NotificationPrefs>
+      requestMicrophoneAccess: () => Promise<boolean>
+      readFileDataUrl: (filePath: string) => Promise<string>
+      readFileText: (filePath: string) => Promise<AnakotReadFileTextResult>
+      selectPaths: (options?: AnakotSelectPathsOptions) => Promise<string[]>
+      writeClipboard: (text: string) => Promise<boolean>
+      saveImageFromUrl: (url: string) => Promise<boolean>
+      saveImageBuffer: (data: ArrayBuffer | Uint8Array, ext: string) => Promise<string>
+      saveClipboardImage: () => Promise<string>
+      getPathForFile: (file: File) => string
+      normalizePreviewTarget: (target: string, baseDir?: string) => Promise<AnakotPreviewTarget | null>
+      watchPreviewFile: (url: string) => Promise<AnakotPreviewWatch>
+      stopPreviewFileWatch: (id: string) => Promise<boolean>
+      setTitleBarTheme?: (payload: AnakotTitleBarTheme) => void
+      setPreviewShortcutActive?: (active: boolean) => void
+      openExternal: (url: string) => Promise<void>
+      fetchLinkTitle: (url: string) => Promise<string>
+      settings: {
+        getDefaultProjectDir: () => Promise<{ defaultLabel: string; dir: null | string }>
+        pickDefaultProjectDir: () => Promise<{ canceled: boolean; dir: null | string }>
+        setDefaultProjectDir: (dir: null | string) => Promise<{ dir: null | string }>
+      }
+      revealLogs: () => Promise<{ ok: boolean; path: string; error?: string }>
+      getRecentLogs: () => Promise<{ path: string; lines: string[] }>
+      readDir: (path: string) => Promise<AnakotReadDirResult>
+  renameFile: (oldPath: string, newPath: string) => Promise<{ ok: boolean; error?: string }>
+  deleteFile: (path: string) => Promise<{ ok: boolean; error?: string }>
+  writeFile: (path: string, content: string) => Promise<{ ok: boolean; error?: string }>
+      gitRoot?: (path: string) => Promise<string | null>
+      gitStatus?: (cwd: string) => Promise<{ root: string | null; files: Array<{ path: string; status: string; staged: boolean; unstaged: boolean }>; branch: string; error?: string }>
+      gitAdd?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitUnstage?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitDiscard?: (cwd: string, files: string[]) => Promise<{ ok: boolean; error?: string }>
+      gitCommit?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
+      gitPush?: (cwd: string) => Promise<{ ok: boolean; output?: string; error?: string }>
+      gitCommitAmend?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
+      gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitStagedDiff?: (cwd: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
+      gitBranches?: (cwd: string) => Promise<{ ok: boolean; branches: Array<{ name: string; current: boolean }>; error?: string }>
+      gitCheckout?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>
+      gitCheckoutNewBranch?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>
+      gitSubscribe?: (cwd: string) => Promise<{ ok: boolean; root?: string; error?: string }>
+      gitUnsubscribe?: (cwd: string) => Promise<{ ok: boolean; error?: string }>
+      onGitChanged?: (callback: (data: { root: string }) => void) => () => void
+      onFileChanged?: (callback: (data: { path: string; root: string }) => void) => () => void
+      terminal: {
+        dispose: (id: string) => Promise<boolean>
+        onData: (id: string, callback: (payload: string) => void) => () => void
+        onExit: (id: string, callback: (payload: AnakotTerminalExit) => void) => () => void
+        resize: (id: string, size: { cols: number; rows: number }) => Promise<boolean>
+        start: (options?: { cols?: number; cwd?: string; rows?: number; shell?: string }) => Promise<AnakotTerminalSession>
+        write: (id: string, data: string) => Promise<boolean>
+      }
+      onClosePreviewRequested?: (callback: () => void) => () => void
+      onOpenUpdatesRequested?: (callback: () => void) => () => void
+      onWindowStateChanged?: (callback: (payload: AnakotWindowState) => void) => () => void
+      onPreviewFileChanged: (callback: (payload: AnakotPreviewFileChanged) => void) => () => void
+      onBackendExit: (callback: (payload: BackendExit) => void) => () => void
+      onPowerResume?: (callback: () => void) => () => void
+      onBootProgress: (callback: (payload: DesktopBootProgress) => void) => () => void
+      getBootstrapState: () => Promise<DesktopBootstrapState>
+      resetBootstrap: () => Promise<{ ok: boolean }>
+      repairBootstrap: () => Promise<{ ok: boolean }>
+      cancelBootstrap: () => Promise<{ ok: boolean; cancelled: boolean }>
+      onBootstrapEvent: (callback: (payload: DesktopBootstrapEvent) => void) => () => void
+      getVersion: () => Promise<DesktopVersionInfo>
+      updates: {
+        check: () => Promise<DesktopUpdateStatus>
+        apply: (opts?: DesktopUpdateApplyOptions) => Promise<DesktopUpdateApplyResult>
+        getBranch: () => Promise<{ branch: string }>
+        setBranch: (name: string) => Promise<{ branch: string }>
+        onProgress: (callback: (payload: DesktopUpdateProgress) => void) => () => void
+      }
+      uninstall: {
+        summary: () => Promise<DesktopUninstallSummary>
+        run: (mode: DesktopUninstallMode) => Promise<DesktopUninstallResult>
+      }
+      lsp: {
+        start: (language: string, rootPath: string) => Promise<AnakotLspStartResult>
+        send: (id: string, message: object) => Promise<{ ok: boolean; error?: string }>
+        stop: (id: string) => Promise<{ ok: boolean }>
+        available: () => Promise<string[]>
+        list: () => Promise<AnakotLspServerInfo[]>
+        onMessage: (id: string, callback: (msg: object) => void) => () => void
+        onExit: (id: string, callback: (payload: { code: number | null }) => void) => () => void
+      }
+
+      // Obsidian Knowledge Graph
+      getObsidianVaultPath: () => Promise<{ ok: boolean; path: string }>
+      scanObsidianVault: (rootPath: string) => Promise<{
+        ok: boolean
+        rootPath?: string
+        error?: string
+        graph: {
+          nodes: Array<{ id: string; name: string; path: string; group: string; size: number }>
+          links: Array<{ source: string; target: string }>
+        }
+      }>
+
+      // Pet overlay — a secondary always-on-top transparent BrowserWindow
+      petOverlay?: {
+        open: (request?: {
+          bounds?: { x: number; y: number; width: number; height: number }
+          screen?: boolean
+          show?: boolean
+          centerToPet?: boolean
+          skipLoad?: boolean
+        }) => Promise<{ ok: boolean; bounds?: { x: number; y: number; width: number; height: number } }>
+        close: () => Promise<{ ok: boolean }>
+        setBounds: (bounds: { x: number; y: number; width: number; height: number }) => void
+        setIgnoreMouse: (ignore: boolean) => void
+        setFocusable: (focusable: boolean) => void
+        pushState: (payload: {
+          info: {
+            enabled: boolean
+            slug?: string
+            displayName?: string
+            mime?: string
+            spritesheetBase64?: string
+            spritesheetRevision?: string
+            frameW?: number
+            frameH?: number
+            framesPerState?: number
+            framesByState?: Record<string, number>
+            framesByRow?: Record<string, number>
+            loopMs?: number
+            scale?: number
+            stateRows?: string[]
+          }
+          activity: {
+            busy?: boolean
+            awaitingInput?: boolean
+            toolRunning?: boolean
+            reasoning?: boolean
+            error?: boolean
+            justCompleted?: boolean
+            celebrate?: boolean
+          }
+          busy: boolean
+          awaiting: boolean
+          unread: boolean
+        }) => void
+        control: (payload:
+          | { type: 'pop-in' }
+          | { type: 'ready' }
+          | { type: 'submit'; text: string }
+          | { type: 'bounds'; bounds: { x: number; y: number; width: number; height: number } }
+          | { type: 'open-app' }
+          | { type: 'toggle-app' }
+          | { type: 'scale'; scale: number }
+        ) => void
+        onState: (callback: (payload: {
+          info: {
+            enabled: boolean
+            slug?: string
+            displayName?: string
+            mime?: string
+            spritesheetBase64?: string
+            spritesheetRevision?: string
+            frameW?: number
+            frameH?: number
+            framesPerState?: number
+            framesByState?: Record<string, number>
+            framesByRow?: Record<string, number>
+            loopMs?: number
+            scale?: number
+            stateRows?: string[]
+          }
+          activity: {
+            busy?: boolean
+            awaitingInput?: boolean
+            toolRunning?: boolean
+            reasoning?: boolean
+            error?: boolean
+            justCompleted?: boolean
+            celebrate?: boolean
+          }
+          busy: boolean
+          awaiting: boolean
+          unread: boolean
+        }) => void) => () => void
+        onControl: (callback: (action:
+          | { type: 'pop-in' }
+          | { type: 'ready' }
+          | { type: 'submit'; text: string }
+          | { type: 'bounds'; bounds: { x: number; y: number; width: number; height: number } }
+          | { type: 'open-app' }
+          | { type: 'toggle-app' }
+          | { type: 'scale'; scale: number }
+        ) => void) => () => void
+      }
+    }
+  }
+
+  interface NotificationPrefs {
+    message: boolean
+    task_complete: boolean
+    update: boolean
+    error: boolean
+    info: boolean
+  }
+}
+
+export interface AnakotTerminalSession {
+  cwd: string
+  id: string
+  shell: string
+}
+
+export interface AnakotTerminalExit {
+  code: number | null
+  signal: string | null
+}
+
+export interface DesktopVersionInfo {
+  appVersion: string
+  electronVersion: string
+  nodeVersion: string
+  platform: string
+  anakotRoot: string
+}
+
+export type DesktopUninstallMode = 'full' | 'gui' | 'lite'
+
+export interface DesktopUninstallSummary {
+  anakot_home: string
+  agent_installed: boolean
+  gui_installed: boolean
+  source_built_artifacts: string[]
+  packaged_app_paths: string[]
+  userdata_dir: string
+  userdata_exists: boolean
+  platform: string
+  running_app_path?: null | string
+  probe?: string
+}
+
+export interface DesktopUninstallResult {
+  ok: boolean
+  mode?: DesktopUninstallMode
+  willRemoveAppBundle?: boolean
+  scriptPath?: string
+  error?: string
+  message?: string
+}
+
+export interface DesktopUpdateCommit {
+  sha: string
+  summary: string
+  author: string
+  at: number
+}
+
+export interface DesktopUpdateStatus {
+  supported: boolean
+  branch?: string
+  currentBranch?: string
+  reason?: string
+  message?: string
+  error?: string
+  behind?: number
+  currentSha?: string
+  targetSha?: string
+  commits?: DesktopUpdateCommit[]
+  dirty?: boolean
+  fetchedAt?: number
+  packaged?: boolean
+}
+
+export type DesktopUpdateDirtyStrategy = 'abort' | 'stash' | 'force'
+
+export interface DesktopUpdateApplyOptions {
+  dirtyStrategy?: DesktopUpdateDirtyStrategy
+}
+
+export interface DesktopUpdateApplyResult {
+  ok: boolean
+  branch?: string
+  error?: string
+  message?: string
+  /** True when no staged updater exists (CLI install) and the user should run
+   *  `anakot update` themselves. `command` is the exact line to run. */
+  manual?: boolean
+  command?: string
+  anakotRoot?: string
+}
+
+export type DesktopUpdateStage = 'idle' | 'prepare' | 'fetch' | 'pull' | 'pydeps' | 'restart' | 'manual' | 'error'
+
+export interface DesktopUpdateProgress {
+  stage: DesktopUpdateStage
+  message: string
+  percent: number | null
+  error: string | null
+  at: number
+}
+
+export interface AnakotConnection {
+  baseUrl: string
+  isFullscreen: boolean
+  mode?: 'local' | 'remote'
+  authMode?: 'oauth' | 'token'
+  nativeOverlayWidth: number
+  source?: 'env' | 'local' | 'settings'
+  token: string
+  wsUrl: string
+  logs: string[]
+  // Set for pool (non-primary) backends so the renderer knows which profile a
+  // connection belongs to.
+  profile?: string
+  windowButtonPosition: { x: number; y: number } | null
+}
+
+export interface AnakotTitleBarTheme {
+  background: string
+  foreground: string
+}
+
+export interface AnakotWindowState {
+  isFullscreen: boolean
+  nativeOverlayWidth: number
+  windowButtonPosition: { x: number; y: number } | null
+}
+
+export interface DesktopActiveProfile {
+  // The desktop's stored profile preference, or null when unset (legacy launch
+  // that defers to the sticky active_profile / default).
+  profile: string | null
+}
+
+export interface DesktopConnectionConfig {
+  envOverride: boolean
+  mode: 'local' | 'remote'
+  // The profile this config describes, or null for the global/default
+  // connection. Per-profile entries let a profile point at its own backend.
+  profile: null | string
+  remoteAuthMode: 'oauth' | 'token'
+  remoteOauthConnected: boolean
+  remoteTokenPreview: string | null
+  remoteTokenSet: boolean
+  remoteUrl: string
+}
+
+export interface DesktopConnectionConfigInput {
+  mode: 'local' | 'remote'
+  // When set, the save/apply/test targets this profile's per-profile remote
+  // override instead of the global connection.
+  profile?: null | string
+  remoteAuthMode?: 'oauth' | 'token'
+  remoteToken?: string
+  remoteUrl?: string
+}
+
+export interface DesktopConnectionTestResult {
+  baseUrl: string
+  ok: boolean
+  version: string | null
+}
+
+export interface DesktopAuthProvider {
+  name: string
+  displayName: string
+  // True when this provider authenticates with a username + password
+  // (the gateway's /login page renders a credential form) rather than an
+  // OAuth redirect. The session/cookie/ws-ticket machinery is identical;
+  // only the login-page form and the desktop's button copy differ.
+  supportsPassword?: boolean
+}
+
+export interface DesktopConnectionProbeResult {
+  baseUrl: string
+  reachable: boolean
+  authMode: 'oauth' | 'token' | 'unknown'
+  providers: DesktopAuthProvider[]
+  version: string | null
+  error: string | null
+}
+
+export interface DesktopOauthLoginResult {
+  ok: boolean
+  baseUrl: string
+  connected: boolean
+}
+
+export interface DesktopOauthLogoutResult {
+  ok: boolean
+  connected: boolean
+}
+
+export interface DesktopBootProgress {
+  error: string | null
+  fakeMode: boolean
+  message: string
+  phase: string
+  progress: number
+  running: boolean
+  timestamp: number
+}
+
+// First-launch install ("bootstrap") event types -- emitted by
+// electron/bootstrap-runner.cjs and observed by the renderer install overlay.
+// Mirrors the event shapes emitted by runBootstrap()'s onEvent callback.
+
+export interface DesktopBootstrapStageDescriptor {
+  name: string
+  title?: string
+  category?: string
+  needs_user_input?: boolean
+}
+
+export type DesktopBootstrapStageState = 'pending' | 'running' | 'succeeded' | 'skipped' | 'failed'
+
+export interface DesktopBootstrapStageResult {
+  state: DesktopBootstrapStageState
+  durationMs: number | null
+  startedAt: number | null
+  json: { ok: boolean; skipped?: boolean; reason?: string | null; stage: string } | null
+  error: string | null
+}
+
+export interface DesktopBootstrapUnsupportedPlatform {
+  platform: string
+  activeRoot: string
+  installCommand: string
+  docsUrl: string
+}
+
+export interface DesktopBootstrapState {
+  active: boolean
+  manifest: { type: 'manifest'; stages: DesktopBootstrapStageDescriptor[]; protocolVersion: number | null } | null
+  stages: Record<string, DesktopBootstrapStageResult>
+  error: string | null
+  log: Array<{ ts: number; stage: string | null; line: string; stream?: 'stdout' | 'stderr' }>
+  startedAt: number | null
+  completedAt: number | null
+  unsupportedPlatform: DesktopBootstrapUnsupportedPlatform | null
+}
+
+export type DesktopBootstrapEvent =
+  | { type: 'manifest'; stages: DesktopBootstrapStageDescriptor[]; protocolVersion: number | null }
+  | {
+      type: 'stage'
+      name: string
+      state: DesktopBootstrapStageState
+      durationMs?: number
+      json?: DesktopBootstrapStageResult['json']
+      error?: string | null
+    }
+  | { type: 'log'; stage?: string | null; line: string; stream?: 'stdout' | 'stderr' }
+  | { type: 'complete'; marker: Record<string, unknown> }
+  | { type: 'failed'; stage?: string | null; error: string }
+  | {
+      type: 'unsupported-platform'
+      platform: string
+      activeRoot: string
+      installCommand: string
+      docsUrl: string
+    }
+
+export interface AnakotApiRequest {
+  path: string
+  method?: string
+  body?: unknown
+  timeoutMs?: number
+  // Route this REST call to a specific profile's backend. Omit for the primary
+  // (window) backend. Read-only cross-profile data is served by the primary, so
+  // this is only needed for profile-scoped live/settings calls.
+  profile?: string | null
+}
+
+export interface AnakotNotification {
+  title?: string
+  body?: string
+  silent?: boolean
+  type?: string
+  sessionId?: string
+  actions?: Array<{ id: string; text: string }>
+  kind?: string
+}
+export interface AnakotPreviewTarget {
+  binary?: boolean
+  byteSize?: number
+  kind: 'file' | 'url'
+  label: string
+  large?: boolean
+  language?: string
+  mimeType?: string
+  path?: string
+  previewKind?: 'binary' | 'html' | 'image' | 'text'
+  renderMode?: 'preview' | 'source'
+  source: string
+  url: string
+}
+
+export interface AnakotReadFileTextResult {
+  binary?: boolean
+  byteSize?: number
+  language?: string
+  mimeType?: string
+  path: string
+  text: string
+  truncated?: boolean
+}
+
+export interface AnakotPreviewWatch {
+  id: string
+  path: string
+}
+
+export interface AnakotReadDirEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+}
+
+export interface AnakotReadDirResult {
+  entries: AnakotReadDirEntry[]
+  error?: string
+}
+
+export interface AnakotPreviewFileChanged {
+  id: string
+  path: string
+  url: string
+}
+
+export interface AnakotSelectPathsOptions {
+  title?: string
+  defaultPath?: string
+  directories?: boolean
+  multiple?: boolean
+  filters?: Array<{ name: string; extensions: string[] }>
+}
+
+export interface BackendExit {
+  code: number | null
+  signal: string | null
+}
+
+export type AnakotLspStartResult = 
+  | { id: string; language: string; error?: never }
+  | { error: string; id?: never; language?: never }
+
+export interface AnakotLspServerInfo {
+  language: string
+  cmd: string
+  installed: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Memory Graph (starmap/) — returned by GET /api/learning/graph
+// ---------------------------------------------------------------------------
+
+export interface StarmapNode {
+  id: string
+  label: string
+  kind: 'memory' | 'skill'
+  memorySource?: 'memory' | 'profile'
+  timestamp?: null | number
+  category: string
+  useCount: number
+  state: string
+  createdBy: null | string
+  pinned: boolean
+}
+
+export interface StarmapEdge {
+  source: string
+  target: string
+}
+
+export interface StarmapCluster {
+  category: string
+  count: number
+}
+
+export interface StarmapMemoryCard {
+  source: 'memory' | 'profile'
+  timestamp?: null | number
+  title: string
+  body: string
+}
+
+export interface StarmapGraph {
+  nodes: StarmapNode[]
+  edges: StarmapEdge[]
+  clusters: StarmapCluster[]
+  memory: StarmapMemoryCard[]
+  stats: {
+    nodes: number
+    edges: number
+    memories: number
+    skills: number
+    linked_nodes: number
+  }
+}
+
+export interface LearningNodeDetail {
+  ok: boolean
+  kind: 'memory' | 'skill'
+  id: string
+  label: string
+  content: string
+  message?: string
+  error?: string
+}
