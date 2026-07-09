@@ -90,7 +90,7 @@ export class LspClient {
   }
 
   private handleExit() {
-    console.log(`[LSP] Server for ${this.language} exited`)
+    
     this.id = null
   }
 
@@ -115,7 +115,7 @@ export class LspClient {
       }
     })
     this.notify('initialized', {})
-    console.log(`[LSP] ${this.language} initialized:`, initResult)
+    
   }
 
   // ── Monaco Integration ──────────────────────────────────────────

@@ -143,13 +143,13 @@ function PetSpriteImpl({ info, zoom = 1, stateOverride, rowOverride }: PetSprite
 
   const image = useMemo(() => {
     if (!info.spritesheetBase64) {
-      console.log('[PetSprite] useMemo: no spritesheetBase64, returning null')
+      
       return null
     }
 
     const img = new Image()
     img.src = `data:${info.mime ?? 'image/webp'};base64,${info.spritesheetBase64}`
-    console.log('[PetSprite] useMemo: created NEW Image, rev=', info.spritesheetRevision, 'mime=', info.mime, 'base64 len=', info.spritesheetBase64.length)
+    
 
     return img
   }, [info.spritesheetBase64, info.mime])
@@ -158,11 +158,11 @@ function PetSpriteImpl({ info, zoom = 1, stateOverride, rowOverride }: PetSprite
     const canvas = canvasRef.current
 
     if (!canvas || !image) {
-      console.log('[PetSprite] effect: skipping (no canvas or image)')
+      
       return
     }
 
-    console.log('[PetSprite] effect: RUNNING canvas setup', { rev: info.spritesheetRevision, drawW, drawH, rows })
+    
 
     // willReadFrequently: the pop-out overlay samples this canvas's alpha under
     // the cursor (per-pixel click-through), so opt into the CPU-readback path.
@@ -234,7 +234,7 @@ function PetSpriteImpl({ info, zoom = 1, stateOverride, rowOverride }: PetSprite
         frame = 0
         lastStep = now
         drawnFrame = -1
-        console.log('[PetSprite] render: row/state switch', { row, count, state: forcedRow ?? overrideRef.current ?? stateRef.current })
+        
       }
 
       // Per-state step keeps every state's loop ~loopMs even when frame counts
@@ -269,7 +269,7 @@ function PetSpriteImpl({ info, zoom = 1, stateOverride, rowOverride }: PetSprite
     return () => {
       cancelAnimationFrame(raf)
       unsubState()
-      console.log('[PetSprite] effect: CLEANUP (canvas tear-down)')
+      
     }
   }, [image, frameW, frameH, frames, framesByState, framesByRow, loopMs, drawW, drawH, rows])
 

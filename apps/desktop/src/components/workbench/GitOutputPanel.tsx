@@ -89,14 +89,6 @@ export function GitOutputPanel() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
-  // Debug: log own dimensions
-  useEffect(() => {
-    if (rootRef.current) {
-      const rect = rootRef.current.getBoundingClientRect()
-      console.log(`[GitOutputPanel] root: ${rect.width}x${rect.height}`)
-    }
-  })
-
   // Auto-scroll to bottom when new entries arrive
   useEffect(() => {
     if (scrollRef.current) {

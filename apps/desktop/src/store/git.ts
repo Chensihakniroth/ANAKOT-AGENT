@@ -237,14 +237,14 @@ export async function gitCheckoutBranch(cwd: string, branch: string): Promise<{ 
 }
 
 export async function gitStageFile(cwd: string, file: string) {
-  console.log('[gitStore] gitStageFile called:', { cwd, file })
+  
   const safePath = toIpcSafePath(cwd)
-  console.log('[gitStore] gitAdd IPC call with safePath:', safePath, 'files:', [file])
+  
   $gitError.set(null)
   setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, [file])
-    console.log('[gitStore] gitAdd result:', result)
+    
     if (result) {
       addGitLogEntry({
         command: 'add',
@@ -265,7 +265,7 @@ export async function gitStageFile(cwd: string, file: string) {
     return result
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git add failed'
-    console.log('[gitStore] gitStageFile error:', msg)
+    
     $gitError.set(msg)
     addGitLogEntry({
       command: 'add',
@@ -287,10 +287,10 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
   setBusy(cwd, true)
-  console.log('[store] gitStageAllFiles safePath:', safePath, 'files:', files.length)
+  
   try {
     const result = await window.anakotDesktop?.gitAdd?.(safePath, files)
-    console.log('[store] gitStageAllFiles result:', JSON.stringify(result))
+    
     if (result) {
       addGitLogEntry({
         command: 'add',
@@ -311,7 +311,7 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
     return result
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git add failed'
-    console.log('[store] gitStageAllFiles error:', msg)
+    
     $gitError.set(msg)
     addGitLogEntry({
       command: 'add',
@@ -330,13 +330,13 @@ export async function gitStageAllFiles(cwd: string, files: string[]) {
 }
 
 export async function gitUnstageFile(cwd: string, file: string) {
-  console.log('[gitStore] gitUnstageFile called:', { cwd, file })
+  
   const safePath = toIpcSafePath(cwd)
   $gitError.set(null)
   setBusy(cwd, true)
   try {
     const result = await window.anakotDesktop?.gitUnstage?.(safePath, [file])
-    console.log('[gitStore] gitUnstage result:', result)
+    
     if (result) {
       addGitLogEntry({
         command: 'unstage',
@@ -522,17 +522,19 @@ export async function gitGenerateCommitMessage(cwd: string): Promise<string | nu
         max_tokens: 4096,
         temperature: 0.3,
         reasoning_effort: 'low'
-      }
+      },
+      timeoutMs: 60_000
     })
 
     const content = response?.choices?.[0]?.message?.content?.trim()
     if (content) {
+      console.log('[GitGen] ✅ Success — got commit message:', content.slice(0, 100))
       return content
     }
-    console.warn('[gitGenerateCommitMessage] API returned no content:', JSON.stringify(response).slice(0, 500))
+    console.warn('[GitGen] API returned no content:', JSON.stringify(response).slice(0, 500))
     return null
   } catch (err) {
-    console.error('[gitGenerateCommitMessage] unexpected error:', err)
+    console.error('[GitGen] unexpected error:', err)
     return null
   }
 }
@@ -560,5 +562,109 @@ export async function gitLoadCommits(cwd: string, limit = 20) {
     }
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Push commits to the remote tracking branch.
+ * Returns { ok, output, error }.
+ */
+export async function gitPush(cwd: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitPush?.(safePath)
+    if (result) {
+      addGitLogEntry({
+        command: 'push',
+        fullCommand: 'git push -u origin <branch>',
+        cwd,
+        stdout: result.output || (result.ok ? 'Push successful' : ''),
+        stderr: result.error || '',
+        exitCode: result.ok ? 0 : 1,
+        level: determineLevel(result.ok ? 0 : 1, result.error || ''),
+        summary: result.ok ? 'Pushed successfully' : result.error || 'Push failed',
+      })
+    }
+    return result || { ok: false, error: 'gitPush not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git push failed'
+    $gitError.set(msg)
+    addGitLogEntry({
+      command: 'push',
+      fullCommand: 'git push -u origin <branch>',
+      cwd,
+      stdout: '',
+      stderr: msg,
+      exitCode: 1,
+      level: 'error',
+      summary: msg,
+    })
+    return { ok: false, error: msg }
+  }
+}
+
+/**
+ * Amend the last commit with a new message.
+ * Leaves staged files intact (--amend with -m).
+ */
+export async function gitCommitAmend(cwd: string, message: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitCommitAmend?.(safePath, message)
+    if (result) {
+      addGitLogEntry({
+        command: 'commit --amend',
+        fullCommand: `git commit --amend -m "${message}"`,
+        cwd,
+        stdout: result.output || (result.ok ? 'Amend successful' : ''),
+        stderr: result.error || '',
+        exitCode: result.ok ? 0 : 1,
+        level: determineLevel(result.ok ? 0 : 1, result.error || ''),
+        summary: result.ok ? `Amended: ${message}` : result.error || 'Amend failed',
+      })
+    }
+    if (result?.ok) {
+      $gitCommitMessage.set('')
+      await refreshGitStatus(cwd)
+    } else if (result?.error) {
+      $gitError.set(result.error)
+    }
+    return result || { ok: false, error: 'gitCommitAmend not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git commit --amend failed'
+    $gitError.set(msg)
+    addGitLogEntry({
+      command: 'commit --amend',
+      fullCommand: `git commit --amend -m "${message}"`,
+      cwd,
+      stdout: '',
+      stderr: msg,
+      exitCode: 1,
+      level: 'error',
+      summary: msg,
+    })
+    return { ok: false, error: msg }
+  }
+}
+
+/**
+ * Create and switch to a new branch (git checkout -b).
+ */
+export async function gitCheckoutNewBranch(cwd: string, branch: string): Promise<{ ok: boolean; error?: string }> {
+  if (!branch.trim()) return { ok: false, error: 'branch name is empty' }
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitCheckoutNewBranch?.(safePath, branch.trim())
+    if (result?.ok) {
+      await refreshGitStatus(cwd)
+      await gitLoadBranches(cwd)
+    } else if (result?.error) {
+      $gitError.set(result.error)
+    }
+    return result || { ok: false, error: 'gitCheckoutNewBranch not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git checkout -b failed'
+    $gitError.set(msg)
+    return { ok: false, error: msg }
   }
 }

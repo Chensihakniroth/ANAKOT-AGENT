@@ -135,7 +135,7 @@ function currentPayload(): PetOverlayStatePayload {
 
 function pushNow(): void {
   const payload = currentPayload()
-  console.log('[pet-overlay] pushNow: pushing state', { rev: payload.info.spritesheetRevision, slug: payload.info.slug, enabled: payload.info.enabled })
+  
   window.anakotDesktop?.petOverlay?.pushState(payload)
 }
 

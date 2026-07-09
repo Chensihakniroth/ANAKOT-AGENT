@@ -86,7 +86,7 @@ export function PetOverlayApp() {
   // Mirror pushed state into the shared atoms so PetSprite/PetBubble just work.
   useEffect(() => {
     const off = window.anakotDesktop?.petOverlay?.onState(payload => {
-      console.log('[PetOverlayApp] onState: received push', { rev: payload.info?.spritesheetRevision, slug: payload.info?.slug })
+      
       setPetInfo(payload.info)
       $petActivity.set(payload.activity ?? {})
       setBusy(Boolean(payload.busy))

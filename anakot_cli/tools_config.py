@@ -2171,6 +2171,57 @@ def _configure_tool_category(
     return False
 
 
+def apply_provider_selection(ts_key: str, provider_name: str, config: dict) -> None:
+    """Persist a provider selection for a toolset without prompting or post-setup.
+
+    Non-interactive equivalent of ``_configure_provider`` / ``_reconfigure_provider``
+    — writes the config key (``backend``, ``provider``, ``cloud_provider``, etc.)
+    and sets ``use_gateway`` to False, but does **not** prompt for env vars, run
+    post-setup hooks, or import/activate plugin providers.
+
+    Raises ``KeyError`` if the toolset or provider is unknown.
+    """
+    visible = _visible_providers(TOOL_CATEGORIES.get(ts_key, {}), config, force_fresh=True)
+    provider = _find_provider_by_name(provider_name, visible)
+    if provider is None:
+        raise KeyError(f"Unknown provider '{provider_name}' for toolset '{ts_key}'")
+
+    if provider.get("tts_provider"):
+        tts_cfg = config.setdefault("tts", {})
+        tts_cfg["provider"] = provider["tts_provider"]
+        tts_cfg["use_gateway"] = False
+    elif provider.get("web_backend"):
+        web_cfg = config.setdefault("web", {})
+        web_cfg["backend"] = provider["web_backend"]
+        web_cfg["use_gateway"] = False
+    elif "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        browser_cfg = config.setdefault("browser", {})
+        if bp:
+            browser_cfg["cloud_provider"] = bp
+        browser_cfg["use_gateway"] = False
+    elif provider.get("imagegen_backend"):
+        img_cfg = config.setdefault("image_gen", {})
+        img_cfg["provider"] = "fal"
+        img_cfg["use_gateway"] = False
+    elif provider.get("image_gen_plugin_name"):
+        img_cfg = config.setdefault("image_gen", {})
+        img_cfg["provider"] = provider["image_gen_plugin_name"]
+        img_cfg["use_gateway"] = False
+    elif provider.get("video_gen_plugin_name"):
+        video_cfg = config.setdefault("video_gen", {})
+        video_cfg["provider"] = provider["video_gen_plugin_name"]
+        video_cfg["use_gateway"] = False
+
+
+def _find_provider_by_name(name: str, providers: list[dict]) -> dict | None:
+    """Locate a provider dict by its display name."""
+    for p in providers:
+        if p.get("name") == name:
+            return p
+    return None
+
+
 def _is_provider_active(
     provider: dict,
     config: dict,

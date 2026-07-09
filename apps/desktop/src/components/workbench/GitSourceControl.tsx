@@ -12,6 +12,7 @@ import { setBottomPanelTab, setBottomPanelOpen } from '@/store/workbench'
 import {
   $gitStatus, $gitLoading, $gitCommitMessage, $gitError, $gitBranches,
   changeWorkspace, triggerGitRefresh, gitStageFile, gitStageAllFiles, gitUnstageFile, gitDiscardChanges, gitCommit,
+  gitPush, gitCommitAmend, gitCheckoutNewBranch,
   gitLoadBranches, gitCheckoutBranch, type GitFile
 } from '@/store/git'
 
@@ -123,18 +124,18 @@ export function GitSourceControl() {
   const unstagedFiles = useMemo(() => status.files.filter(f => !f.staged), [status.files])
 
   const handleStage = useCallback(async (file: string) => {
-    console.log('[GitSourceControl] handleStage clicked, file:', file, 'cwd:', cwd, 'status.root:', status.root)
+    
     setContextMenu(null)
     const root = status.root || cwd
-    console.log('[GitSourceControl] gitStageFile call:', root, file)
+    
     await gitStageFile(root, file)
   }, [cwd, status.root])
 
   const handleUnstage = useCallback(async (file: string) => {
-    console.log('[GitSourceControl] handleUnstage clicked, file:', file, 'cwd:', cwd, 'status.root:', status.root)
+    
     setContextMenu(null)
     const root = status.root || cwd
-    console.log('[GitSourceControl] gitUnstageFile call:', root, file)
+    
     try {
       await gitUnstageFile(root, file)
     } catch (e) {
@@ -151,32 +152,44 @@ export function GitSourceControl() {
   }, [cwd, status.root])
 
   const handleStageAll = useCallback(async () => {
-    console.log('[GitSourceControl] Stage All clicked, unstagedFiles:', unstagedFiles.length)
+    
     setContextMenu(null)
     const root = status.root || cwd
     const files = unstagedFiles.map(f => f.path)
     if (files.length > 0) {
       const result = await gitStageAllFiles(root, files)
-      console.log('[GitSourceControl] Stage All result:', result)
+      
     }
   }, [cwd, status.root, unstagedFiles])
 
+  const generatingRef = useRef(false)
+
   const handleGenerate = useCallback(async () => {
-    if (!cwd.trim() || generating) return
+    if (!cwd.trim() || generatingRef.current) return
     setGenerating(true)
+    generatingRef.current = true
     try {
       const root = status.root || cwd
-      const { gitGenerateCommitMessage } = await import('@/store/git')
-      await gitGenerateCommitMessage(root)
-      const el = textareaRef.current
-      if (el) {
-        el.style.height = 'auto'
-        el.style.height = `${el.scrollHeight}px`
+      const { gitGenerateCommitMessage, $gitCommitMessage } = await import('@/store/git')
+      console.log('[Sparkle] Calling gitGenerateCommitMessage for:', root)
+      const message = await gitGenerateCommitMessage(root)
+      console.log('[Sparkle] Generated message:', message)
+      if (message) {
+        $gitCommitMessage.set(message)
+        const el = textareaRef.current
+        if (el) {
+          el.value = message
+          el.style.height = 'auto'
+          el.style.height = `${el.scrollHeight}px`
+        }
+      } else {
+        console.warn('[Sparkle] gitGenerateCommitMessage returned null/empty')
       }
     } finally {
+      generatingRef.current = false
       setGenerating(false)
     }
-  }, [cwd, status.root, generating])
+  }, [cwd, status.root])
 
   const handleCommit = useCallback(async () => {
     if (commitMessage.trim()) {
@@ -184,6 +197,32 @@ export function GitSourceControl() {
       await gitCommit(root, commitMessage)
     }
   }, [cwd, status.root, commitMessage])
+
+  const handleCommitAndPush = useCallback(async () => {
+    if (!commitMessage.trim()) return
+    const root = status.root || cwd
+    const commitResult = await gitCommit(root, commitMessage)
+    if (commitResult?.ok) {
+      await gitPush(root)
+    }
+  }, [cwd, status.root, commitMessage])
+
+  const handleCommitAmend = useCallback(async () => {
+    if (!commitMessage.trim()) return
+    const root = status.root || cwd
+    await gitCommitAmend(root, commitMessage)
+  }, [cwd, status.root, commitMessage])
+
+  const [newBranchDialog, setNewBranchDialog] = useState<{ cwd: string } | null>(null)
+  const [newBranchName, setNewBranchName] = useState('')
+  const handleCreateNewBranch = useCallback(async () => {
+    if (!newBranchDialog || !newBranchName.trim()) return
+    const result = await gitCheckoutNewBranch(newBranchDialog.cwd, newBranchName.trim())
+    if (result.ok) {
+      setNewBranchDialog(null)
+      setNewBranchName('')
+    }
+  }, [newBranchDialog, newBranchName])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -241,7 +280,7 @@ export function GitSourceControl() {
         className="group flex items-start gap-1.5 rounded-[2px] px-2 py-[3px] text-xs leading-4 hover:bg-(--ui-control-hover-background) w-full cursor-pointer"
         onContextMenu={e => openContextMenu(e, file, type)}
         onClick={() => {
-          console.log('[GitSourceControl] row click:', file.path, type)
+          
           void handleOpenFile(file.path)
         }}
       >
@@ -263,7 +302,7 @@ export function GitSourceControl() {
           {type === 'staged' && (
              <button
                className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
-               onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline unstage click, file:', file.path); handleUnstage(file.path) }}
+               onClick={e => { e.stopPropagation(); e.preventDefault();  handleUnstage(file.path) }}
                title="Unstage"
                type="button"
              >
@@ -274,7 +313,7 @@ export function GitSourceControl() {
             <>
               <button
                 className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
-                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline stage click, file:', file.path); handleStage(file.path) }}
+                onClick={e => { e.stopPropagation(); e.preventDefault();  handleStage(file.path) }}
                 title="Stage"
                 type="button"
               >
@@ -282,7 +321,7 @@ export function GitSourceControl() {
               </button>
               <button
                 className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive focus:outline-none"
-                onClick={e => { e.stopPropagation(); e.preventDefault(); console.log('[GitSourceControl] inline discard click, file:', file.path); handleDiscard(file.path) }}
+                onClick={e => { e.stopPropagation(); e.preventDefault();  handleDiscard(file.path) }}
                 title="Discard"
                 type="button"
               >
@@ -384,14 +423,42 @@ export function GitSourceControl() {
             <Codicon name="check" size="0.65rem" className="text-foreground" />
             <span>{t.gitCommit || 'Commit'}</span>
           </button>
-          <button
-            className="flex items-center justify-center rounded-r-[2px] border border-l-0 border-(--ui-stroke-tertiary) bg-[#3c3c4c] px-[7px] py-[5px] text-muted-foreground hover:bg-[#4a4a5a] disabled:opacity-40"
-            disabled={!commitMessage.trim() || stagedFiles.length === 0}
-            type="button"
-            aria-label="Commit options"
-          >
-            <Codicon name="chevron-down" size="0.65rem" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex items-center justify-center rounded-r-[2px] border border-l-0 border-(--ui-stroke-tertiary) bg-[#3c3c4c] px-[7px] py-[5px] text-muted-foreground hover:bg-[#4a4a5a] disabled:opacity-40"
+                disabled={!commitMessage.trim() || stagedFiles.length === 0}
+                type="button"
+                aria-label="Commit options"
+              >
+                <Codicon name="chevron-down" size="0.65rem" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4} className="data-[state=open]:animate-none">
+              <DropdownMenuItem className="flex items-center gap-2 text-xs" onClick={handleCommit}>
+                <Codicon name="check" size="0.65rem" />
+                <span>Commit</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="flex items-center gap-2 text-xs" onClick={handleCommitAndPush}>
+                <Codicon name="cloud-upload" size="0.65rem" />
+                <span>Commit & Push</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="flex items-center gap-2 text-xs" onClick={handleCommitAmend}>
+                <Codicon name="edit" size="0.65rem" />
+                <span>Commit (Amend)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex items-center gap-2 text-xs"
+                onClick={() => {
+                  const root = status.root || cwd
+                  if (root) setNewBranchDialog({ cwd: root })
+                }}
+              >
+                <Codicon name="git-branch" size="0.65rem" />
+                <span>Create New Branch...</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -537,7 +604,7 @@ export function GitSourceControl() {
               <>
                 <button
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                  onClick={() => { console.log('[GitSourceControl] Stage Changes click, file:', contextMenu.file.path); handleStage(contextMenu.file.path) }}
+                  onClick={() => {  handleStage(contextMenu.file.path) }}
                   type="button"
                 >
                   <Codicon name="add" size="0.75rem" />
@@ -601,6 +668,40 @@ export function GitSourceControl() {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setCheckoutConflict(null)}>Got it</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Create New Branch Dialog */}
+      <Dialog open={!!newBranchDialog} onOpenChange={(open) => {
+        if (!open) { setNewBranchDialog(null); setNewBranchName('') }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Branch</DialogTitle>
+            <DialogDescription className="space-y-2 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Enter a name for the new branch. It will be created from the current HEAD.
+              </p>
+              <input
+                autoFocus
+                className="w-full rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2.5 py-1.5 text-[0.8rem] text-foreground placeholder:text-muted-foreground/45 focus:border-primary focus:outline-none"
+                placeholder="branch-name"
+                value={newBranchName}
+                onChange={e => setNewBranchName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); void handleCreateNewBranch() }
+                  if (e.key === 'Escape') { setNewBranchDialog(null); setNewBranchName('') }
+                }}
+              />
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setNewBranchDialog(null); setNewBranchName('') }}>
+              Cancel
+            </Button>
+            <Button disabled={!newBranchName.trim()} onClick={handleCreateNewBranch}>
+              Create Branch
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

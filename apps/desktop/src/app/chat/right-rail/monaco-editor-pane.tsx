@@ -175,14 +175,14 @@ export function MonacoEditorPane({ value, language, readOnly = true, filePath, o
   const handleBeforeMount: BeforeMount = useCallback((monaco) => {
     // If an editor is already mounted globally, skip this mount
     if (globalEditorLock) {
-      console.log('[MonacoDiag] skipping duplicate editor mount (global lock)')
+      
       return
     }
     globalEditorLock = true
 
     mountCountRef.current++
     const bg = resolveEditorBackground()
-    console.log('[MonacoDiag] beforeMount #' + mountCountRef.current, 'bg:', bg)
+    
     // Only override editor.background — let the base theme handle the gutter
     // to avoid ghost/duplicate line number rendering artifacts.
     monaco.editor.defineTheme('anakot-dark', {
@@ -211,14 +211,14 @@ export function MonacoEditorPane({ value, language, readOnly = true, filePath, o
 
     // Apply the custom theme after mount
     applyMonacoTheme(monaco)
-    console.log('[MonacoDiag] mount #' + mountCountRef.current, 'theme:', themeCtx.resolvedMode)
+    
 
     // After mount, the flex container may not have stable dimensions yet.
     // Use rAF + setTimeout to catch the final size after the browser paints.
     requestAnimationFrame(() => {
       setTimeout(() => {
         editor.layout()
-        console.log('[MonacoDiag] post-mount layout done')
+        
       }, 0)
     })
   }, [onMount, themeCtx.resolvedMode, applyMonacoTheme])

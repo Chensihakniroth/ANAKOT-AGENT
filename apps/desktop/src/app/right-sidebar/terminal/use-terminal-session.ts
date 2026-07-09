@@ -291,7 +291,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     // If a previous session exists, dispose it first
     const prevId = sessionIdRef.current
     if (prevId) {
-      console.log('[terminal] disposing previous session:', prevId)
+      
       void terminalApi.dispose(prevId)
       sessionIdRef.current = null
     }
@@ -310,7 +310,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     const themeFg = themeCtx.theme.colors.foreground || '#839496'
     const settings = $terminalSettings.get()
 
-    console.log('[terminal] theme bg resolved:', themeBg, 'from theme:', themeCtx.themeName, 'mode:', themeCtx.resolvedMode)
+    
 
     const term = new Terminal({
       allowProposedApi: true,
@@ -449,9 +449,9 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     // Start PTY session after container is ready
     const startPty = () => {
       if (disposed) return
-      console.log('[terminal] startPty check:', { clientWidth: host.clientWidth, clientHeight: host.clientHeight })
+      
       if (host.clientWidth <= 0 || host.clientHeight < 50) {
-        console.log('[terminal] container too small (' + host.clientWidth + 'x' + host.clientHeight + '), retrying...')
+        
         const t = setTimeout(startPty, 100)
         cleanup.push(() => clearTimeout(t))
         return
@@ -459,9 +459,9 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
 
       try {
         fit.fit()
-        console.log('[terminal] startPty fit.fit() done, term=' + term.cols + 'x' + term.rows)
+        
       } catch (err) {
-        console.log('[terminal] fit.fit() failed:', err)
+        
         const t = setTimeout(startPty, 50)
         cleanup.push(() => clearTimeout(t))
         return
@@ -469,7 +469,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
 
       let cols = term.cols
       let rows = term.rows
-      console.log('[terminal] after fit:', { cols, rows, termCols: term.cols, termRows: term.rows, hostW: host.clientWidth, hostH: host.clientHeight })
+      
       if (cols <= 0 || rows <= 0) {
         cols = Math.max(80, Math.floor(host.clientWidth / 7))
         rows = Math.max(8, Math.floor(host.clientHeight / 12.32))
@@ -477,11 +477,11 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
       rows = Math.max(rows, 8)
       cols = Math.max(cols, 80)
 
-      console.log('[terminal] starting PTY:', { cols, cwd, rows, shell })
+      
       void terminalApi
         .start({ cols, cwd, rows, shell })
         .then(session => {
-          console.log('[terminal] PTY started:', { sessionId: session.id, shell: session.shell })
+          
           if (disposed) {
             void terminalApi.dispose(session.id)
             return
@@ -598,7 +598,7 @@ export function useTerminalSession({ cwd, onAddSelectionToChat, shell }: UseTerm
     requestAnimationFrame(() => {
       const newBg = resolveThemeBackground(hostRef.current!.parentElement!)
       const newFg = themeCtx.theme.colors.foreground || '#839496'
-      console.log('[terminal] live theme update:', newBg, 'mode:', themeCtx.resolvedMode)
+      
 
       // Strip old background/foreground from overrides so they don't
       // clobber the freshly-resolved newBg/newFg (buildTerminalTheme

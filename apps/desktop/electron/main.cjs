@@ -6296,6 +6296,46 @@ ipcMain.handle('anakot:git:commit', async (_event, { cwd, message }) => {
   }
 })
 
+ipcMain.handle('anakot:git:push', async (_event, { cwd }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\\\')
+    rawPath = rawPath.replace(/[\\\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const branch = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root })).stdout.trim()
+    if (!branch || branch === 'HEAD') return { ok: false, error: 'not on any branch (detached HEAD)' }
+    const result = await runGit(['push', '-u', 'origin', branch], { cwd: root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, output: result.stdout.trim(), error: result.ok ? undefined : errorOutput || 'git push failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git push failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:commit-amend', async (_event, { cwd, message }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\\\')
+    rawPath = rawPath.replace(/[\\\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const args = ['commit', '--amend']
+    if (message?.trim()) args.push('-m', message.trim())
+    const result = await runGit(args, { cwd: root })
+    const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+    return { ok: result.ok, output: result.stdout.trim(), error: result.ok ? undefined : errorOutput || 'git commit --amend failed' }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git commit --amend failed' }
+  }
+})
+
 ipcMain.handle('anakot:git:diff', async (_event, { cwd, file }) => {
   try {
     let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
@@ -6387,6 +6427,21 @@ ipcMain.handle('anakot:git:checkout', async (_event, { cwd, branch }) => {
     return { ok: true }
   } catch (error) {
     return { ok: false, error: error?.message || 'git checkout failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:checkout-new-branch', async (_event, { cwd, branch }) => {
+  try {
+    const validated = await validateGitCwd(cwd)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await runGit(['checkout', '-b', branch], { cwd: validated.root })
+    if (!result.ok) {
+      const errorOutput = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
+      return { ok: false, error: errorOutput || 'git checkout -b failed' }
+    }
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git checkout -b failed' }
   }
 })
 

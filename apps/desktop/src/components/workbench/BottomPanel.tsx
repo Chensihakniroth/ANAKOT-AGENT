@@ -48,12 +48,6 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       setSelectedShell(activeTerminalTab.shell as ShellType)
     }
   }, [activeTerminalTab?.id, activeTerminalTab?.shell])
-  useEffect(() => {
-    if (contentRef.current && isOpen) {
-      const rect = contentRef.current.getBoundingClientRect()
-      console.log(`[BottomPanel] content area: ${rect.width}x${rect.height} (active: ${activeTab})`)
-    }
-  }, [isOpen, activeTab])
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
