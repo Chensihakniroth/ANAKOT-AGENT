@@ -298,7 +298,7 @@ COPY --chmod=0755 docker/anakot-exec-shim.sh /opt/anakot/bin/anakot
 # every other consumer.
 ENV PATH="/opt/anakot/bin:/opt/anakot/.venv/bin:/opt/data/.local/bin:${PATH}"
 RUN mkdir -p /opt/data
-VOLUME [ "/opt/data" ]
+# VOLUME omitted — Railway Volumes handles persistence
 
 # s6-overlay's /init is PID 1. It sets up the supervision tree, runs
 # /etc/cont-init.d/* (our stage2 hook), starts s6-rc services
