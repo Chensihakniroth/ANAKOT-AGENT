@@ -2146,23 +2146,11 @@ def _configure_tool_category(
                     configured = ""
                 else:
                     configured = " [configured]"
-            # Mark callmemo-managed entries. Logged-in paid subscribers get the
-            # "included" star; everyone else gets a "via callmemo Portal" hint so
-            # it's clear selecting the row triggers a Portal login. The rows
-            # are always shown now (see _visible_providers) — selecting one
-            # drives an inline login + entitlement check.
-            sub_marker = ""
-            try:
-                enabled = _get_platform_tools(
-                    config,
-                    platform,
-                    include_default_mcp_servers=False,
-                )
-            except Exception:
-                continue
-            if ts_key in enabled:
-                return True
-    return False
+            provider_choices.append(f"{p['name']}{badge}{tag}{configured}")
+
+        provider_idx = _prompt_choice("  Select provider:", provider_choices, default=0)
+        provider = providers[provider_idx]
+        _configure_provider(provider, config, force_fresh=force_fresh)
 
 
 def apply_provider_selection(ts_key: str, provider_name: str, config: dict) -> None:
@@ -2214,6 +2202,24 @@ def _find_provider_by_name(name: str, providers: list[dict]) -> dict | None:
         if p.get("name") == name:
             return p
     return None
+
+
+def _detect_active_provider_index(
+    providers: list[dict],
+    config: dict,
+    *,
+    force_fresh: bool = True,
+) -> int:
+    """Find the index of the currently active provider (or first configured)."""
+    for i, p in enumerate(providers):
+        if _is_provider_active(p, config, force_fresh=force_fresh):
+            return i
+    # Fallback: return first provider with configured env vars
+    for i, p in enumerate(providers):
+        env_vars = p.get("env_vars", [])
+        if env_vars and all(get_env_value(v["key"]) for v in env_vars):
+            return i
+    return 0
 
 
 def _is_provider_active(
@@ -2529,6 +2535,19 @@ def _reconfigure_simple_requirements(ts_key: str):
             _print_success("    Updated")
         else:
             _print_info("    Kept current")
+
+
+def _reconfigure_tool(config: dict, *, force_fresh: bool = False):
+    """Let user pick a toolset and reconfigure its provider/API keys."""
+    toolsets = _get_effective_configurable_toolsets()
+    choice = _prompt_choice("Select tool to reconfigure:", [t[1] for t in toolsets])
+    ts_key = toolsets[choice][0]
+
+    cat = TOOL_CATEGORIES.get(ts_key)
+    if cat:
+        _configure_tool_category_for_reconfig(ts_key, cat, config, force_fresh=force_fresh)
+    else:
+        _reconfigure_simple_requirements(ts_key)
 
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
