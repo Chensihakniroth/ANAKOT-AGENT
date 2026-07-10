@@ -2160,7 +2160,20 @@ def get_model_options():
         )
     except Exception:
         _log.exception("GET /api/model/options failed")
-        raise HTTPException(status_code=500, detail="Failed to list model options")
+        from anakot_cli.inventory import load_picker_context
+        try:
+            ctx = load_picker_context()
+            cur_p = getattr(ctx, "current_provider", "")
+            cur_m = getattr(ctx, "current_model", "")
+        except Exception:
+            cur_p = ""
+            cur_m = ""
+            
+        return {
+            "providers": [],
+            "model": cur_m,
+            "provider": cur_p,
+        }
 
 
 @app.get("/api/model/recommended-default")
@@ -2276,7 +2289,7 @@ def get_auxiliary_models():
         return {"tasks": tasks, "main": main}
     except Exception:
         _log.exception("GET /api/model/auxiliary failed")
-        raise HTTPException(status_code=500, detail="Failed to read auxiliary config")
+        return {"tasks": [], "main": {"provider": "", "model": ""}}
 
 
 @app.post("/api/model/set")
