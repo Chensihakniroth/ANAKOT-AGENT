@@ -2502,6 +2502,11 @@ def _reconfigure_provider(
                 img_cfg["use_gateway"] = False
 
 
+def _configure_simple_requirements(ts_key: str):
+    """Configure simple env var requirements (first-time setup)."""
+    _reconfigure_simple_requirements(ts_key)
+
+
 def _reconfigure_simple_requirements(ts_key: str):
     """Reconfigure simple env var requirements."""
     requirements = TOOLSET_ENV_REQUIREMENTS.get(ts_key, [])
