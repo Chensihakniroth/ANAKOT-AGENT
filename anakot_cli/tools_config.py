@@ -2292,6 +2292,73 @@ def _is_provider_active(
     return False
 
 
+def _configure_provider(
+    provider: dict,
+    config: dict,
+    *,
+    force_fresh: bool = True,
+):
+    """Configure a provider - prompt for API keys if needed."""
+    env_vars = provider.get("env_vars", [])
+
+    # Skip managed (callmemo) features — not applicable in this fork
+    managed_feature = provider.get("managed_nous_feature")
+    if managed_feature:
+        _print_info(f"  {provider.get('name', 'Provider')} - managed feature, skipping")
+        return
+
+    if provider.get("tts_provider"):
+        tts_cfg = config.setdefault("tts", {})
+        tts_cfg["provider"] = provider["tts_provider"]
+        tts_cfg["use_gateway"] = False
+        _print_success(f"  TTS provider set to: {provider['tts_provider']}")
+
+    if "browser_provider" in provider:
+        bp = provider["browser_provider"]
+        browser_cfg = config.setdefault("browser", {})
+        if bp == "local":
+            browser_cfg["cloud_provider"] = "local"
+            _print_success("  Browser set to local mode")
+        elif bp:
+            browser_cfg["cloud_provider"] = bp
+            _print_success(f"  Browser cloud provider set to: {bp}")
+        browser_cfg["use_gateway"] = False
+
+    if provider.get("web_backend"):
+        web_cfg = config.setdefault("web", {})
+        web_cfg["backend"] = provider["web_backend"]
+        web_cfg["use_gateway"] = False
+        _print_success(f"  Web backend set to: {provider['web_backend']}")
+
+    if not env_vars:
+        if provider.get("post_setup"):
+            _run_post_setup(provider["post_setup"])
+        _print_success(f"  {provider['name']} - no configuration needed!")
+        return
+
+    # Prompt for each env var
+    _print_info(f"  Configuring {provider['name']}:")
+    for var_def in env_vars:
+        key = var_def.get("key", "")
+        label = var_def.get("label", key)
+        secret = var_def.get("secret", True)
+        existing = get_env_value(key) if key else ""
+        if existing:
+            _print_info(f"    {label}: already set (using existing value)")
+            continue
+        prompt_text = f"    {label}"
+        if secret:
+            val = input(f"  {prompt_text}: ").strip()
+        else:
+            val = input(f"  {prompt_text}: ").strip()
+        if val and key:
+            config.setdefault("env", {})[key] = val
+
+    if provider.get("post_setup"):
+        _run_post_setup(provider["post_setup"])
+    _print_success(f"  {provider['name']} configured!")
+
+
 def _configure_tool_category_for_reconfig(
     ts_key: str,
     cat: dict,
@@ -2351,21 +2418,12 @@ def _reconfigure_provider(
 ):
     """Reconfigure a provider - update API keys."""
     env_vars = provider.get("env_vars", [])
+    managed_feature = provider.get("managed_nous_feature")
 
-    # Same inline callmemo Portal login + entitlement gate as _configure_provider:
-    # managed Tool Gateway backends only activate with paid Portal access.
-
-    if not ensure_callmemo_portal_access(
-        capability=f"{provider.get('name', 'the callmemo Tool Gateway')}",
-        coverage_category=MANAGED_FEATURE_COVERAGE_CATEGORY.get(managed_feature),
-    ):
-        _print_warning(
-            "  Not enabled — callmemo Portal access is required for this backend."
-        )
+    # Skip managed (callmemo) features
+    if managed_feature:
+        _print_info(f"  {provider.get('name', 'Provider')} - managed feature, skipping")
         return
-
-    # Pure pre-auth UX rows keep the old gate; managed rows already handled
-    # by the inline login above.
 
     if provider.get("tts_provider"):
         tts_cfg = config.setdefault("tts", {})
@@ -2409,25 +2467,11 @@ def _reconfigure_provider(
         if provider.get("post_setup"):
             _run_post_setup(provider["post_setup"])
         _print_success(f"  {provider['name']} - no configuration needed!")
-        _print_info("  Requests for this tool will be billed to your callmemo subscription.")
-        plugin_name = provider.get("image_gen_plugin_name")
-        if plugin_name:
-            _select_plugin_image_gen_provider(plugin_name, config)
-            return
-        # Plugin-registered video_gen provider — same flow, different registry.
-        video_plugin = provider.get("video_gen_plugin_name")
-        if video_plugin:
-            _select_plugin_video_gen_provider(video_plugin, config, use_gateway=bool(managed_feature))
-            return
-        # Imagegen backends prompt for model selection on reconfig too.
-        backend = provider.get("imagegen_backend")
-        if backend:
-            _configure_imagegen_model(backend, config)
-            if backend == "fal":
-                img_cfg = config.setdefault("image_gen", {})
-                if isinstance(img_cfg, dict):
-                    img_cfg["provider"] = "fal"
-                    img_cfg["use_gateway"] = False
+        if provider.get("imagegen_backend") and provider["imagegen_backend"] == "fal":
+            img_cfg = config.setdefault("image_gen", {})
+            if isinstance(img_cfg, dict):
+                img_cfg["provider"] = "fal"
+                img_cfg["use_gateway"] = False
         return
 
     for var in env_vars:
@@ -2448,21 +2492,9 @@ def _reconfigure_provider(
     if provider.get("post_setup"):
         _run_post_setup(provider["post_setup"])
 
-    # Imagegen backends prompt for model selection on reconfig too.
-    plugin_name = provider.get("image_gen_plugin_name")
-    if plugin_name:
-        _select_plugin_image_gen_provider(plugin_name, config)
-        return
-
-    # Plugin-registered video_gen provider — same flow, different registry.
-    video_plugin = provider.get("video_gen_plugin_name")
-    if video_plugin:
-        _select_plugin_video_gen_provider(video_plugin, config, use_gateway=bool(managed_feature))
-        return
-
+    # Set up imagegen backend if applicable
     backend = provider.get("imagegen_backend")
     if backend:
-        _configure_imagegen_model(backend, config)
         if backend == "fal":
             img_cfg = config.setdefault("image_gen", {})
             if isinstance(img_cfg, dict):
