@@ -38,7 +38,8 @@
     "ws": "^8.21.0"
   },
   "overrides": {
-    "lodash": "4.18.1"
+    "lodash": "4.18.1",
+    "anakot-parser": "npm:hermes-parser@0.25.1"
   },
   "engines": {
     "node": ">=20.0.0"
