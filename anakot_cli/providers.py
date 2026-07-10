@@ -404,6 +404,8 @@ def normalize_provider(name: str) -> str:
     Returns the canonical id string.  Does *not* validate that the id
     corresponds to a known provider.
     """
+    if not isinstance(name, str):
+        return str(name) if name is not None else ""
     key = name.strip().lower()
     return ALIASES.get(key, key)
 

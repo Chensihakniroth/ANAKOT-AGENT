@@ -2494,6 +2494,9 @@ def select_provider_and_model(args=None):
     model_cfg = config.get("model")
     if isinstance(model_cfg, dict):
         config_provider = model_cfg.get("provider")
+    # Guard against misconfigured provider values in config
+    if not isinstance(config_provider, str):
+        config_provider = None
 
     effective_provider = (
         config_provider or os.getenv("ANAKOT_INFERENCE_PROVIDER") or "auto"
