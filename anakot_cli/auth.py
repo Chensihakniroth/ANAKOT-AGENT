@@ -519,6 +519,7 @@ def _resolve_kimi_base_url(api_key: str, default_url: str, env_override: str) ->
 # =============================================================================
 
 DEFAULT_CALLMEMO_INFERENCE_URL = "https://inference-api.callmemo.ai"
+DEFAULT_CALLMEMO_PORTAL_URL = "https://portal.callmemo.ai"
 
 
 def resolve_callmemo_runtime_credentials(
