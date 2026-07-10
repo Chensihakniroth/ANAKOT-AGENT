@@ -1694,6 +1694,8 @@ export const zh: Translations = {
       running: count => `${count} 个运行中`,
       cron: '排程',
       openCron: '打开排程任务',
+      keybindings: '键盘快捷键',
+      openKeybindings: '打开键盘快捷键',
       turnRunning: '运行中',
       currentTurnElapsed: '当前回合已用时间',
       contextUsage: '上下文用量',
