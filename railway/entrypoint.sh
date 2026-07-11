@@ -79,7 +79,12 @@ done
 echo "→ Starting Anakot Web UI on 0.0.0.0:${PORT}"
 
 exec python -c "
+from anakot_cli.main import _sync_bundled_skills_quietly
 from anakot_cli.web_server import start_server
+
+# Seed bundled skills into ANAKOT_HOME/skills/ — same as anakot dashboard does
+_sync_bundled_skills_quietly()
+
 start_server(
     host='0.0.0.0',
     port=${PORT},
