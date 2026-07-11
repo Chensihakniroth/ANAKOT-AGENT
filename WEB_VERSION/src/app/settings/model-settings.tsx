@@ -167,7 +167,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   // current main, regardless of whether the user just switched. Catches the
   // "I pinned aux months ago and forgot, now it bills a dead provider" case.
   const persistentStaleAux = useMemo<StaleAuxAssignment[]>(() => {
-    const mainProvider = (mainModel?.provider ?? '').toLowerCase()
+    const mainProvider = String(mainModel?.provider ?? '').toLowerCase()
 
     if (!mainProvider || !auxiliary) {
       return []
@@ -175,7 +175,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
 
     return auxiliary.tasks
       .filter(entry => {
-        const p = (entry.provider ?? '').toLowerCase()
+        const p = String(entry.provider ?? '').toLowerCase()
 
         return p && p !== 'auto' && p !== mainProvider
       })

@@ -2043,7 +2043,14 @@ def get_model_info():
         # Extract model name and provider from the config
         if isinstance(model_cfg, dict):
             model_name = model_cfg.get("default", model_cfg.get("name", ""))
-            provider = model_cfg.get("provider", "")
+            raw_provider = model_cfg.get("provider", "")
+            # provider can be a string ("openai") or a nested dict ({"default": "openai"})
+            if isinstance(raw_provider, dict):
+                provider = str(raw_provider.get("default", "") or "")
+            elif isinstance(raw_provider, str):
+                provider = raw_provider
+            else:
+                provider = str(raw_provider) if raw_provider else ""
             base_url = model_cfg.get("base_url", "")
             config_ctx = model_cfg.get("context_length")
         else:
