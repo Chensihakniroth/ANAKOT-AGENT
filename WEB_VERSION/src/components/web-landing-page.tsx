@@ -278,6 +278,18 @@ export function WebLandingPage({
         )}
       </div>
     )
+  } else if (isAuthMode && passwordProvider && onPasswordLogin) {
+    // Password-only login (no OAuth providers configured)
+    ctaSection = (
+      <div className="flex w-full max-w-sm flex-col items-center gap-5">
+        <h2 className="m-0 text-lg font-semibold text-[#d6deeb]">Sign in to continue</h2>
+        <PasswordForm
+          providerName={passwordProvider.name}
+          providerDisplayName={passwordProvider.display_name}
+          onPasswordLogin={onPasswordLogin}
+        />
+      </div>
+    )
   } else if (isAuthMode && providers.length === 0 && !authLoading) {
     // Auth mode but no providers configured
     ctaSection = (
