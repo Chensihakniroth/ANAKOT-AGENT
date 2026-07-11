@@ -8,6 +8,7 @@ import { useSkinCommand } from '@/themes/use-skin-command'
 
 import { useGroupRegistry } from '@/app/shell/use-group-registry'
 
+import { GatewayOfflineDialog } from '@/components/gateway-offline-dialog'
 import { WebLandingPage } from '@/components/web-landing-page'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { useAuth } from '@/hooks/use-auth'
@@ -955,6 +956,7 @@ export function DesktopController() {
       {/* Preview pane (right side) */}
       {previewPane}
     </AppShell>
+      <GatewayOfflineDialog />
     </>
   )
 }
