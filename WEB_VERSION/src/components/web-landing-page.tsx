@@ -4,13 +4,15 @@
  * Two modes depending on auth config:
  *   1) No auth required   → brand hero + "Get Started" → into the app
  *   2) Auth required       → brand hero + provider login buttons
+ *
+ * The page only dismisses when the user clicks "Get Started" (or authenticates).
+ * It NEVER auto-dismisses based on gateway state — this prevents the landing
+ * from flashing and disappearing before the browser paints (React 18 batching).
  */
-import { useStore } from '@nanostores/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
 import { ShaderBackground } from '@/components/ui/shader-background'
-import { $gatewayState } from '@/store/session'
 import type { AuthProvider } from '@/hooks/use-auth'
 
 // ── Props ──────────────────────────────────────────────────────────────────────
@@ -153,7 +155,7 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+            placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
             autoComplete="current-password"
             disabled={loading}
             className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-3 py-2.5 text-sm text-[#d6deeb] placeholder:text-[#637777] outline-none transition-colors focus:border-[#82aaff]/50 focus:ring-1 focus:ring-[#82aaff]/30 disabled:opacity-50"
@@ -185,15 +187,7 @@ export function WebLandingPage({
   onPasswordLogin,
   onRetry,
 }: WebLandingPageProps) {
-  const gatewayState = useStore($gatewayState)
   const [dismissed, setDismissed] = useState(false)
-
-  // Auto-dismiss if the gateway becomes open (backend started on its own)
-  useEffect(() => {
-    if (gatewayState === 'open' && !dismissed) {
-      setDismissed(true)
-    }
-  }, [gatewayState, dismissed])
 
   // ALL hooks above — early return below is safe
   const handleGetStarted = useCallback(() => {
