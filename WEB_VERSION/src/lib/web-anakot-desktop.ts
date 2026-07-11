@@ -180,6 +180,19 @@ export function touchBackend(_profile?: string | null): Promise<{ ok: boolean }>
 
 export function getGatewayWsUrl(_profile?: string | null): Promise<string> {
   const conn = buildConnection(_profile)
+
+  // OAuth mode: the base WS URL has no credential baked in (no `?token=`).
+  // Mint a short-lived single-use ticket from the backend, which reads the
+  // session cookie.  The caller (resolveGatewayWsUrl) wraps this in a
+  // GatewayReauthRequiredError on failure so the UI surfaces a re-auth
+  // prompt rather than an opaque WS error.
+  if (conn.authMode === 'oauth') {
+    const baseWsUrl = conn.wsUrl.split('?')[0] // strip any stale ticket
+    return api<{ ticket: string }>({ path: '/api/auth/ws-ticket', method: 'POST' })
+      .then(({ ticket }) => `${baseWsUrl}?ticket=${encodeURIComponent(ticket)}`)
+  }
+
+  // Token / local mode: the URL carries a long-lived token; return as-is.
   return Promise.resolve(conn.wsUrl)
 }
 

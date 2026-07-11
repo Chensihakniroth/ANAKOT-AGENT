@@ -42,6 +42,7 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/auth/logout",
     "/login",
     "/api/auth/providers",
+    "/",  # SPA root — the React app handles its own auth gating
     "/assets/",
     "/favicon.ico",
     "/ds-assets/",

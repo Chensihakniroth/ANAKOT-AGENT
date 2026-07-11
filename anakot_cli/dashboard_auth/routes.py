@@ -12,10 +12,14 @@ The routes:
   POST /auth/logout        → clears cookies, best-effort revoke
   GET  /api/auth/providers → list registered providers (login bootstrap)
   GET  /api/auth/me        → current Session as JSON (auth-required)
+  GET  /api/auth/profile-for-user  → profile name for current user (auth-required)
+  POST /api/auth/onboard    → create profile on first login (auth-required)
 """
+
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -619,3 +623,154 @@ async def api_auth_ws_ticket(request: Request):
         ip=_client_ip(request),
     )
     return {"ticket": ticket, "ttl_seconds": TTL_SECONDS}
+
+
+# ---------------------------------------------------------------------------
+# Auth-required: profile-for-user (multi-user routing)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/auth/profile-for-user", name="auth_profile_for_user")
+async def api_auth_profile_for_user(request: Request):
+    """Return the profile name for the authenticated user.
+
+    Returns ``{"profile": "alice"}`` if the user has been onboarded, or
+    ``{"profile": null, "needs_onboarding": true}`` if this is a first-time
+    user who hasn't picked a profile name yet.
+    """
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user, has_profile_for_user
+
+    if has_profile_for_user(sess.user_id):
+        profile = get_profile_for_user(sess.user_id)
+        return {"profile": profile, "needs_onboarding": False}
+
+    return {"profile": None, "needs_onboarding": True}
+
+
+# ---------------------------------------------------------------------------
+# Auth-required: onboarding (first-login profile creation)
+# ---------------------------------------------------------------------------
+
+
+class _OnboardBody(BaseModel):
+    """POST body for ``/api/auth/onboard``."""
+
+    display_name: str
+    """The display name the user chose — becomes their profile name."""
+
+
+@router.post("/api/auth/onboard", name="auth_onboard")
+async def api_auth_onboard(request: Request, body: _OnboardBody):
+    """Create a profile on first login.
+
+    Validates the profile name (lowercase alphanumeric + hyphens/underscores),
+    creates the Anakot profile via ``anakot profile create``, applies the
+    global config as a fallback, and saves the user→profile mapping.
+
+    Returns ``{"ok": true, "profile": <name>}`` on success.
+    """
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    display_name = body.display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=400, detail="Display name is required")
+
+    # Sanitize to a valid profile name: lowercase, alphanumeric + hyphens/underscores
+    profile_name = re.sub(r"[^a-z0-9_-]", "", display_name.lower().replace(" ", "-"))
+    profile_name = profile_name[:63]  # Max 63 chars
+    if not profile_name or not re.match(r"^[a-z0-9]", profile_name):
+        raise HTTPException(
+            status_code=400,
+            detail="Display name must start with a letter or number",
+        )
+
+    from anakot_cli.dashboard_auth.user_profiles import (
+        get_profile_for_user,
+        has_profile_for_user,
+        set_profile_for_user,
+    )
+
+    # Already onboarded?
+    if has_profile_for_user(sess.user_id):
+        existing = get_profile_for_user(sess.user_id)
+        return {"ok": True, "profile": existing, "already_onboarded": True}
+
+    # Check if profile name is taken
+    all_mappings = _list_all_profile_names()
+    if profile_name in all_mappings:
+        # Generate a unique name by appending a number
+        base = profile_name
+        counter = 1
+        while f"{base}-{counter}" in all_mappings:
+            counter += 1
+        profile_name = f"{base}-{counter}"
+    # Also check if a profile directory already exists but isn't in the mapping
+    from anakot_constants import get_anakot_home
+    from pathlib import Path
+
+    global_home = _resolve_global_home()
+    profiles_dir = global_home / "profiles"
+    existing_profiles = set()
+    if profiles_dir.exists():
+        existing_profiles = {d.name for d in profiles_dir.iterdir() if d.is_dir()}
+
+    if profile_name in existing_profiles:
+        base = profile_name
+        counter = 1
+        while f"{base}-{counter}" in existing_profiles:
+            counter += 1
+        profile_name = f"{base}-{counter}"
+
+    # Create the profile via subprocess
+    import subprocess
+    import sys
+
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "anakot_cli", "profile", "create", profile_name],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            _log.error(
+                "Failed to create profile %r: %s",
+                profile_name, result.stderr.strip(),
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to create profile: {result.stderr.strip() or 'unknown error'}",
+            )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Profile creation timed out")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="anakot CLI not found")
+
+    # Persist the mapping
+    set_profile_for_user(sess.user_id, profile_name)
+
+    _log.info(
+        "Onboarded user %r → profile %r (display_name=%r)",
+        sess.user_id, profile_name, display_name,
+    )
+
+    return {"ok": True, "profile": profile_name, "needs_onboarding": False}
+
+
+def _resolve_global_home() -> Path:
+    """Return the root ANAKOT_HOME (outside any profile)."""
+    from anakot_constants import get_anakot_home
+    home = get_anakot_home()
+    if home.parent.name == "profiles":
+        return home.parent.parent
+    return home
+
+
+def _list_all_profile_names() -> set[str]:
+    """Return all profile names from the user→profile mapping."""
+    from anakot_cli.dashboard_auth.user_profiles import list_all_mappings
+    return set(list_all_mappings().values())

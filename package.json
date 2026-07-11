@@ -33,8 +33,10 @@
   },
   "homepage": "https://github.com/callmemo/Anakot-Agent#readme",
   "dependencies": {
+    "@assistant-ui/react": "^0.12.28",
     "@streamdown/math": "^1.0.2",
     "agent-browser": "^0.26.0",
+    "dnd-core": "^16.0.1",
     "ws": "^8.21.0"
   },
   "overrides": {

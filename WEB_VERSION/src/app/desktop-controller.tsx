@@ -8,6 +8,10 @@ import { useSkinCommand } from '@/themes/use-skin-command'
 
 import { useGroupRegistry } from '@/app/shell/use-group-registry'
 
+import { WebLandingPage } from '@/components/web-landing-page'
+import { OnboardingDialog } from '@/components/onboarding-dialog'
+import { useAuth } from '@/hooks/use-auth'
+import { api } from '@/lib/web-anakot-desktop'
 import { formatRefValue } from '../components/assistant-ui/directive-text'
 import { getSessionMessages, listAllProfileSessions, type SessionInfo } from '../anakot'
 import { preserveLocalAssistantErrors, toChatMessages } from '../lib/chat-messages'
@@ -156,6 +160,59 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
+
+  // Auth gate: when the server requires auth (e.g. Railway deploy),
+  // check session and show login page if not authenticated.
+  const {
+    authRequired,
+    isAuthenticated,
+    loading: authLoading,
+    providers,
+    providersLoading,
+    user: authUser,
+    error: authError,
+    login,
+    passwordLogin,
+    retry,
+  } = useAuth()
+
+  // Onboarding: first-time users who just logged in need to pick a name
+  // and create a profile before they can use the app.
+  const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [onboardingLoading, setOnboardingLoading] = useState(false)
+
+  // After auth succeeds (or is detected via session cookie), check if the
+  // user has a profile. If not, show the onboarding dialog.
+  useEffect(() => {
+    if (!authRequired || !isAuthenticated) return
+
+    let cancelled = false
+    setOnboardingLoading(true)
+
+    api<{ profile: string | null; needs_onboarding: boolean }>({
+      path: '/api/auth/profile-for-user',
+    })
+      .then((res) => {
+        if (!cancelled) {
+          if (res.needs_onboarding) {
+            setNeedsOnboarding(true)
+          } else {
+            setNeedsOnboarding(false)
+          }
+        }
+      })
+      .catch(() => {
+        // Not auth-required or server error — skip onboarding
+        if (!cancelled) setNeedsOnboarding(false)
+      })
+      .finally(() => {
+        if (!cancelled) setOnboardingLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authRequired, isAuthenticated])
 
   // Load plugin manifests early and register their routes so navigating
   // to /kanban, /achievements, etc. is recognised by the router.
@@ -816,14 +873,40 @@ export function DesktopController() {
     </Pane>
   )
 
+  // When auth is required + session exists + needs onboarding: onboarding dialog.
+  if (authRequired && isAuthenticated && needsOnboarding) {
+    return (
+      <OnboardingDialog
+        userEmail={authUser?.email}
+        onComplete={(profileName) => {
+          setNeedsOnboarding(false)
+          // After onboarding, reload so the app picks up the new profile
+          window.location.reload()
+        }}
+      />
+    )
+  }
+
   return (
-    <AppShell
-      activityBar={<ActivityBar />}
-      leftStatusbarItems={leftStatusbarItems}
-      onOpenSettings={openSettings}
-      overlays={overlays}
-      statusbarItems={statusbarItems}
-    >
+    <>
+      <WebLandingPage
+        authRequired={authRequired}
+        isAuthenticated={isAuthenticated}
+        authLoading={authLoading}
+        providers={providers}
+        providersLoading={providersLoading}
+        authError={authError}
+        onLogin={login}
+        onPasswordLogin={passwordLogin}
+        onRetry={retry}
+      />
+      <AppShell
+        activityBar={<ActivityBar />}
+        leftStatusbarItems={leftStatusbarItems}
+        onOpenSettings={openSettings}
+        overlays={overlays}
+        statusbarItems={statusbarItems}
+      >
       {/* Sidebar — Explorer / Search / Chat panels */}
       <Pane
         disabled={terminalTakeoverActive}
@@ -872,6 +955,7 @@ export function DesktopController() {
       {/* Preview pane (right side) */}
       {previewPane}
     </AppShell>
+    </>
   )
 }
 

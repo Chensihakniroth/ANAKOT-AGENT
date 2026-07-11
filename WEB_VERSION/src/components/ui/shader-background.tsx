@@ -1,13 +1,13 @@
 import { useStore } from '@nanostores/react'
 import { $backgroundOpacity } from '@/store/background'
 
-export function ShaderBackground() {
+export function ShaderBackground({ className }: { className?: string } = {}) {
   const opacity = useStore($backgroundOpacity)
 
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 z-[4] overflow-hidden"
+      className={`pointer-events-none absolute inset-0 z-[4] overflow-hidden ${className ?? ''}`}
       style={{ opacity: opacity ?? 0.4 }}
     >
       <style>{`

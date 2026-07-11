@@ -9947,6 +9947,15 @@ def start_server(
     app.state.allow_public = allow_public
 
     if app.state.auth_required:
+        # Auto-register the built-in password provider.  It reads users from
+        # ``auth.users`` in the *global* config.yaml (~/.anakot/config.yaml),
+        # so the admin defines users in one place and all profiles inherit them.
+        # If the provider is already registered (e.g. by a plugin) we skip.
+        from anakot_cli.dashboard_auth import list_providers, register_provider
+
+        if not any(p.name == "password" for p in list_providers()):
+            from anakot_cli.dashboard_auth.providers.password import PasswordAuthProvider
+            register_provider(PasswordAuthProvider())
         # Phase 3.5: the gate engages on non-loopback binds.  The legacy
         # "refusing to bind" guard is replaced by "require at least one
         # provider to be registered, else fail closed".
