@@ -2,8 +2,8 @@
  * Web Landing Page — combined hero landing + login.
  *
  * Two modes depending on auth config:
- *   1) No auth required   → brand hero + "Get Started" → into the app
- *   2) Auth required       → brand hero + provider login buttons
+ *   1) No auth required   → full hero + "Get Started" + feature cards
+ *   2) Auth required       → clean centered login card (no feature cards)
  *
  * The page only dismisses when the user clicks "Get Started" (or authenticates).
  * It NEVER auto-dismisses based on gateway state — this prevents the landing
@@ -46,11 +46,10 @@ const FEATURES: Feature[] = [
   { icon: '\uD83E\uDDE0', title: 'Skills', description: 'Extend the agent with custom skills, plugins, and knowledge graph.' },
 ]
 
-// ── Provider icon (extracted from login-page) ──────────────────────────────────
+// ── Provider icon ──────────────────────────────────────────────────────────────
 
 function ProviderIcon({ name }: { name: string }) {
   const n = name.toLowerCase()
-
   if (n.includes('google')) {
     return (
       <svg viewBox="0 0 24 24" className="size-5 shrink-0" aria-hidden="true">
@@ -61,7 +60,6 @@ function ProviderIcon({ name }: { name: string }) {
       </svg>
     )
   }
-
   if (n.includes('github') || n.includes('gitlab')) {
     return (
       <svg viewBox="0 0 24 24" className="size-5 shrink-0" fill="currentColor" aria-hidden="true">
@@ -69,7 +67,6 @@ function ProviderIcon({ name }: { name: string }) {
       </svg>
     )
   }
-
   if (n.includes('microsoft') || n.includes('azure') || n.includes('entra') || n.includes('oidc')) {
     return (
       <svg viewBox="0 0 24 24" className="size-5 shrink-0" aria-hidden="true">
@@ -80,7 +77,6 @@ function ProviderIcon({ name }: { name: string }) {
       </svg>
     )
   }
-
   return (
     <svg viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
@@ -88,7 +84,7 @@ function ProviderIcon({ name }: { name: string }) {
   )
 }
 
-// ── Password form (auth mode only) ─────────────────────────────────────────────
+// ── Password form ──────────────────────────────────────────────────────────────
 
 interface PasswordFormProps {
   providerName: string
@@ -121,56 +117,64 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
   )
 
   return (
-    <div className="mt-5 w-full">
-      <div className="relative mb-4">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-white/[0.07]" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-[#0b2942] px-2 text-[#637777]">or</span>
-        </div>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div>
+        <label htmlFor="landing-username" className="block text-sm font-medium text-[#637777] mb-1.5">
+          Email or username
+        </label>
+        <input
+          id="landing-username"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="you@example.com"
+          autoComplete="username"
+          disabled={loading}
+          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-[#d6deeb] placeholder:text-[#4a5a6a] outline-none transition-all duration-150 focus:border-[#82aaff]/60 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(130,170,255,0.1)] disabled:opacity-50"
+        />
       </div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label htmlFor="landing-username" className="block text-sm font-medium text-[#637777] mb-1.5">
-            Email or username
-          </label>
-          <input
-            id="landing-username"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="you@example.com"
-            autoComplete="username"
-            disabled={loading}
-            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-3 py-2.5 text-sm text-[#d6deeb] placeholder:text-[#637777] outline-none transition-colors focus:border-[#82aaff]/50 focus:ring-1 focus:ring-[#82aaff]/30 disabled:opacity-50"
-          />
+      <div>
+        <label htmlFor="landing-password" className="block text-sm font-medium text-[#637777] mb-1.5">
+          Password
+        </label>
+        <input
+          id="landing-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+          autoComplete="current-password"
+          disabled={loading}
+          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5 text-sm text-[#d6deeb] placeholder:text-[#4a5a6a] outline-none transition-all duration-150 focus:border-[#82aaff]/60 focus:bg-white/[0.06] focus:shadow-[0_0_0_3px_rgba(130,170,255,0.1)] disabled:opacity-50"
+        />
+      </div>
+      {error && (
+        <div className="flex items-center gap-2 rounded-lg bg-[#ef5350]/10 px-3 py-2 text-sm text-[#ef5350]">
+          <svg className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4m0 4h.01" strokeLinecap="round" />
+          </svg>
+          <span className="flex-1">{error}</span>
         </div>
-        <div>
-          <label htmlFor="landing-password" className="block text-sm font-medium text-[#637777] mb-1.5">
-            Password
-          </label>
-          <input
-            id="landing-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-            autoComplete="current-password"
-            disabled={loading}
-            className="w-full rounded-md border border-white/[0.1] bg-white/[0.04] px-3 py-2.5 text-sm text-[#d6deeb] placeholder:text-[#637777] outline-none transition-colors focus:border-[#82aaff]/50 focus:ring-1 focus:ring-[#82aaff]/30 disabled:opacity-50"
-          />
-        </div>
-        {error && <p className="text-sm text-[#ef5350] m-0">{error}</p>}
-        <button
-          type="submit"
-          disabled={loading || !username.trim() || !password}
-          className="w-full cursor-pointer rounded-md bg-[#82aaff] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#6b96e0] disabled:opacity-50"
-        >
-          {loading ? 'Signing in\u2026' : `Sign in with ${providerDisplayName}`}
-        </button>
-      </form>
-    </div>
+      )}
+      <button
+        type="submit"
+        disabled={loading || !username.trim() || !password}
+        className="relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#82aaff] px-4 py-2.5 text-sm font-medium text-white transition-all duration-150 hover:bg-[#6b96e0] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? (
+          <>
+            <svg className="size-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            Signing in...
+          </>
+        ) : (
+          <span>Sign in with {providerDisplayName}</span>
+        )}
+      </button>
+    </form>
   )
 }
 
@@ -189,15 +193,10 @@ export function WebLandingPage({
 }: WebLandingPageProps) {
   const [dismissed, setDismissed] = useState(false)
 
-  // ALL hooks above — early return below is safe
-  const handleGetStarted = useCallback(() => {
-    setDismissed(true)
-  }, [])
+  const handleGetStarted = useCallback(() => setDismissed(true), [])
 
   const handleLogin = useCallback(
-    (providerName: string) => {
-      onLogin?.(providerName)
-    },
+    (providerName: string) => onLogin?.(providerName),
     [onLogin],
   )
 
@@ -211,95 +210,101 @@ export function WebLandingPage({
     [handleLogin],
   )
 
-  // Dismissed — remove from DOM
   if (dismissed) return null
 
-  // ── Determine which CTA section to render ──
   const isAuthMode = authRequired && !isAuthenticated
   const isAuthLoading = authLoading || providersLoading
 
-  // Separate password provider if in auth mode
   const passwordProvider = providers.find((p) => p.supports_password)
   const oauthProviders = providers.filter((p) => !p.supports_password)
 
+  // ── Footer text ──
+  const footerText = isAuthMode
+    ? 'Auth required \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
+    : 'No account needed \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
+
+  // ── CTA section ──
   let ctaSection: React.ReactNode
 
   if (isAuthMode && isAuthLoading) {
-    // Loading skeleton (auth mode)
     ctaSection = (
-      <div className="flex w-full max-w-sm flex-col items-center gap-4" aria-label="Loading sign-in options">
-        <div className="h-16 w-full rounded-xl bg-white/[0.06] animate-pulse" />
-        <div className="h-16 w-full rounded-xl bg-white/[0.06] animate-pulse" />
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-10 w-full animate-pulse rounded-lg bg-white/[0.04]" />
+        <div className="h-10 w-3/4 animate-pulse rounded-lg bg-white/[0.04]" />
       </div>
     )
   } else if (isAuthMode && authError && providers.length === 0) {
-    // Error state (auth mode, no providers loaded)
     ctaSection = (
       <div className="flex flex-col items-center gap-3">
-        <p className="text-sm text-[#ef5350]">{authError}</p>
+        <div className="flex items-center gap-2 rounded-lg bg-[#ef5350]/10 px-3 py-2 text-sm text-[#ef5350]">
+          <svg className="size-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4m0 4h.01" strokeLinecap="round" />
+          </svg>
+          <span>{authError}</span>
+        </div>
         <button
           onClick={onRetry}
-          className="cursor-pointer rounded px-4 py-2 text-sm font-medium text-white bg-[#82aaff] hover:bg-[#6b96e0] transition-colors border-0"
+          className="cursor-pointer rounded-lg bg-white/[0.06] px-4 py-2 text-sm font-medium text-[#d6deeb] transition-all hover:bg-white/[0.1] border-0"
         >
           Retry
         </button>
       </div>
     )
   } else if (isAuthMode && oauthProviders.length > 0) {
-    // Provider login buttons
     ctaSection = (
-      <div className="flex w-full max-w-sm flex-col items-center gap-5">
-        <h2 className="m-0 text-lg font-semibold text-[#d6deeb]">Sign in to continue</h2>
-        <div className="grid w-full gap-3">
-          {oauthProviders.map((p) => (
-            <button
-              key={p.name}
-              onClick={() => handleLogin(p.name)}
-              onKeyDown={(e) => handleKeyDown(e, p.name)}
-              className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 py-3 text-left text-sm font-medium text-[#d6deeb] transition-all duration-150 hover:bg-white/[0.08] hover:border-[#82aaff]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#82aaff]/60 active:scale-[0.98]"
-              aria-label={`Sign in with ${p.display_name}`}
-            >
-              <ProviderIcon name={p.name} />
-              <span className="flex-1">
-                Sign in with <strong>{p.display_name}</strong>
-              </span>
-              <svg className="size-4 text-[#637777] shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-3">
+        {oauthProviders.map((p) => (
+          <button
+            key={p.name}
+            onClick={() => handleLogin(p.name)}
+            onKeyDown={(e) => handleKeyDown(e, p.name)}
+            className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-[#d6deeb] transition-all duration-150 hover:bg-white/[0.06] hover:border-[#82aaff]/40 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#82aaff]/60"
+          >
+            <ProviderIcon name={p.name} />
+            <span className="flex-1 text-left">
+              Continue with <strong>{p.display_name}</strong>
+            </span>
+            <svg className="size-4 text-[#4a5a6a]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+        ))}
         {passwordProvider && onPasswordLogin && (
-          <PasswordForm
-            providerName={passwordProvider.name}
-            providerDisplayName={passwordProvider.display_name}
-            onPasswordLogin={onPasswordLogin}
-          />
+          <>
+            <div className="relative my-1">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/[0.06]" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-[#0b2942] px-2 text-[#4a5a6a]">or</span>
+              </div>
+            </div>
+            <PasswordForm
+              providerName={passwordProvider.name}
+              providerDisplayName={passwordProvider.display_name}
+              onPasswordLogin={onPasswordLogin}
+            />
+          </>
         )}
       </div>
     )
   } else if (isAuthMode && passwordProvider && onPasswordLogin) {
-    // Password-only login (no OAuth providers configured)
     ctaSection = (
-      <div className="flex w-full max-w-sm flex-col items-center gap-5">
-        <h2 className="m-0 text-lg font-semibold text-[#d6deeb]">Sign in to continue</h2>
-        <PasswordForm
-          providerName={passwordProvider.name}
-          providerDisplayName={passwordProvider.display_name}
-          onPasswordLogin={onPasswordLogin}
-        />
-      </div>
+      <PasswordForm
+        providerName={passwordProvider.name}
+        providerDisplayName={passwordProvider.display_name}
+        onPasswordLogin={onPasswordLogin}
+      />
     )
   } else if (isAuthMode && providers.length === 0 && !authLoading) {
-    // Auth mode but no providers configured
     ctaSection = (
       <div className="text-center">
-        <p className="text-sm text-[#637777] mb-1">No sign-in methods are configured.</p>
-        <p className="text-xs text-[#637777]">Contact your administrator.</p>
+        <p className="text-sm text-[#637777] m-0">No sign-in methods are configured.</p>
+        <p className="text-xs text-[#4a5a6a] mt-1 m-0">Contact your administrator.</p>
       </div>
     )
   } else {
-    // No auth required — simple "Get Started" CTA
     ctaSection = (
       <button
         className="inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 min-w-[180px] rounded-xl bg-white/90 px-6 text-sm font-semibold text-[#011627] shadow-lg shadow-black/20 transition-all hover:bg-white hover:shadow-xl active:scale-[0.98]"
@@ -310,10 +315,7 @@ export function WebLandingPage({
     )
   }
 
-  // ── Determine footer text ──
-  const footerText = isAuthMode ? 'Auth required \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
-    : 'No account needed \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
-
+  // ── Render ──
   return (
     <div
       className="fixed inset-0 z-[1500] flex flex-col items-center justify-center overflow-hidden"
@@ -321,44 +323,58 @@ export function WebLandingPage({
     >
       <ShaderBackground className="pointer-events-none absolute inset-0" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center gap-8 px-6 py-12">
-        {/* Hero */}
-        <div className="flex flex-col items-center gap-5">
-          <div className="flex size-20 items-center justify-center rounded-2xl bg-white/10 shadow-lg shadow-black/20">
-            <BrandMark className="size-12" />
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            Anakot Agent
-          </h1>
-          <p className="max-w-lg text-center text-base leading-relaxed text-white/60 sm:text-lg">
-            {'Your AI agent platform \u2014 chat, automate, and orchestrate from anywhere. Open source, runs on your own infra.'}
-          </p>
-        </div>
-
-        {/* CTA / Login section */}
-        <div className="flex flex-col items-center">
-          {ctaSection}
-        </div>
-
-        {/* Feature Grid */}
-        <div className="mt-4 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-          {FEATURES.map(f => (
-            <div
-              key={f.title}
-              className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.08]"
-            >
-              <span className="mt-0.5 shrink-0 text-lg" aria-hidden="true">{f.icon}</span>
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-white/85">{f.title}</h3>
-                <p className="mt-0.5 text-xs leading-relaxed text-white/50">{f.description}</p>
+      {isAuthMode ? (
+        /* ── Auth mode: clean centered card ── */
+        <div className="relative z-10 mx-auto w-full max-w-sm px-4">
+          <div className="rounded-2xl border border-white/[0.06] bg-[#0b2942]/60 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
+            <div className="flex flex-col items-center gap-5 mb-6">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-[#82aaff]/10">
+                <BrandMark className="size-7" />
+              </div>
+              <div className="text-center">
+                <h1 className="text-lg font-semibold text-[#d6deeb] m-0">Anakot Agent</h1>
+                <p className="text-sm text-[#637777] mt-1 m-0">Sign in to continue</p>
               </div>
             </div>
-          ))}
+            <div className="min-h-[100px]">
+              {ctaSection}
+            </div>
+            <p className="text-xs text-center text-[#4a5a6a] mt-6 m-0">{footerText}</p>
+          </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-xs text-white/30">{footerText}</p>
-      </div>
+      ) : (
+        /* ── No auth: full landing with hero, feature cards ── */
+        <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center gap-8 px-6 py-12">
+          <div className="flex flex-col items-center gap-5">
+            <div className="flex size-20 items-center justify-center rounded-2xl bg-white/10 shadow-lg shadow-black/20">
+              <BrandMark className="size-12" />
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">Anakot Agent</h1>
+            <p className="max-w-lg text-center text-base leading-relaxed text-white/60 sm:text-lg">
+              {'Your AI agent platform \u2014 chat, automate, and orchestrate from anywhere. ' +
+               'Open source, runs on your own infra.'}
+            </p>
+          </div>
+          <div className="flex flex-col items-center">
+            {ctaSection}
+          </div>
+          <div className="mt-4 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+            {FEATURES.map(f => (
+              <div
+                key={f.title}
+                className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.08]"
+              >
+                <span className="mt-0.5 shrink-0 text-lg" aria-hidden="true">{f.icon}</span>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white/85">{f.title}</h3>
+                  <p className="mt-0.5 text-xs leading-relaxed text-white/50">{f.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-white/30">{footerText}</p>
+        </div>
+      )}
     </div>
   )
 }
