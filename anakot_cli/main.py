@@ -1425,6 +1425,94 @@ def _tui_need_rebuild(root: Path) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# Workspace package integrity — catch corrupted hoisted deps before builds
+# ---------------------------------------------------------------------------
+# npm workspaces hoist shared packages under root/node_modules/.  If one of
+# those packages is incomplete (a partial install, interrupted cache
+# extraction, or silent corruption), esbuild and Vite fail with cryptic
+# resolution errors.  The map below lists the specific internal files known
+# to go missing for each critical transitive dep.
+_CRITICAL_PACKAGES: dict[str, list[str]] = {
+    "lodash-es": [
+        "_freeGlobal.js",
+        "_baseGetTag.js",
+        "_baseTrim.js",
+    ],
+}
+
+
+def _verify_critical_packages(
+    workspace_root: Path, npm_bin: str | None = None
+) -> bool:
+    """Verify known-critical hoisted npm packages are complete.
+
+    Checks that each package listed in ``_CRITICAL_PACKAGES`` has all of its
+    expected internal files in the hoisted ``node_modules/``.  Missing files
+    trigger a targeted reinstall of the affected package.
+
+    Returns True when every checked package is intact (after any repairs).
+    """
+    if npm_bin is None:
+        npm_bin = shutil.which("npm")
+
+    all_ok = True
+    for pkg_name, critical_files in _CRITICAL_PACKAGES.items():
+        pkg_dir = workspace_root / "node_modules" / pkg_name
+        if not pkg_dir.is_dir():
+            continue  # not yet installed, skip
+
+        missing = [f for f in critical_files if not (pkg_dir / f).is_file()]
+        if not missing:
+            continue
+
+        all_ok = False
+        if npm_bin is None:
+            continue  # can't repair without npm
+
+        # Read the installed version so we reinstall the same one
+        try:
+            pkg_json = json.loads(
+                (pkg_dir / "package.json").read_text("utf-8")
+            )
+            version = pkg_json.get("version", "")
+            pkg_spec = f"{pkg_name}@{version}" if version else pkg_name
+        except (FileNotFoundError, json.JSONDecodeError):
+            pkg_spec = pkg_name
+
+        print(
+            f"  \u26a0 {pkg_name} is incomplete "
+            f"(missing {', '.join(missing)}), reinstalling\u2026"
+        )
+        subprocess.run(
+            [
+                npm_bin,
+                "install",
+                pkg_spec,
+                "--no-save",
+                "--silent",
+                "--no-fund",
+                "--no-audit",
+                "--progress=false",
+            ],
+            cwd=str(workspace_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        # Re-check after reinstall
+        missing = [f for f in critical_files if not (pkg_dir / f).is_file()]
+        if missing:
+            print(
+                f"  \u2717 {pkg_name} still incomplete after reinstall "
+                f"(missing {', '.join(missing)})"
+            )
+
+    return all_ok
+
+
 def _ensure_tui_node() -> None:
     """Make sure `node` + `npm` are on PATH for the TUI.
 
@@ -1593,6 +1681,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
                 print(preview)
             sys.exit(1)
         did_install = True
+        # Post-install: verify critical hoisted packages are complete
+        _verify_critical_packages(npm_cwd, npm)
 
     if tui_dev:
         # Keep the local @anakot/ink package exports in sync with source.
@@ -1637,6 +1727,8 @@ def _make_tui_argv(tui_dir: Path, tui_dev: bool) -> tuple[list[str], Path]:
 
     if should_build:
         npm = _node_bin("npm")
+        # Pre-build: verify critical hoisted packages before esbuild
+        _verify_critical_packages(_workspace_root(tui_dir), npm)
         result = subprocess.run(
             [npm, "run", "build"],
             cwd=str(tui_dir),
@@ -7168,6 +7260,8 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
         if fatal:
             _say("  Run manually:  npm install --workspace WEB_VERSION && npm run build -w WEB_VERSION")
         return False
+    # Post-install: verify critical hoisted packages before Vite build
+    _verify_critical_packages(npm_cwd, npm)
     # First attempt — stream output via idle-timeout helper (issue #33788).
     # capture_output=True on a long Vite build looks identical to a hang;
     # users react by rebooting, which leaves the editable install in a

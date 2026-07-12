@@ -54,6 +54,7 @@ same precedence convention as the ``nous`` plugin)::
     # Environment overrides (Docker/Fly secret injection)
     ANAKOT_DASHBOARD_OIDC_ISSUER
     ANAKOT_DASHBOARD_OIDC_CLIENT_ID
+    ANAKOT_DASHBOARD_OIDC_CLIENT_SECRET   # optional; some IDPs (Google) require it
     ANAKOT_DASHBOARD_OIDC_SCOPES        # optional; defaults to "openid profile email"
 
 Skip reasons: when the plugin loads but can't register (missing issuer /
@@ -171,6 +172,7 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
         *,
         issuer: str,
         client_id: str,
+        client_secret: str = "",
         scopes: str = _DEFAULT_SCOPES,
     ) -> None:
         if not issuer:
@@ -185,6 +187,7 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
         self._issuer = issuer.rstrip("/")
         _require_https_or_loopback(self._issuer, field="issuer")
         self._client_id = client_id
+        self._client_secret = client_secret.strip() if client_secret else ""
         self._scopes = scopes.strip() or _DEFAULT_SCOPES
 
         # Discovery + JWKS are lazily resolved on first use so plugin
@@ -245,6 +248,8 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
             "client_id": self._client_id,
             "code_verifier": code_verifier,
         }
+        if self._client_secret:
+            data["client_secret"] = self._client_secret
         # TODO(confidential-client): when client_secret support lands, add it
         # here (and switch to HTTP Basic auth if the IDP's
         # token_endpoint_auth_methods_supported prefers client_secret_basic).
@@ -265,6 +270,8 @@ class SelfHostedOIDCProvider(DashboardAuthProvider):
             # identity claims (some IDPs narrow scope on refresh otherwise).
             "scope": self._scopes,
         }
+        if self._client_secret:
+            data["client_secret"] = self._client_secret
         # TODO(confidential-client): add client_secret here when supported.
         return self._exchange(
             disco["token_endpoint"],
@@ -697,6 +704,9 @@ def register(ctx) -> None:
     client_id = _resolve_setting(
         "ANAKOT_DASHBOARD_OIDC_CLIENT_ID", oidc_cfg.get("client_id")
     )
+    client_secret = _resolve_setting(
+        "ANAKOT_DASHBOARD_OIDC_CLIENT_SECRET", oidc_cfg.get("client_secret")
+    )
     scopes = (
         _resolve_setting("ANAKOT_DASHBOARD_OIDC_SCOPES", oidc_cfg.get("scopes"))
         or _DEFAULT_SCOPES
@@ -717,7 +727,8 @@ def register(ctx) -> None:
 
     try:
         provider = SelfHostedOIDCProvider(
-            issuer=issuer, client_id=client_id, scopes=scopes
+            issuer=issuer, client_id=client_id,
+            client_secret=client_secret, scopes=scopes
         )
     except (ValueError, ProviderError) as exc:
         LAST_SKIP_REASON = (
