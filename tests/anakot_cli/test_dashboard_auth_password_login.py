@@ -34,7 +34,6 @@ from anakot_cli.dashboard_auth import (
     register_provider,
 )
 from anakot_cli.dashboard_auth.cookies import SESSION_AT_COOKIE, SESSION_RT_COOKIE
-from anakot_cli.dashboard_auth.login_page import render_login_html
 from anakot_cli.dashboard_auth.routes import _reset_password_rate_limit
 from tests.anakot_cli.conftest_dashboard_auth import StubAuthProvider
 
@@ -397,52 +396,3 @@ class TestRateLimit:
             json={"provider": "testpw", "username": "admin", "password": "hunter2"},
         )
         assert good.status_code == 429
-
-
-# ---------------------------------------------------------------------------
-# Login page rendering
-# ---------------------------------------------------------------------------
-
-
-class TestLoginPageRender:
-    def test_password_provider_renders_credential_form_and_script(self):
-        clear_providers()
-        register_provider(PasswordProvider())
-        try:
-            html = render_login_html(next_path="/sessions")
-            assert '<form class="provider-form" data-provider="testpw"' in html
-            assert 'name="username"' in html
-            assert 'name="password"' in html
-            assert 'value="/sessions"' in html
-            assert "<script>" in html
-            assert "/auth/password-login" in html
-        finally:
-            clear_providers()
-
-    def test_oauth_only_page_stays_script_free(self):
-        clear_providers()
-        register_provider(StubAuthProvider())
-        try:
-            html = render_login_html()
-            assert "provider-btn" in html
-            assert "<script>" not in html
-            # No password FORM element rendered (the .provider-form CSS
-            # rule lives in the template's <style> block unconditionally;
-            # what must be absent is an actual rendered form + its script).
-            assert '<form class="provider-form"' not in html
-            assert "/auth/password-login" not in html
-        finally:
-            clear_providers()
-
-    def test_mixed_providers_render_both(self):
-        clear_providers()
-        register_provider(StubAuthProvider())
-        register_provider(PasswordProvider())
-        try:
-            html = render_login_html()
-            # OAuth redirect button AND a password form, both present.
-            assert "/auth/login?provider=stub" in html
-            assert 'data-provider="testpw"' in html
-            assert "<script>" in html
-        finally:
-            clear_providers()

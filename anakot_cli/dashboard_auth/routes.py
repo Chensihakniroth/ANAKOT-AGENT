@@ -6,7 +6,6 @@ allowlists everything under ``/auth/*`` and ``/api/auth/providers``.
 
 The routes:
 
-  GET  /login              → server-rendered login page
   GET  /auth/login?provider=N → 302 to IDP, sets PKCE cookie
   GET  /auth/callback?code,state → completes login, sets session cookies
   POST /auth/logout        → clears cookies, best-effort revoke
@@ -27,7 +26,7 @@ from collections import defaultdict, deque
 from typing import Any, Deque, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 # Imported at module level (not deferred) so cold-import cost is paid at
@@ -54,7 +53,7 @@ from anakot_cli.dashboard_auth.cookies import (
     set_pkce_cookie,
     set_session_cookies,
 )
-from anakot_cli.dashboard_auth.login_page import render_login_html
+from anakot_cli.dashboard_auth import _validate_post_login_target, list_providers
 
 _log = logging.getLogger(__name__)
 
@@ -133,25 +132,6 @@ def _prefix(request: Request) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public: login page (server-rendered HTML, no SPA bundle)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/login", name="login_page")
-async def login_page(request: Request) -> HTMLResponse:
-    # Read the ``next=`` query the gate's ``_unauth_response`` set on
-    # the redirect URL. Validate against the same same-origin rules the
-    # callback applies (defence in depth — the gate already filters,
-    # but /login is reachable directly too).
-    next_path = _validate_post_login_target(
-        request.query_params.get("next", "")
-    )
-    return HTMLResponse(
-        render_login_html(next_path=next_path),
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
-    )
-
-
 # ---------------------------------------------------------------------------
 # Public: provider list for the login-page bootstrap
 # ---------------------------------------------------------------------------
@@ -568,7 +548,7 @@ async def auth_logout(request: Request):
     )
 
     prefix = _prefix(request)
-    resp = RedirectResponse(url=f"{prefix}/login", status_code=302)
+    resp = RedirectResponse(url=f"{prefix}/", status_code=302)
     clear_session_cookies(resp, prefix=prefix)
     clear_pkce_cookie(resp, prefix=prefix)
     return resp

@@ -4,9 +4,8 @@ Uses ``StubAuthProvider`` so the OAuth round trip can complete in-process
 without any external IDP.  Exercises:
 
   * `/api/status` flips from public (loopback) to gated (auth_required)
-  * `/` redirects to /login when no cookie present
+  * `/` loads the SPA which handles auth gating itself
   * `/api/auth/providers` is the public bootstrap endpoint
-  * `/login` renders HTML listing all providers
   * /assets/* still passes through unauthenticated
   * Full /auth/login → /auth/callback → / round trip with the stub
   * Invalid / missing cookies return 401 (api) or 302 (html)
@@ -113,11 +112,11 @@ def test_other_public_api_paths_are_public_under_gate(gated_app, path):
         )
 
 
-def test_gated_html_redirects_to_login(gated_app):
+def test_gated_root_returns_spa(gated_app):
+    """``/`` is public so the SPA can load and handle auth gating itself."""
     r = gated_app.get("/", follow_redirects=False)
-    assert r.status_code == 302
-    # Phase 6: gate carries a ``next=`` so post-login bounces back to /.
-    assert r.headers["location"] in ("/login", "/login?next=%2F")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
 
 
 def test_gated_auth_providers_is_public(gated_app):
@@ -129,11 +128,9 @@ def test_gated_auth_providers_is_public(gated_app):
 
 
 def test_gated_login_html_is_public_and_lists_providers(gated_app):
+    """``/login`` no longer exists — the SPA handles login at ``/`` instead."""
     r = gated_app.get("/login")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/html")
-    assert "Stub IdP" in r.text
-    assert 'href="/auth/login?provider=stub"' in r.text
+    assert r.status_code == 404
 
 
 def test_gated_static_asset_path_is_public(gated_app):
@@ -319,7 +316,8 @@ def test_gated_zero_providers_fails_closed_on_api_auth_providers():
         web_server.app.state.bound_host = prev_host
 
 
-def test_gated_zero_providers_login_page_renders_help_text():
+def test_gated_zero_providers_login_page_is_gone():
+    """``/login`` no longer exists — the SPA handles auth gating at ``/``."""
     clear_providers()
     prev_required = getattr(web_server.app.state, "auth_required", None)
     prev_host = getattr(web_server.app.state, "bound_host", None)
@@ -328,16 +326,10 @@ def test_gated_zero_providers_login_page_renders_help_text():
     try:
         client = TestClient(web_server.app, base_url="https://fly-app.fly.dev")
         r = client.get("/login")
-        assert r.status_code == 200
-        # Empty-provider HTML mentions the fix-up path.  (HTML wraps text
-        # so we can't grep for the exact phrase; check for the canonical
-        # fragments instead.)
-        text = r.text.lower()
-        assert "sign-in unavailable" in text
-        assert "no authentication" in text
-        assert "providers are installed" in text
-        assert "--insecure" in text
+        # /login route no longer exists — SPA handles login at /
+        assert r.status_code == 404
     finally:
+        clear_providers()
         web_server.app.state.auth_required = prev_required
         web_server.app.state.bound_host = prev_host
 

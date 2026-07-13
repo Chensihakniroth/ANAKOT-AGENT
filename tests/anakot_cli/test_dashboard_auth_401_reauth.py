@@ -459,10 +459,8 @@ class TestAuthCallbackNext:
         h = body.find(marker, i) + len(marker)
         j = body.find('"', h)
         href = body[h:j]
-        # Critical: the href must carry next= when /login was given
-        # next= AND the validator accepted it. (This is the property the
-        # pre-fix render_login_html didn't satisfy.) For rejected
-        # next= values, the validator drops them at the /login boundary
+        # Critical: the href must carry next= for the PKCE round trip.
+        # values, the validator drops them at the /auth/login boundary
         # and the button href must NOT carry the rogue value.
         if next_path and expect_next_in_button:
             assert "next=" in href, (
@@ -629,52 +627,6 @@ class TestValidatePostLoginTarget:
         # SPA route lookalikes — must NOT be dropped.
         assert _validate_post_login_target("/apidocs") == "/apidocs"
         assert _validate_post_login_target("/api-keys") == "/api-keys"
-
-
-# ---------------------------------------------------------------------------
-# Unit-level coverage: render_login_html threads next= into provider buttons
-# ---------------------------------------------------------------------------
-
-
-class TestRenderLoginHtmlNext:
-    """Cover ``render_login_html`` directly so a regression that drops
-    the ``next_path`` parameter is caught at the function boundary, not
-    only via the full integration walk."""
-
-    def setup_method(self):
-        clear_providers()
-        register_provider(StubAuthProvider())
-
-    def teardown_method(self):
-        clear_providers()
-
-    def test_no_next_emits_plain_button(self):
-        from anakot_cli.dashboard_auth.login_page import render_login_html
-        html_out = render_login_html()
-        assert 'href="/auth/login?provider=stub"' in html_out
-        assert "next=" not in html_out
-
-    def test_next_threaded_url_encoded(self):
-        from anakot_cli.dashboard_auth.login_page import render_login_html
-        html_out = render_login_html(next_path="/sessions?page=2")
-        # next= is URL-encoded — quote(safe='') turns "/" into "%2F",
-        # "?" into "%3F", "=" into "%3D". The encoded value never
-        # contains an "&" so the raw "&" separator in the href is
-        # unambiguous.
-        assert "next=%2Fsessions%3Fpage%3D2" in html_out
-        assert "provider=stub&next=" in html_out
-
-    def test_next_with_html_metacharacters_is_escaped(self):
-        """Defence in depth: even though the caller validates next_path,
-        we still HTML-escape the rendered value so a regression in the
-        caller can't trivially produce an HTML-injection sink."""
-        from anakot_cli.dashboard_auth.login_page import render_login_html
-        # `"` in a path is already URL-encoded by quote() to %22, so it
-        # never reaches the HTML escaper as a raw quote. This test pins
-        # both layers: quote() does its job AND escape() does its.
-        html_out = render_login_html(next_path='/x"injected')
-        assert '"injected' not in html_out
-        assert "%22injected" in html_out
 
 
 # ---------------------------------------------------------------------------

@@ -2,12 +2,12 @@
 
 Engaged when ``app.state.auth_required is True``. The gate's job:
 
-  1. Allow a small set of routes through unauthenticated (login page,
+  1. Allow a small set of routes through unauthenticated (
      ``/auth/*`` OAuth round trip, ``/api/auth/providers``, static
      assets).
   2. For everything else, demand a valid session cookie and attach the
      verified :class:`Session` to ``request.state.session``.
-  3. On HTML routes, redirect missing/invalid cookies to ``/login``.
+  3. On HTML routes, redirect missing/invalid cookies to ``/``.
      On ``/api/*`` routes, return 401 JSON.
 
 The middleware is a no-op when ``auth_required`` is False (loopback
@@ -40,7 +40,6 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/auth/callback",
     "/auth/password-login",
     "/auth/logout",
-    "/login",
     "/api/auth/providers",
     "/assets/",
     "/favicon.ico",
@@ -85,7 +84,7 @@ def _client_ip(request: Request) -> str:
 
 
 def _unauth_response(request: Request, *, reason: str) -> Response:
-    """API routes → 401 JSON with ``login_url``; HTML routes → 302 → /login.
+    """API routes → 401 JSON with ``login_url``; HTML routes → 302 → /.
 
     The JSON envelope carries a ``login_url`` field with a ``next=`` query
     string so the SPA's global 401 handler can drop the user back where
@@ -101,10 +100,9 @@ def _unauth_response(request: Request, *, reason: str) -> Response:
     ``/sessions`` after login.
 
     Under a reverse proxy with ``X-Forwarded-Prefix: /anakot``, the
-    ``login_url`` is prefixed (``/anakot/login?next=...``) so the
-    browser's window.location.assign / Location: follow lands on the
-    proxied login page rather than the bare ``/login`` (which the
-    proxy doesn't route to the dashboard).
+    ``login_url`` is prefixed (``/anakot?next=...``) so the browser's
+    window.location.assign / Location: follow lands on the SPA root
+    which renders its own login UI.
     """
     from anakot_cli.dashboard_auth.prefix import prefix_from_request
 
@@ -112,8 +110,8 @@ def _unauth_response(request: Request, *, reason: str) -> Response:
     next_param = _safe_next_target(request)
     prefix = prefix_from_request(request)
     login_url = (
-        f"{prefix}/login?next={next_param}" if next_param
-        else f"{prefix}/login"
+        f"{prefix}/?next={next_param}" if next_param
+        else f"{prefix}/"
     )
 
     if path.startswith("/api/"):
@@ -143,8 +141,8 @@ def _safe_next_target(request: Request) -> str:
 
     Only same-origin relative paths are accepted; absolute URLs or
     ``//evil.com`` open-redirect attempts are silently dropped. The empty
-    string return means the caller produces a bare ``/login`` URL — fine,
-    user lands at the dashboard root after re-auth.
+    string return means the caller produces a bare ``/`` URL — fine,
+    user lands at the SPA root which renders its own login UI.
     """
     path = request.url.path
     # Reject anything that doesn't start with "/" or starts with "//"
@@ -154,7 +152,7 @@ def _safe_next_target(request: Request) -> str:
     # Don't redirect back to the auth routes themselves — that loops.
     if any(
         path == p or path.startswith(p)
-        for p in ("/login", "/auth/", "/api/auth/")
+        for p in ("/auth/", "/api/auth/")
     ):
         return ""
     # Reject ALL ``/api/*`` paths. The 401-envelope code path fires for
