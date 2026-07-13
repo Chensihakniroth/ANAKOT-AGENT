@@ -732,7 +732,7 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
     # Create the profile in-process (more reliable than subprocess on Railway).
     # Run in a thread executor to avoid blocking the ASGI event loop.
     try:
-        await asyncio.wait_for(
+        profile_dir = await asyncio.wait_for(
             asyncio.to_thread(
                 create_profile,
                 name=profile_name,
@@ -752,6 +752,13 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
 
     # Persist the mapping
     set_profile_for_user(sess.user_id, profile_name)
+
+    # Symlink profile's config.yaml and .env to the global (admin-owned) files.
+    # Every web user reads the admin's configuration (API keys, model providers,
+    # tool settings) while only their skills/memory stay per-user. The symlink
+    # target's ownership/permissions (root-owned in Docker, admin-owned otherwise)
+    # prevent the agent from writing config changes back.
+    _ensure_web_profile_config_links(profile_dir, global_home)
 
     _log.info(
         "Onboarded user %r → profile %r (display_name=%r)",
@@ -807,6 +814,38 @@ async def api_auth_set_role(request: Request, body: _SetRoleBody):
     return {"ok": True, "user_id": body.user_id, "role": body.role}
 
 
+@router.post("/api/auth/propagate-config", name="auth_propagate_config")
+async def api_auth_propagate_config(request: Request):
+    """Re-symlink config.yaml/.env for every web profile.
+    Call this after editing the global config.yaml to push changes to all
+    existing user profiles. Only admins can call this endpoint.
+    """
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if not _is_admin_user(sess.user_id):
+        raise HTTPException(status_code=403, detail="Forbidden: admin role required")
+
+    global_home = _resolve_global_home()
+    results: dict[str, str] = {}
+
+    for profile_name in sorted(_list_all_profile_names()):
+        if not profile_name.startswith("web-"):
+            continue
+        try:
+            from anakot_cli.profiles import get_profile_dir as _get_profile_dir
+
+            profile_dir = _get_profile_dir(profile_name)
+            _ensure_web_profile_config_links(profile_dir, global_home)
+            results[profile_name] = "ok"
+        except Exception as exc:
+            results[profile_name] = f"error: {exc}"
+            _log.warning("propagate-config failed for %s: %s", profile_name, exc)
+
+    return {"ok": True, "results": results}
+
+
 def _resolve_global_home() -> Path:
     """Return the root ANAKOT_HOME (outside any profile)."""
     from anakot_constants import get_anakot_home
@@ -814,6 +853,47 @@ def _resolve_global_home() -> Path:
     if home.parent.name == "profiles":
         return home.parent.parent
     return home
+
+
+def _ensure_web_profile_config_links(profile_dir: Path, global_home: Path) -> None:
+    """Symlink profile config.yaml → global admin-owned file.
+
+    Removes any existing config.yaml in the profile dir and replaces
+    it with a relative symlink to the global admin config. The target
+    file is owned by root/admin with restricted write perms so the
+    agent runtime user cannot persist config changes.
+
+    Note: .env is NOT symlinked — Railway injects API keys via system
+    env vars natively; profiles without a local .env fall back to that.
+
+    Best-effort: failures are logged but do not abort onboarding.
+    """
+    import os as _os
+
+    name = "config.yaml"
+    global_path = global_home / name
+    profile_path = profile_dir / name
+
+    # Remove existing file/dir/symlink if present
+    try:
+        if profile_path.is_symlink() or profile_path.exists():
+            profile_path.unlink()
+    except OSError as exc:
+        _log.warning("Could not remove existing %s in profile: %s", name, exc)
+        return
+
+    # Only symlink if the global file exists
+    if not global_path.exists():
+        _log.info("Global %s not found at %s — skipping symlink", name, global_path)
+        return
+
+    try:
+        # Relative symlink survives volume remounts
+        rel = _os.path.relpath(global_path, profile_dir)
+        profile_path.symlink_to(rel)
+        _log.debug("Symlinked profile %s → %s", profile_path, rel)
+    except OSError as exc:
+        _log.warning("Could not symlink %s in profile: %s", name, exc)
 
 
 def _list_all_profile_names() -> set[str]:

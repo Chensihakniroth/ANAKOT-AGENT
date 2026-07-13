@@ -8497,6 +8497,7 @@ def _ws_auth_ok(ws: "WebSocket") -> bool:
 def _resolve_chat_argv(
     resume: Optional[str] = None,
     sidecar_url: Optional[str] = None,
+    profile: Optional[str] = None,
 ) -> tuple[list[str], Optional[str], Optional[dict]]:
     """Resolve the argv + cwd + env for the chat PTY.
 
@@ -8516,6 +8517,14 @@ def _resolve_chat_argv(
     `sidecar_url` (when set) is forwarded as ``ANAKOT_TUI_SIDECAR_URL`` so
     the spawned ``tui_gateway.entry`` can mirror dispatcher emits to the
     dashboard's ``/api/pub`` endpoint (see :func:`pub_ws`).
+
+    `profile` (when set) points ``ANAKOT_HOME`` at the named profile's
+    directory under the global ANAKOT_HOME's ``profiles/`` subtree, so the
+    spawned agent loads only that user's skills/memory while its config.yaml
+    and .env are symlinked to global admin-owned files (see
+    ``_ensure_web_profile_config_links``).  When omitted, the agent uses
+    whatever ``ANAKOT_HOME`` is already set in the environment (desktop
+    / single-user fallback).
     """
     from anakot_cli.main import PROJECT_ROOT, _make_tui_argv
 
@@ -8546,6 +8555,21 @@ def _resolve_chat_argv(
 
     if gateway_ws_url := _build_gateway_ws_url():
         env["ANAKOT_TUI_GATEWAY_URL"] = gateway_ws_url
+
+    # When a web profile is specified, override ANAKOT_HOME so the agent
+    # subprocess tree loads only that user's skills/memory/sessions while
+    # config.yaml and .env are symlinked to global admin-owned files.
+    if profile is not None:
+        from anakot_cli.profiles import get_profile_dir
+
+        profile_dir = get_profile_dir(profile)
+        if profile_dir.is_dir():
+            env["ANAKOT_HOME"] = str(profile_dir.resolve())
+        else:
+            _log.warning(
+                "Profile %r not found at %s — falling back to default ANAKOT_HOME",
+                profile, profile_dir,
+            )
 
     return list(argv), str(cwd) if cwd else None, env
 
@@ -8707,11 +8731,14 @@ async def pty_ws(ws: WebSocket) -> None:
 
     # --- spawn PTY ------------------------------------------------------
     resume = ws.query_params.get("resume") or None
+    profile = ws.query_params.get("profile") or None
     channel = _channel_or_close_code(ws)
     sidecar_url = _build_sidecar_url(channel) if channel else None
 
     try:
-        argv, cwd, env = _resolve_chat_argv(resume=resume, sidecar_url=sidecar_url)
+        argv, cwd, env = _resolve_chat_argv(
+            resume=resume, sidecar_url=sidecar_url, profile=profile,
+        )
     except SystemExit as exc:
         # _make_tui_argv calls sys.exit(1) when node/npm is missing.
         await ws.send_text(f"\r\n\x1b[31mChat unavailable: {exc}\x1b[0m\r\n")

@@ -14,7 +14,7 @@ import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { api } from '@/lib/web-anakot-desktop'
 import { formatRefValue } from '../components/assistant-ui/directive-text'
-import { getSessionMessages, listAllProfileSessions, type SessionInfo } from '../anakot'
+import { getSessionMessages, listAllProfileSessions, setApiRequestProfile, type SessionInfo } from '../anakot'
 import { preserveLocalAssistantErrors, toChatMessages } from '../lib/chat-messages'
 import {
   $fileBrowserOpen,
@@ -36,7 +36,7 @@ import {
 } from '../store/layout'
 import { $filePreviewTarget, $previewTarget, closeActiveRightRailTab } from '../store/preview'
 import { $codeReviewData } from '../store/code-review'
-import { $activeGatewayProfile, $freshSessionRequest, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
+import { $activeGatewayProfile, $freshSessionRequest, $newChatProfile, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
 import {
   $activeSessionId,
   $currentCwd,
@@ -199,6 +199,11 @@ export function DesktopController() {
             setNeedsOnboarding(true)
           } else {
             setNeedsOnboarding(false)
+          }
+          if (res.profile) {
+            $activeGatewayProfile.set(res.profile)
+            $newChatProfile.set(res.profile)
+            setApiRequestProfile(res.profile)
           }
         }
       })

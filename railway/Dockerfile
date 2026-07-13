@@ -68,6 +68,16 @@ RUN uv pip install --no-cache-dir --no-deps -e "."
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 
+# Create non-root user and lock down agent source code.
+# The anakot runtime user can read/traverse but NEVER write to /app.
+# Only /data (the Railway volume) is writable.
+RUN adduser --disabled-password --gecos "" anakot && \
+    chown -R root:root /app && \
+    chmod -R 555 /app && \
+    chmod -R 755 /app/.venv && \
+    mkdir -p /data && \
+    chown anakot:anakot /data
+
 # Railway mounts a volume at /data for persistence; anakot uses it for config,
 # sessions, logs, and skills. Override ANAKOT_HOME env var for ephemeral mode.
 ENV ANAKOT_HOME=/data
@@ -77,5 +87,7 @@ EXPOSE ${PORT:-8080}
 
 COPY railway/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+USER anakot
 
 ENTRYPOINT ["/entrypoint.sh"]
