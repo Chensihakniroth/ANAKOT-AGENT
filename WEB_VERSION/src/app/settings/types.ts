@@ -12,6 +12,8 @@ export interface SettingsPageProps {
   onClose: () => void
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void
+  /** Email of the currently authenticated user, used to gate admin-only tabs */
+  userEmail?: string
 }
 
 export interface ProviderGroup {

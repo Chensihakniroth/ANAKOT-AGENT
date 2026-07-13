@@ -36,7 +36,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'about'
 ]
 
-export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged }: SettingsPageProps) {
+export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged, userEmail }: SettingsPageProps) {
   const { t } = useI18n()
   const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, 'config:model' as SettingsViewId)
   // Providers subnav (Accounts vs API keys) lives in its own param so each
@@ -55,6 +55,16 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
   }
 
   const importInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Admin gating — hide Model, Advanced and Providers tabs from normal users.
+  // Set ANAKOT_ADMIN_EMAIL env var on the server to your email to unlock them.
+  const adminEmail = typeof window !== 'undefined'
+    ? (window as unknown as Record<string, unknown>).__ANAKOT_ADMIN_EMAIL__
+    : ''
+  const isAdmin = !adminEmail || (!!userEmail && userEmail === adminEmail)
+  const visibleSections = isAdmin
+    ? SECTIONS
+    : SECTIONS.filter(s => s.id !== 'model' && s.id !== 'advanced')
 
   const exportConfig = async () => {
     try {
@@ -103,7 +113,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
     <OverlayView closeLabel={t.settings.closeSettings} onClose={onClose}>
       <OverlaySplitLayout>
         <OverlaySidebar>
-          {SECTIONS.map(s => {
+          {visibleSections.map(s => {
             const view = `config:${s.id}` as SettingsViewId
 
             return (
@@ -117,29 +127,33 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             )
           })}
           <div className="my-2 h-px bg-border/30" />
-          <OverlayNavItem
-            active={activeView === 'providers'}
-            icon={Zap}
-            label={t.settings.nav.providers}
-            onClick={() => setActiveView('providers')}
-          />
-          {activeView === 'providers' && (
-            <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
+          {isAdmin && (
+            <>
               <OverlayNavItem
-                active={providerView === 'accounts'}
-                icon={Sparkles}
-                label={t.settings.nav.providerAccounts}
-                nested
-                onClick={() => openProviderView('accounts')}
+                active={activeView === 'providers'}
+                icon={Zap}
+                label={t.settings.nav.providers}
+                onClick={() => setActiveView('providers')}
               />
-              <OverlayNavItem
-                active={providerView === 'keys'}
-                icon={KeyRound}
-                label={t.settings.nav.providerApiKeys}
-                nested
-                onClick={() => openProviderView('keys')}
-              />
-            </div>
+              {activeView === 'providers' && (
+                <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
+                  <OverlayNavItem
+                    active={providerView === 'accounts'}
+                    icon={Sparkles}
+                    label={t.settings.nav.providerAccounts}
+                    nested
+                    onClick={() => openProviderView('accounts')}
+                  />
+                  <OverlayNavItem
+                    active={providerView === 'keys'}
+                    icon={KeyRound}
+                    label={t.settings.nav.providerApiKeys}
+                    nested
+                    onClick={() => openProviderView('keys')}
+                  />
+                </div>
+              )}
+            </>
           )}
           <OverlayNavItem
             active={activeView === 'gateway'}

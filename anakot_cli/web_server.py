@@ -8964,11 +8964,13 @@ def mount_spa(application: FastAPI):
         gated = bool(getattr(app.state, "auth_required", False))
         gated_js = "true" if gated else "false"
         if gated:
+            admin_email = os.environ.get("ANAKOT_ADMIN_EMAIL", "")
             bootstrap_script = (
                 f"<script>"
                 f"window.__ANAKOT_DASHBOARD_EMBEDDED_CHAT__={chat_js};"
                 f'window.__ANAKOT_BASE_PATH__="{prefix}";'
                 f"window.__ANAKOT_AUTH_REQUIRED__={gated_js};"
+                f'window.__ANAKOT_ADMIN_EMAIL__="{admin_email}";'
                 f"</script>"
             )
         else:
