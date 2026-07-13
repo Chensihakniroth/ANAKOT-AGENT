@@ -8099,6 +8099,16 @@ async def update_config_raw(body: RawConfigUpdate, request: Request):
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}")
 
 
+@app.get("/api/admin/users")
+async def admin_list_users(request: Request):
+    """Return all {user_id -> metadata} for the admin management UI.
+    Admin-only. Returns every registered user with their role.
+    """
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_metadata import list_all_users
+    return {"users": list_all_users()}
+
+
 # ---------------------------------------------------------------------------
 # Token / cost analytics endpoint
 # ---------------------------------------------------------------------------

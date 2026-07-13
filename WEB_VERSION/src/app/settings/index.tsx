@@ -158,42 +158,50 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             label={t.settings.nav.gateway}
             onClick={() => setActiveView('gateway')}
           />
-          <OverlayNavItem
-            active={activeView === 'keys'}
-            icon={KeyRound}
-            label={t.settings.nav.apiKeys}
-            onClick={() => setActiveView('keys')}
-          />
-          {activeView === 'keys' && (
-            <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
+          {isAdmin && (
+            <>
               <OverlayNavItem
-                active={keysView === 'tools'}
-                icon={Wrench}
-                label={t.settings.nav.keysTools}
-                nested
-                onClick={() => openKeysView('tools')}
+                active={activeView === 'keys'}
+                icon={KeyRound}
+                label={t.settings.nav.apiKeys}
+                onClick={() => setActiveView('keys')}
               />
-              <OverlayNavItem
-                active={keysView === 'settings'}
-                icon={Settings2}
-                label={t.settings.nav.keysSettings}
-                nested
-                onClick={() => openKeysView('settings')}
-              />
-            </div>
+              {activeView === 'keys' && (
+                <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
+                  <OverlayNavItem
+                    active={keysView === 'tools'}
+                    icon={Wrench}
+                    label={t.settings.nav.keysTools}
+                    nested
+                    onClick={() => openKeysView('tools')}
+                  />
+                  <OverlayNavItem
+                    active={keysView === 'settings'}
+                    icon={Settings2}
+                    label={t.settings.nav.keysSettings}
+                    nested
+                    onClick={() => openKeysView('settings')}
+                  />
+                </div>
+              )}
+            </>
           )}
-          <OverlayNavItem
-            active={activeView === 'mcp'}
-            icon={Wrench}
-            label={t.settings.nav.mcp}
-            onClick={() => setActiveView('mcp')}
-          />
-          <OverlayNavItem
-            active={activeView === 'toolsets'}
-            icon={Wrench}
-            label={t.settings.nav.toolsets ?? 'Tool Backends'}
-            onClick={() => setActiveView('toolsets')}
-          />
+          {isAdmin && (
+            <OverlayNavItem
+              active={activeView === 'mcp'}
+              icon={Wrench}
+              label={t.settings.nav.mcp}
+              onClick={() => setActiveView('mcp')}
+            />
+          )}
+          {isAdmin && (
+            <OverlayNavItem
+              active={activeView === 'toolsets'}
+              icon={Wrench}
+              label={t.settings.nav.toolsets ?? 'Tool Backends'}
+              onClick={() => setActiveView('toolsets')}
+            />
+          )}
           <OverlayNavItem
             active={activeView === 'sessions'}
             icon={Archive}
@@ -263,11 +271,11 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             />
           ) : activeView === 'providers' ? (
             <ProvidersSettings onViewChange={setProviderView} view={providerView} />
-          ) : activeView === 'keys' ? (
+          ) : isAdmin && activeView === 'keys' ? (
             <KeysSettings view={keysView} />
-          ) : activeView === 'toolsets' ? (
+          ) : isAdmin && activeView === 'toolsets' ? (
             <ToolsetsSettings />
-          ) : activeView === 'mcp' ? (
+          ) : isAdmin && activeView === 'mcp' ? (
             <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
           ) : (
             <SessionsSettings />
