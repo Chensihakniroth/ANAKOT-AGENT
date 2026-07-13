@@ -96,7 +96,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
     } catch {
       // Ignore — the redirect response may cause a fetch error
     }
-    window.location.href = '/login'
+    window.location.href = '/'
   }
 
   return (

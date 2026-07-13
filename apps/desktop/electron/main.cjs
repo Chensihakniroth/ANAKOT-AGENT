@@ -4632,6 +4632,7 @@ async function spawnPoolBackend(profile, entry) {
       ...process.env,
       ANAKOT_HOME,
       ...backend.env,
+      ANAKOT_AUTH_REQUIRED: 'false',
       ANAKOT_DASHBOARD_SESSION_TOKEN: token,
       ANAKOT_WEB_DIST: webDist
     },
@@ -4781,6 +4782,10 @@ async function startAnakot() {
         // directories. install.ps1 sets ANAKOT_HOME via setx; the desktop
         // can't reliably do that, so we set it inline for every spawn.
         ANAKOT_HOME,
+        // Force auth off for the desktop's local backend. The auth gate
+        // (should_require_auth) normally skips auth for loopback hosts, but
+        // this env override guarantees it regardless of host binding or flags.
+        ANAKOT_AUTH_REQUIRED: 'false',
         ...backend.env,
         ANAKOT_DASHBOARD_SESSION_TOKEN: token,
         ANAKOT_WEB_DIST: webDist
