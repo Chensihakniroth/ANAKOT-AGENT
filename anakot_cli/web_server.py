@@ -239,6 +239,67 @@ def _require_token(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def _get_session_user_id(request: Request) -> str | None:
+    """Return the current user's ID from auth state, or None in loopback mode."""
+    if not getattr(request.app.state, "auth_required", False):
+        return None
+    sess = getattr(request.state, "session", None)
+    return sess.user_id if sess else None
+
+
+def _user_metadata(user_id: str | None) -> dict:
+    """Return per-user metadata dict, or empty dict when user_id is None."""
+    if user_id is None:
+        return {}
+    from anakot_cli.dashboard_auth.user_metadata import get_metadata
+    return get_metadata(user_id)
+
+
+def _user_allowed_mcp(request: Request) -> list[str] | None:
+    """Return the list of MCP server names this user is allowed to see,
+    or None if no restriction (user sees all configured MCP servers).
+    Returns None in loopback mode or when the field is absent.
+    """
+    uid = _get_session_user_id(request)
+    meta = _user_metadata(uid)
+    raw = meta.get("allowed_mcp")
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return [str(n) for n in raw]
+    return None
+
+
+def _mcp_is_allowed(name: str, request: Request) -> bool:
+    """True if the MCP server *name* is allowed for the current user."""
+    allowed = _user_allowed_mcp(request)
+    if allowed is None:
+        return True  # no restriction
+    return name in allowed
+
+
+def _user_allowed_toolsets(request: Request) -> list[str] | None:
+    """Return the list of toolset names this user may use,
+    or None if unrestricted.
+    """
+    uid = _get_session_user_id(request)
+    meta = _user_metadata(uid)
+    raw = meta.get("allowed_toolsets")
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return [str(n) for n in raw]
+    return None
+
+
+def _toolset_is_allowed(name: str, request: Request) -> bool:
+    """True if the toolset *name* is allowed for the current user."""
+    allowed = _user_allowed_toolsets(request)
+    if allowed is None:
+        return True
+    return name in allowed
+
+
 # Accepted Host header values for loopback binds. DNS rebinding attacks
 # point a victim browser at an attacker-controlled hostname (evil.test)
 # which resolves to 127.0.0.1 after a TTL flip — bypassing same-origin
@@ -6002,13 +6063,15 @@ def _mcp_server_summary(name: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @app.get("/api/mcp/servers")
-async def list_mcp_servers():
+async def list_mcp_servers(request: Request):
+    _user_allowed_mcp(request)
     from anakot_cli.mcp_config import _get_mcp_servers
 
     servers = _get_mcp_servers()
     return {
         "servers": [
             _mcp_server_summary(name, cfg) for name, cfg in sorted(servers.items())
+            if _mcp_is_allowed(name, request)
         ]
     }
 
@@ -7806,7 +7869,7 @@ async def toggle_skill(body: SkillToggle):
 
 
 @app.get("/api/tools/toolsets")
-async def get_toolsets():
+async def get_toolsets(request: Request):
     from anakot_cli.tools_config import (
         _get_effective_configurable_toolsets,
         _get_platform_tools,
@@ -7823,6 +7886,8 @@ async def get_toolsets():
     )
     result = []
     for name, label, desc in _get_effective_configurable_toolsets():
+        if not _toolset_is_allowed(name, request):
+            continue
         try:
             tools = sorted(set(resolve_toolset(name)))
         except Exception:
@@ -8146,6 +8211,38 @@ async def admin_delete_user(user_id: str, request: Request):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="User not found")
     return {"ok": True, "user_id": user_id, "deleted": True}
+
+
+class _UserGrantsBody(BaseModel):
+    allowed_mcp: list[str] | None = None
+    allowed_toolsets: list[str] | None = None
+
+
+@app.post("/api/admin/users/{user_id}/grants")
+async def admin_set_user_grants(user_id: str, body: _UserGrantsBody, request: Request):
+    """Set per-user MCP/tool grants. Admin only.
+    Pass null for a field to remove the restriction (user sees all).
+    """
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_metadata import update_user_metadata
+
+    set_fields = {}
+    remove_fields = []
+    if body.allowed_mcp is not None:
+        set_fields["allowed_mcp"] = body.allowed_mcp
+    else:
+        remove_fields.append("allowed_mcp")
+    if body.allowed_toolsets is not None:
+        set_fields["allowed_toolsets"] = body.allowed_toolsets
+    else:
+        remove_fields.append("allowed_toolsets")
+
+    entry = update_user_metadata(
+        user_id,
+        set_fields=set_fields or None,
+        remove_fields=remove_fields or None,
+    )
+    return {"ok": True, "user_id": user_id, "metadata": entry}
 
 
 # ---------------------------------------------------------------------------

@@ -156,3 +156,24 @@ def delete_user(user_id: str) -> bool:
         shutil.rmtree(profile_dir, ignore_errors=True)
 
     return existed
+
+
+def update_user_metadata(user_id: str, *, set_fields: dict | None = None, remove_fields: list[str] | None = None) -> dict:
+    """Atomically update a user's metadata entry.
+
+    Sets or removes named fields under ``_LOCK`` and returns the
+    complete entry after the mutation.
+    """
+    with _LOCK:
+        all_meta = _load_all()
+        if user_id not in all_meta:
+            all_meta[user_id] = {}
+        entry = all_meta[user_id]
+        if set_fields:
+            entry.update(set_fields)
+        if remove_fields:
+            for k in remove_fields:
+                entry.pop(k, None)
+        _save_all(all_meta)
+        _CACHE = all_meta
+    return dict(entry)
