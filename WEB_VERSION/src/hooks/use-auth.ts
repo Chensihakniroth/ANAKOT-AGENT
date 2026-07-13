@@ -14,6 +14,7 @@ export interface AuthSession {
   org_id?: string
   provider: string
   expires_at: number
+  is_admin?: boolean
 }
 
 export interface AuthState {

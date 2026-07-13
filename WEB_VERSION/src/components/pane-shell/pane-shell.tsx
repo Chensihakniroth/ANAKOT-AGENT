@@ -181,7 +181,7 @@ export function PaneShell({ children, className, style }: PaneShellProps) {
 
   return (
     <PaneShellContext.Provider value={{ mainColumn: ctxValue.mainColumn, paneById: ctxValue.paneById }}>
-      <div className={cn('relative grid h-full min-h-0', className)} style={composedStyle}>
+      <div className={cn('relative grid h-full min-h-0', className)} data-pane-shell="true" style={composedStyle}>
         {children}
       </div>
     </PaneShellContext.Provider>

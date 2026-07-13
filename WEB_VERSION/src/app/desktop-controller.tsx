@@ -709,7 +709,7 @@ export function DesktopController() {
               void refreshCurrentModel()
               void queryClient.invalidateQueries({ queryKey: ['model-options'] })
             }}
-            userEmail={authUser?.email}
+            user={authUser}
           />
         </Suspense>
       )}

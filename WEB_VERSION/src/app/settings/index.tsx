@@ -36,7 +36,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'about'
 ]
 
-export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged, userEmail }: SettingsPageProps) {
+export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged, user }: SettingsPageProps) {
   const { t } = useI18n()
   const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, 'config:model' as SettingsViewId)
   // Providers subnav (Accounts vs API keys) lives in its own param so each
@@ -57,11 +57,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
   const importInputRef = useRef<HTMLInputElement | null>(null)
 
   // Admin gating — hide Model, Advanced and Providers tabs from normal users.
-  // Set ANAKOT_ADMIN_EMAIL env var on the server to your email to unlock them.
-  const adminEmail = typeof window !== 'undefined'
-    ? (window as unknown as Record<string, unknown>).__ANAKOT_ADMIN_EMAIL__
-    : ''
-  const isAdmin = !adminEmail || (!!userEmail && userEmail === adminEmail)
+  // The `is_admin` field comes from the auth session (/api/auth/me).
+  const isAdmin = user?.is_admin ?? false
   const visibleSections = isAdmin
     ? SECTIONS
     : SECTIONS.filter(s => s.id !== 'model' && s.id !== 'advanced')

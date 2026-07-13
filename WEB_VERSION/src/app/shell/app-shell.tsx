@@ -4,7 +4,8 @@ import { type ReactNode } from 'react'
 import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
 import { SidebarProvider } from '@/components/ui/sidebar'
-import { $sidebarOpen, setSidebarOpen } from '@/store/layout'
+import { PanelLeftIcon } from '@/lib/icons'
+import { $sidebarOpen, setSidebarOpen, toggleSidebarOpen } from '@/store/layout'
 import { $connection } from '@/store/session'
 
 import { KeybindPanel } from './keybind-panel'
@@ -43,7 +44,7 @@ export function AppShell({
         <div className="flex min-h-0 flex-1 flex-row">
           {/* Activity Bar — fixed width icon rail */}
           {activityBar && (
-            <div className="relative z-10 shrink-0" style={{ width: '48px' }}>
+            <div className="appshell-activitybar relative z-10 shrink-0" style={{ width: '48px' }}>
               {activityBar}
             </div>
           )}
@@ -63,6 +64,16 @@ export function AppShell({
       {overlays}
 
       <KeybindPanel />
+
+      {/* Mobile floating sidebar toggle */}
+      <button
+        aria-label="Toggle sidebar"
+        className="mobile-sidebar-toggle"
+        onClick={toggleSidebarOpen}
+        type="button"
+      >
+        <PanelLeftIcon />
+      </button>
 
       <NotificationStack />
     </SidebarProvider>

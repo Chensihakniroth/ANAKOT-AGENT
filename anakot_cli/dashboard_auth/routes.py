@@ -38,6 +38,11 @@ from anakot_cli.dashboard_auth import (
     get_provider,
     list_providers,
 )
+from anakot_cli.dashboard_auth.user_metadata import (
+    is_admin as _is_admin_user,
+    list_all_users as _list_all_users_meta,
+    set_user_role as _set_user_role_meta,
+)
 from anakot_cli.dashboard_auth.audit import AuditEvent, audit_log
 from anakot_cli.dashboard_auth.base import (
     InvalidCodeError,
@@ -564,6 +569,17 @@ async def api_auth_me(request: Request):
     sess = getattr(request.state, "session", None)
     if sess is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    import os
+
+    is_admin = _is_admin_user(sess.user_id)
+    # Migration fallback: if ANAKOT_ADMIN_EMAIL is set and matches,
+    # treat as admin even without user-metadata.json entry.
+    if not is_admin and sess.email:
+        admin_email_env = os.environ.get("ANAKOT_ADMIN_EMAIL", "")
+        if sess.email == admin_email_env:
+            is_admin = True
+
     return {
         "user_id": sess.user_id,
         "email": sess.email,
@@ -571,6 +587,7 @@ async def api_auth_me(request: Request):
         "org_id": sess.org_id,
         "provider": sess.provider,
         "expires_at": sess.expires_at,
+        "is_admin": is_admin,
     }
 
 
@@ -741,7 +758,53 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
         sess.user_id, profile_name, display_name,
     )
 
+    # Auto-assign admin to the very first user
+    existing_users = _list_all_users_meta()
+    if not existing_users:
+        _set_user_role_meta(sess.user_id, "admin")
+        _log.info("First user %r auto-promoted to admin", sess.user_id)
+
     return {"ok": True, "profile": profile_name, "needs_onboarding": False}
+
+
+# ---------------------------------------------------------------------------
+# Auth-required: set user role (admin management)
+# ---------------------------------------------------------------------------
+
+
+class _SetRoleBody(BaseModel):
+    """POST body for ``/api/auth/set-role``."""
+
+    user_id: str
+    role: str  # "admin" or "user"
+
+
+@router.post("/api/auth/set-role", name="auth_set_role")
+async def api_auth_set_role(request: Request, body: _SetRoleBody):
+    """Set a user's role. Only existing admins can call this."""
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if not _is_admin_user(sess.user_id):
+        raise HTTPException(status_code=403, detail="Forbidden: admin role required")
+
+    if body.role not in ("admin", "user"):
+        raise HTTPException(status_code=400, detail="Role must be 'admin' or 'user'")
+
+    try:
+        _set_user_role_meta(body.user_id, body.role)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    audit_log(
+        AuditEvent.USER_ROLE_CHANGED,
+        actor=sess.user_id,
+        target=body.user_id,
+        new_role=body.role,
+    )
+
+    return {"ok": True, "user_id": body.user_id, "role": body.role}
 
 
 def _resolve_global_home() -> Path:

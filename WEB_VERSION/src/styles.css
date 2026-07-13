@@ -1383,4 +1383,121 @@ canvas {
   word-spacing: normal;
 }
 
+/* ---------------------------------------------------------------------------
+ * Mobile responsive layout overrides
+ *
+ * Below 768px (Tailwind `max-md:`) the desktop 3-pane grid collapses to
+ * single-column full-width layout. Sidebar & preview panes are hidden —
+ * they remain interactable via keyboard shortcut (Cmd+B) or the sidebar
+ * Sheet overlay. Activity bar and status bar are hidden to save vertical
+ * and horizontal real-estate.
+ * --------------------------------------------------------------------------- */
+
+@media (max-width: 767.98px) {
+  /* — PaneShell collapses to a single column (hide sidebar + preview panes) */
+  [data-pane-shell] {
+    grid-template-columns: 1fr !important;
+  }
+
+  [data-pane-shell] [data-pane-id] {
+    display: none !important;
+  }
+
+  [data-pane-shell] [data-pane-main] {
+    grid-column: 1 !important;
+  }
+
+  /* — Activity bar: hidden (48px vertical strip wasted on mobile) */
+  .appshell-activitybar {
+    display: none !important;
+  }
+
+  /* — Status bar: hidden (20px vertical strip wasted on mobile) */
+  .appshell-statusbar {
+    display: none !important;
+  }
+
+  /* — Overlay split layout: sidebar becomes a horizontal scrollable tab strip */
+  .overlay-split-sidebar {
+    grid-column: 1 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    gap: 0.25rem !important;
+    padding: 0.5rem !important;
+    min-height: auto !important;
+    max-height: none !important;
+    max-width: 100vw !important;
+    scrollbar-width: none !important;
+  }
+
+  .overlay-split-sidebar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .overlay-split-sidebar .overlay-nav-item {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .overlay-split-layout > .overlay-split-main {
+    grid-column: 1 !important;
+  }
+
+  /* — Mobile floating sidebar toggle button */
+  .mobile-sidebar-toggle {
+    display: flex !important;
+  }
+
+  /* — Larger touch targets for chat composer on mobile */
+  [data-slot="composer-root"] [data-slot="rich-input"] {
+    min-height: 44px !important;
+    font-size: 16px !important; /* prevents iOS zoom on focus */
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  [data-slot="composer-root"] [role="textbox"] {
+    min-height: 44px !important;
+    font-size: 16px !important;
+  }
+
+  [data-slot="composer-root"] button {
+    min-height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  /* — Hide desktop sidebar toggle rail on mobile */
+  [data-sidebar="rail"] {
+    display: none !important;
+  }
+}
+
+/* Mobile sidebar toggle button — hidden by default, shown at breakpoint above */
+.mobile-sidebar-toggle {
+  display: none;
+  position: fixed;
+  left: 0.5rem;
+  bottom: 1rem;
+  z-index: 40;
+  height: 2.75rem;
+  width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--dt-primary);
+  color: var(--dt-primary-foreground);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.mobile-sidebar-toggle:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
 

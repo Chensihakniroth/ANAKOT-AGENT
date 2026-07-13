@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { AnakotGateway } from '@/anakot'
 import type { IconComponent } from '@/lib/icons'
 import type { EnvVarInfo } from '@/types/anakot'
+import type { AuthSession } from '@/hooks/use-auth'
 
 export type SettingsView = 'about' | 'gateway' | 'keys' | 'mcp' | 'pets' | 'providers' | 'sessions' | 'toolsets' | `config:${string}`
 export type EnvPatch = Partial<Pick<EnvVarInfo, 'is_set' | 'redacted_value'>>
@@ -12,8 +13,8 @@ export interface SettingsPageProps {
   onClose: () => void
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void
-  /** Email of the currently authenticated user, used to gate admin-only tabs */
-  userEmail?: string
+  /** Current auth user info — used for admin gating */
+  user?: AuthSession | null
 }
 
 export interface ProviderGroup {
