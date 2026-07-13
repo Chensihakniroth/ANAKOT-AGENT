@@ -53,7 +53,6 @@ from anakot_cli.dashboard_auth.cookies import (
     set_pkce_cookie,
     set_session_cookies,
 )
-from anakot_cli.dashboard_auth import _validate_post_login_target, list_providers
 
 _log = logging.getLogger(__name__)
 
