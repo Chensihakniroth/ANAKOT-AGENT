@@ -213,6 +213,26 @@ def _has_valid_session_token(request: Request) -> bool:
     return hmac.compare_digest(auth.encode(), expected.encode())
 
 
+def _require_admin(request: Request) -> None:
+    """Raise 403 Forbidden unless the request is from an admin user.
+
+    No-op when ``auth_required`` is False (loopback mode — there's no
+    session and admin checks don't apply).  When auth is active the
+    caller MUST be an admin; regular users get a 403 JSON response.
+    """
+    if not getattr(request.app.state, "auth_required", False):
+        return  # Loopback mode — nothing to enforce
+    sess = getattr(request.state, "session", None)
+    if sess is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    from anakot_cli.dashboard_auth.user_metadata import is_admin
+    if not is_admin(sess.user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: admin role required",
+        )
+
+
 def _require_token(request: Request) -> None:
     """Validate the ephemeral session token.  Raises 401 on mismatch."""
     if not _has_valid_session_token(request):
@@ -1044,7 +1064,8 @@ async def run_dump():
 
 
 @app.post("/api/ops/config-migrate")
-async def run_config_migrate():
+async def run_config_migrate(request: Request):
+    _require_admin(request)
     try:
         proc = _spawn_anakot_action(["config", "migrate"], "config-migrate")
     except Exception as exc:
@@ -2508,7 +2529,8 @@ def _denormalize_config_from_web(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @app.put("/api/config")
-async def update_config(body: ConfigUpdate):
+async def update_config(body: ConfigUpdate, request: Request):
+    _require_admin(request)
     try:
         save_config(_denormalize_config_from_web(body.config))
         return {"ok": True}
@@ -2542,7 +2564,8 @@ async def get_env_vars():
 
 
 @app.put("/api/env")
-async def set_env_var(body: EnvVarUpdate):
+async def set_env_var(body: EnvVarUpdate, request: Request):
+    _require_admin(request)
     try:
         save_env_value(body.key, body.value)
         return {"ok": True, "key": body.key}
@@ -2606,7 +2629,7 @@ async def validate_provider_credential(body: EnvVarUpdate, request: Request):
     reachable=False means the network probe couldn't run (caller may save with
     a warning rather than hard-blocking offline users).
     """
-    _require_token(request)
+    _require_admin(request)
     import httpx
 
     key = (body.key or "").strip()
@@ -2792,7 +2815,8 @@ async def proxy_chat_completions(request: Request):
 
 
 @app.delete("/api/env")
-async def remove_env_var(body: EnvVarDelete):
+async def remove_env_var(body: EnvVarDelete, request: Request):
+    _require_admin(request)
     try:
         removed = remove_env_value(body.key)
         if not removed:
@@ -2812,6 +2836,7 @@ async def remove_env_var(body: EnvVarDelete):
 
 @app.post("/api/env/reveal")
 async def reveal_env_var(body: EnvVarReveal, request: Request):
+    _require_admin(request)
     """Return the real (unredacted) value of a single env var.
 
     Protected by:
@@ -4198,8 +4223,8 @@ async def list_oauth_providers():
 
 @app.delete("/api/providers/oauth/{provider_id}")
 async def disconnect_oauth_provider(provider_id: str, request: Request):
-    """Disconnect an OAuth provider. Token-protected (matches /env/reveal)."""
-    _require_token(request)
+    """Disconnect an OAuth provider. Admin only."""
+    _require_admin(request)
 
     valid_ids = {p["id"] for p in _OAUTH_PROVIDER_CATALOG}
     if provider_id not in valid_ids:
@@ -5989,7 +6014,8 @@ async def list_mcp_servers():
 
 
 @app.post("/api/mcp/servers")
-async def add_mcp_server(body: MCPServerCreate):
+async def add_mcp_server(body: MCPServerCreate, request: Request):
+    _require_admin(request)
     from anakot_cli.mcp_config import _get_mcp_servers, _save_mcp_server
 
     name = (body.name or "").strip()
@@ -6025,7 +6051,8 @@ async def add_mcp_server(body: MCPServerCreate):
 
 
 @app.delete("/api/mcp/servers/{name}")
-async def remove_mcp_server(name: str):
+async def remove_mcp_server(name: str, request: Request):
+    _require_admin(request)
     from anakot_cli.mcp_config import _remove_mcp_server
 
     if not _remove_mcp_server(name):
@@ -6063,7 +6090,8 @@ class MCPEnabledToggle(BaseModel):
 
 
 @app.put("/api/mcp/servers/{name}/enabled")
-async def set_mcp_server_enabled(name: str, body: MCPEnabledToggle):
+async def set_mcp_server_enabled(name: str, body: MCPEnabledToggle, request: Request):
+    _require_admin(request)
     """Enable or disable an MCP server (takes effect on next session/gateway).
 
     Toggles the ``enabled`` key on the server's config.yaml entry — the same
@@ -6137,7 +6165,8 @@ class MCPCatalogInstall(BaseModel):
 
 
 @app.post("/api/mcp/catalog/install")
-async def install_mcp_catalog_entry(body: MCPCatalogInstall):
+async def install_mcp_catalog_entry(body: MCPCatalogInstall, request: Request):
+    _require_admin(request)
     """Install a catalog MCP into config.yaml.
 
     For HTTP/stdio entries with required env vars, those are written to .env
@@ -6531,8 +6560,9 @@ async def add_credential_pool_entry(body: CredentialPoolAdd):
 
 
 @app.delete("/api/credentials/pool/{provider}/{index}")
-async def remove_credential_pool_entry(provider: str, index: int):
+async def remove_credential_pool_entry(provider: str, index: int, request: Request):
     """Remove a pool entry.  ``index`` is 1-based (matches the list response)."""
+    _require_admin(request)
     from agent.credential_pool import load_pool
 
     provider = (provider or "").strip().lower()
@@ -7815,7 +7845,8 @@ class ToolsetToggle(BaseModel):
 
 
 @app.put("/api/tools/toolsets/{name}")
-async def toggle_toolset(name: str, body: ToolsetToggle):
+async def toggle_toolset(name: str, body: ToolsetToggle, request: Request):
+    _require_admin(request)
     """Enable/disable a configurable toolset for the desktop (cli) platform.
 
     Persists to ``platform_toolsets.cli`` via the same ``_save_platform_tools``
@@ -8056,7 +8087,8 @@ async def get_config_raw():
 
 
 @app.put("/api/config/raw")
-async def update_config_raw(body: RawConfigUpdate):
+async def update_config_raw(body: RawConfigUpdate, request: Request):
+    _require_admin(request)
     try:
         parsed = yaml.safe_load(body.yaml_text)
         if not isinstance(parsed, dict):
