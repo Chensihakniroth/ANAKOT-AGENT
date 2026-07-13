@@ -18,6 +18,7 @@ The routes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import threading
@@ -28,6 +29,11 @@ from typing import Any, Deque, Dict, Tuple
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
+
+# Imported at module level (not deferred) so cold-import cost is paid at
+# server startup, not on the first onboard request.  create_profile is
+# called via run_in_executor to avoid blocking the ASGI event loop.
+from anakot_cli.profiles import create_profile
 
 from anakot_cli.dashboard_auth import (
     get_provider,
@@ -727,11 +733,15 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
             counter += 1
         profile_name = f"{base}-{counter}"
 
-    # Create the profile in-process (more reliable than subprocess on Railway)
-    from anakot_cli.profiles import create_profile
-
+    # Create the profile in-process (more reliable than subprocess on Railway).
+    # Run in a thread executor to avoid blocking the ASGI event loop.
     try:
-        create_profile(name=profile_name, no_alias=True, no_skills=False)
+        await asyncio.to_thread(
+            create_profile,
+            name=profile_name,
+            no_alias=True,
+            no_skills=False,
+        )
     except (ValueError, FileExistsError, FileNotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
