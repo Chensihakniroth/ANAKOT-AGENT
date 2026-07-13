@@ -311,6 +311,25 @@ async def gated_auth_middleware(
         return response
 
     request.state.session = session
+
+    # Reject disabled users — they authenticated OK but their account
+    # has been deactivated by an admin. Return 401 so the SPA shows
+    # an appropriate message rather than silently failing on every
+    # subsequent request.
+    from anakot_cli.dashboard_auth.user_metadata import is_user_disabled
+    if is_user_disabled(session.user_id):
+        audit_log(
+            AuditEvent.LOGIN_FAILURE,
+            provider=session.provider,
+            user_id=session.user_id,
+            reason="account_disabled",
+            ip=_client_ip(request),
+        )
+        return JSONResponse(
+            {"error": "account_disabled", "detail": "Account has been disabled"},
+            status_code=401,
+        )
+
     return await call_next(request)
 
 

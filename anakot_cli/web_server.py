@@ -8109,6 +8109,45 @@ async def admin_list_users(request: Request):
     return {"users": list_all_users()}
 
 
+@app.post("/api/admin/users/{user_id}/disable")
+async def admin_disable_user(user_id: str, request: Request):
+    """Disable a user account. Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_metadata import set_user_disabled
+    from anakot_cli.dashboard_auth.user_metadata import is_user_disabled
+
+    if is_user_disabled(user_id):
+        return {"ok": True, "user_id": user_id, "disabled": True, "already": True}
+    set_user_disabled(user_id, True)
+    return {"ok": True, "user_id": user_id, "disabled": True}
+
+
+@app.post("/api/admin/users/{user_id}/enable")
+async def admin_enable_user(user_id: str, request: Request):
+    """Re-enable a user account. Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_metadata import set_user_disabled
+    from anakot_cli.dashboard_auth.user_metadata import is_user_disabled
+
+    if not is_user_disabled(user_id):
+        return {"ok": True, "user_id": user_id, "disabled": False, "already": True}
+    set_user_disabled(user_id, False)
+    return {"ok": True, "user_id": user_id, "disabled": False}
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, request: Request):
+    """Delete a user account and all their data. Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_metadata import delete_user
+
+    existed = delete_user(user_id)
+    if not existed:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"ok": True, "user_id": user_id, "deleted": True}
+
+
 # ---------------------------------------------------------------------------
 # Token / cost analytics endpoint
 # ---------------------------------------------------------------------------

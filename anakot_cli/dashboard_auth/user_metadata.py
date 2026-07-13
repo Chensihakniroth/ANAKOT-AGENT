@@ -105,3 +105,54 @@ def get_metadata(user_id: str) -> dict:
 def list_all_users() -> dict[str, dict]:
     """Return all {user_id → metadata} for admin management UI."""
     return dict(_load_all())
+
+
+def set_user_disabled(user_id: str, disabled: bool) -> None:
+    """Set the disabled flag for *user_id*."""
+    with _LOCK:
+        all_meta = _load_all()
+        if user_id not in all_meta:
+            all_meta[user_id] = {}
+        all_meta[user_id]["disabled"] = disabled
+        _save_all(all_meta)
+        _CACHE = all_meta
+
+
+def is_user_disabled(user_id: str) -> bool:
+    """Return True if *user_id* has been disabled."""
+    meta = _load_all().get(user_id, {})
+    return bool(meta.get("disabled", False))
+
+
+def delete_user(user_id: str) -> bool:
+    """Remove *user_id* from the metadata store entirely.
+
+    Also removes the user→profile mapping and the profile directory.
+    Returns True if the user existed, False otherwise.
+    """
+    from anakot_cli.dashboard_auth.user_profiles import (
+        remove_profile_for_user,
+    )
+    from pathlib import Path
+    from anakot_constants import get_anakot_home
+
+    existed = False
+    with _LOCK:
+        all_meta = _load_all()
+        if user_id in all_meta:
+            del all_meta[user_id]
+            existed = True
+            _save_all(all_meta)
+            _CACHE = all_meta
+
+    # Remove profile mapping
+    remove_profile_for_user(user_id)
+
+    # Attempt to remove the profile data directory
+    home = get_anakot_home()
+    profile_dir = home.parent / "profiles" / user_id if home.parent.name == "profiles" else home / user_id
+    if profile_dir.exists():
+        import shutil
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    return existed
