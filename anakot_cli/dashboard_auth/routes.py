@@ -736,12 +736,18 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
     # Create the profile in-process (more reliable than subprocess on Railway).
     # Run in a thread executor to avoid blocking the ASGI event loop.
     try:
-        await asyncio.to_thread(
-            create_profile,
-            name=profile_name,
-            no_alias=True,
-            no_skills=False,
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                create_profile,
+                name=profile_name,
+                no_alias=True,
+                no_skills=False,
+            ),
+            timeout=20,
         )
+    except asyncio.TimeoutError:
+        _log.error("Profile creation timed out for %r", profile_name)
+        raise HTTPException(status_code=500, detail="Profile creation timed out, please try again")
     except (ValueError, FileExistsError, FileNotFoundError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
