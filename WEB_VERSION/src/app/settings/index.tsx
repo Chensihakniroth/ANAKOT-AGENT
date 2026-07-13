@@ -5,7 +5,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { getAnakotConfigDefaults, getAnakotConfigRecord, saveAnakotConfig } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Globe, Info, KeyRound, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
+import { Archive, Globe, Info, KeyRound, LogOut, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -84,6 +84,19 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
     } catch (err) {
       notifyError(err, t.settings.resetFailed)
     }
+  }
+
+  const handleLogout = async () => {
+    if (!window.confirm('Are you sure you want to sign out?')) {
+      return
+    }
+    triggerHaptic('warning')
+    try {
+      await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // Ignore — the redirect response may cause a fetch error
+    }
+    window.location.href = '/login'
   }
 
   return (
@@ -183,6 +196,15 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             label={t.settings.nav.about}
             onClick={() => setActiveView('about')}
           />
+          <div className="mb-1 mt-2 h-px bg-border/30" />
+          <button
+            className="flex h-7 w-full items-center justify-start gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-[length:var(--conversation-text-font-size)] font-normal text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => void handleLogout()}
+            type="button"
+          >
+            <LogOut className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">Sign out</span>
+          </button>
           <div className="mt-auto flex items-center gap-1 pt-2">
             <Tip label={t.settings.exportConfig}>
               <OverlayIconButton onClick={() => void exportConfig()}>
