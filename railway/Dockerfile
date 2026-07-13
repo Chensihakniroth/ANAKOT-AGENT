@@ -76,7 +76,7 @@ RUN adduser --disabled-password --gecos "" anakot && \
     chmod -R 555 /app && \
     chmod -R 755 /app/.venv && \
     mkdir -p /data && \
-    chown anakot:anakot /data
+    chmod 777 /data
 
 # Railway mounts a volume at /data for persistence; anakot uses it for config,
 # sessions, logs, and skills. Override ANAKOT_HOME env var for ephemeral mode.
