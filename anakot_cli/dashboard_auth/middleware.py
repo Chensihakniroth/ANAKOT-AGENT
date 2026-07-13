@@ -42,7 +42,6 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/auth/logout",
     "/login",
     "/api/auth/providers",
-    "/",  # SPA root — the React app handles its own auth gating
     "/assets/",
     "/favicon.ico",
     "/ds-assets/",
@@ -65,6 +64,12 @@ def _path_is_public(path: str) -> bool:
       ``/assets/``.
     """
     if path in PUBLIC_API_PATHS:
+        return True
+    # SPA root — the React app handles its own auth gating.
+    # Exact match only: prefix-matching "/" would make EVERY path
+    # public, defeating the gate and causing every /api/auth/me
+    # check to return 401 because request.state.session is never set.
+    if path == "/":
         return True
     return any(
         path == prefix or path.startswith(prefix)
