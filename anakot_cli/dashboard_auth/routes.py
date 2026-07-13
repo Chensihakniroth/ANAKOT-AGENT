@@ -727,28 +727,16 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
             counter += 1
         profile_name = f"{base}-{counter}"
 
-    # Create the profile via subprocess
-    import subprocess
-    import sys
+    # Create the profile in-process (more reliable than subprocess on Railway)
+    from anakot_cli.profiles import create_profile
 
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "anakot_cli", "profile", "create", profile_name],
-            capture_output=True, text=True, timeout=30,
-        )
-        if result.returncode != 0:
-            _log.error(
-                "Failed to create profile %r: %s",
-                profile_name, result.stderr.strip(),
-            )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to create profile: {result.stderr.strip() or 'unknown error'}",
-            )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=500, detail="Profile creation timed out")
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="anakot CLI not found")
+        create_profile(name=profile_name, no_alias=True, no_skills=False)
+    except (ValueError, FileExistsError, FileNotFoundError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        _log.exception("Failed to create profile %r", profile_name)
+        raise HTTPException(status_code=500, detail="Failed to create profile")
 
     # Persist the mapping
     set_profile_for_user(sess.user_id, profile_name)
