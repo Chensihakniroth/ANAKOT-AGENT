@@ -17,7 +17,7 @@ from anakot_constants import get_anakot_home
 
 _log = logging.getLogger(__name__)
 
-_USER_PROFILES_LOCK = threading.Lock()
+_USER_PROFILES_LOCK = threading.RLock()
 _USER_PROFILES_CACHE: dict[str, str] | None = None  # None = not loaded
 
 
