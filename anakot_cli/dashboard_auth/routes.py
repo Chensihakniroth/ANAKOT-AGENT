@@ -644,13 +644,22 @@ async def api_auth_profile_for_user(request: Request):
     if sess is None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user, has_profile_for_user
+    from anakot_cli.dashboard_auth.user_profiles import (
+        get_user_profiles,
+        get_profile_for_user,
+        has_profile_for_user,
+    )
 
     if has_profile_for_user(sess.user_id):
         profile = get_profile_for_user(sess.user_id)
-        return {"profile": profile, "needs_onboarding": False}
+        entry = get_user_profiles(sess.user_id)
+        return {
+            "profile": profile,
+            "profiles": entry.get("profiles", [profile]) if entry else [profile],
+            "needs_onboarding": False,
+        }
 
-    return {"profile": None, "needs_onboarding": True}
+    return {"profile": None, "profiles": [], "needs_onboarding": True}
 
 
 # ---------------------------------------------------------------------------

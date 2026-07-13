@@ -8245,6 +8245,65 @@ async def admin_set_user_grants(user_id: str, body: _UserGrantsBody, request: Re
     return {"ok": True, "user_id": user_id, "metadata": entry}
 
 
+class _AddProfileBody(BaseModel):
+    profile_name: str
+
+
+@app.post("/api/admin/users/{user_id}/profiles")
+async def admin_add_user_profile(user_id: str, body: _AddProfileBody, request: Request):
+    """Add a profile name to a user's available profiles.  Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_profiles import add_profile_for_user
+
+    added = add_profile_for_user(user_id, body.profile_name)
+    return {"ok": True, "user_id": user_id, "profile_name": body.profile_name, "created": added}
+
+
+class _SwitchProfileBody(BaseModel):
+    profile_name: str
+
+
+@app.post("/api/admin/users/{user_id}/profiles/switch")
+async def admin_switch_user_profile(user_id: str, body: _SwitchProfileBody, request: Request):
+    """Switch a user's active profile.  Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_profiles import switch_profile_for_user
+
+    ok = switch_profile_for_user(user_id, body.profile_name)
+    if not ok:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Profile not found or user has no profiles")
+    return {"ok": True, "user_id": user_id, "active_profile": body.profile_name}
+
+
+@app.delete("/api/admin/users/{user_id}/profiles/{profile_name}")
+async def admin_remove_user_profile(user_id: str, profile_name: str, request: Request):
+    """Remove a profile from a user.  Admin only.
+    Will not remove the user's last profile (use DELETE /api/admin/users/{user_id} instead).
+    """
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_profiles import remove_user_profile
+
+    ok = remove_user_profile(user_id, profile_name)
+    if not ok:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Cannot remove profile (last remaining or not found)")
+    return {"ok": True, "user_id": user_id, "profile_name": profile_name, "removed": True}
+
+
+@app.get("/api/admin/users/{user_id}/profiles")
+async def admin_list_user_profiles(user_id: str, request: Request):
+    """List all profiles for a user.  Admin only."""
+    _require_admin(request)
+    from anakot_cli.dashboard_auth.user_profiles import get_user_profiles
+
+    entry = get_user_profiles(user_id)
+    if not entry:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user_id": user_id, **entry}
+
+
 # ---------------------------------------------------------------------------
 # Token / cost analytics endpoint
 # ---------------------------------------------------------------------------
