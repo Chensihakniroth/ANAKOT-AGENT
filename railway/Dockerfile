@@ -88,6 +88,6 @@ EXPOSE ${PORT:-8080}
 COPY railway/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-USER anakot
+USER root
 
 ENTRYPOINT ["/entrypoint.sh"]
