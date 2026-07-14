@@ -2045,6 +2045,17 @@ def _normalize_config_for_web(config: Dict[str, Any]) -> Dict[str, Any]:
         config["model_context_length"] = ctx_len if isinstance(ctx_len, int) else 0
     else:
         config["model_context_length"] = 0
+    # Strip UI-only preferences that must be per-browser localStorage,
+    # never shared globally.  display.theme + display.skin are set by the
+    # desktop app via gateway config.set (for localStorage-survival) or by
+    # a user's general-settings full-config save.  On the web version every
+    # user must pick their own theme independently.
+    display = config.get("display")
+    if isinstance(display, dict):
+        display.pop("theme", None)
+        display.pop("skin", None)
+        if not display:
+            config.pop("display", None)
     return config
 
 
@@ -2553,6 +2564,15 @@ def _denormalize_config_from_web(config: Dict[str, Any]) -> Dict[str, Any]:
     # Remove any _model_meta that might have leaked in (shouldn't happen
     # with the stripped GET response, but be defensive)
     config.pop("_model_meta", None)
+
+    # Strip theme/skin from the incoming config so they are NEVER persisted
+    # globally.  Theme is a per-user UI preference owned by localStorage.
+    display = config.get("display")
+    if isinstance(display, dict):
+        display.pop("theme", None)
+        display.pop("skin", None)
+        if not display:
+            config.pop("display", None)
 
     # Extract and remove model_context_length before processing model
     ctx_override = config.pop("model_context_length", 0)
