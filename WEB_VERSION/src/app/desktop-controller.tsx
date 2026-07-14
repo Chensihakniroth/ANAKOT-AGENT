@@ -10,7 +10,7 @@ import { useGroupRegistry } from '@/app/shell/use-group-registry'
 
 import { GatewayOfflineDialog } from '@/components/gateway-offline-dialog'
 import { WebLandingPage } from '@/components/web-landing-page'
-import { OnboardingDialog } from '@/components/onboarding-dialog'
+import { BrandMark } from '@/components/brand-mark'
 import { useAuth } from '@/hooks/use-auth'
 import { api } from '@/lib/web-anakot-desktop'
 import { formatRefValue } from '../components/assistant-ui/directive-text'
@@ -880,18 +880,23 @@ export function DesktopController() {
     </Pane>
   )
 
-  // When auth is required + session exists + needs onboarding: onboarding dialog.
+  // When auth is required + session exists + needs onboarding:
+  // silently auto-onboard with a default profile instead of showing the dialog.
   if (authRequired && isAuthenticated && needsOnboarding) {
-    return (
-      <OnboardingDialog
-        userEmail={authUser?.email}
-        onComplete={(profileName) => {
-          setNeedsOnboarding(false)
-          // After onboarding, reload so the app picks up the new profile
-          window.location.reload()
-        }}
-      />
-    )
+    const defaultName = authUser?.email?.split('@')[0] || 'User'
+    api<{ ok: boolean; profile: string }>({
+      path: '/api/auth/onboard',
+      method: 'POST',
+      body: { display_name: defaultName },
+    })
+      .then(r => {
+        if (r.ok) window.location.reload()
+      })
+      .catch(() => {
+        // If auto-onboard fails, fall through to the main app anyway
+        setNeedsOnboarding(false)
+      })
+    return <div className="flex h-screen items-center justify-center text-sm text-muted-foreground">Setting up your profile…</div>
   }
 
   return (

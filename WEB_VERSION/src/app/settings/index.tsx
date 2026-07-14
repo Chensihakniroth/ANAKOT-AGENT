@@ -42,7 +42,6 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
 
 export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged, user }: SettingsPageProps) {
   const { t } = useI18n()
-  const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, 'config:model' as SettingsViewId)
   // Providers subnav (Accounts vs API keys) lives in its own param so each
   // sub-view is deep-linkable and survives a refresh.
   const [providerView, setProviderView] = useRouteEnumParam<ProviderView>('pview', PROVIDER_VIEWS, 'accounts')
@@ -66,6 +65,14 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
   const visibleSections = isAdmin
     ? SECTIONS
     : SECTIONS.filter(s => s.id !== 'model' && s.id !== 'advanced')
+
+  // Default to the first visible section for non-admin users,
+  // since 'config:model' is hidden from them.
+  const defaultTab: SettingsViewId = isAdmin
+    ? 'config:model'
+    : (`config:${visibleSections[0]?.id}` as SettingsViewId) || 'gateway'
+
+  const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, defaultTab)
 
   const exportConfig = async () => {
     try {
