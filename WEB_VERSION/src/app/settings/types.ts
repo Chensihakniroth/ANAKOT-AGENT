@@ -5,7 +5,7 @@ import type { IconComponent } from '@/lib/icons'
 import type { EnvVarInfo } from '@/types/anakot'
 import type { AuthSession } from '@/hooks/use-auth'
 
-export type SettingsView = 'about' | 'gateway' | 'keys' | 'mcp' | 'pets' | 'providers' | 'sessions' | 'toolsets' | `config:${string}`
+export type SettingsView = 'about' | 'gateway' | 'keys' | 'mcp' | 'pets' | 'providers' | 'sessions' | 'toolsets' | 'users' | 'grants' | `config:${string}`
 export type EnvPatch = Partial<Pick<EnvVarInfo, 'is_set' | 'redacted_value'>>
 
 export interface SettingsPageProps {

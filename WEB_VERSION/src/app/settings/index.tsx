@@ -5,7 +5,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { getAnakotConfigDefaults, getAnakotConfigRecord, saveAnakotConfig } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Globe, Info, KeyRound, LogOut, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
+import { Archive, Globe, Info, KeyRound, LogOut, Settings2, ShieldCheck, Sparkles, Users, Wrench, Zap } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -18,12 +18,14 @@ import { AppearanceSettings } from './appearance-settings'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
 import { GatewaySettings } from './gateway-settings'
+import { GrantsSettings } from './grants-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { McpSettings } from './mcp-settings'
 import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './providers-settings'
 import { SessionsSettings } from './sessions-settings'
 import { ToolsetsSettings } from './toolsets-settings'
 import type { SettingsPageProps, SettingsView as SettingsViewId } from './types'
+import { UsersSettings } from './users-settings'
 
 const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
@@ -32,6 +34,8 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'keys',
   'mcp',
   'toolsets',
+  'users',
+  'grants',
   'sessions',
   'about'
 ]
@@ -202,6 +206,23 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
               onClick={() => setActiveView('toolsets')}
             />
           )}
+          <div className="my-2 h-px bg-border/30" />
+          {isAdmin && (
+            <>
+              <OverlayNavItem
+                active={activeView === 'users'}
+                icon={Users}
+                label="Users"
+                onClick={() => setActiveView('users')}
+              />
+              <OverlayNavItem
+                active={activeView === 'grants'}
+                icon={ShieldCheck}
+                label="Grants"
+                onClick={() => setActiveView('grants')}
+              />
+            </>
+          )}
           <OverlayNavItem
             active={activeView === 'sessions'}
             icon={Archive}
@@ -277,6 +298,10 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <ToolsetsSettings />
           ) : isAdmin && activeView === 'mcp' ? (
             <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
+          ) : isAdmin && activeView === 'users' ? (
+            <UsersSettings />
+          ) : isAdmin && activeView === 'grants' ? (
+            <GrantsSettings />
           ) : (
             <SessionsSettings />
           )}
