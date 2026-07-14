@@ -26,6 +26,7 @@ import {
 } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { AlertTriangle, Pencil, Save, Terminal, Trash2, Users } from '@/lib/icons'
+import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 
@@ -46,6 +47,9 @@ interface ProfilesViewProps {
 export function ProfilesView({ onClose }: ProfilesViewProps) {
   const { t } = useI18n()
   const p = t.profiles
+  const { user: authUser, authRequired } = useAuth()
+  const isAdmin = authUser?.is_admin ?? false
+  const canCreateProfile = !authRequired || isAdmin
   const [profiles, setProfiles] = useState<null | ProfileInfo[]>(null)
   const [selectedName, setSelectedName] = useState<null | string>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -145,6 +149,7 @@ export function ProfilesView({ onClose }: ProfilesViewProps) {
       ) : (
         <OverlaySplitLayout>
           <OverlaySidebar>
+            {canCreateProfile && (
             <Button
               className="mb-1 w-full justify-start gap-2"
               onClick={() => setCreateOpen(true)}
@@ -154,6 +159,7 @@ export function ProfilesView({ onClose }: ProfilesViewProps) {
               <Codicon name="add" />
               {p.newProfile}
             </Button>
+            )}
             {profiles.map(profile => (
               <ProfileRow
                 active={selected?.name === profile.name}

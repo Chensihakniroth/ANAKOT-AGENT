@@ -101,8 +101,9 @@ export function ProfileRail() {
   const order = useStore($profileOrder)
   const colors = useStore($profileColors)
   const navigate = useNavigate()
-  const { user: authUser } = useAuth()
+  const { user: authUser, authRequired } = useAuth()
   const isAdmin = authUser?.is_admin ?? false
+  const canCreateProfile = !authRequired || isAdmin
 
   const [createOpen, setCreateOpen] = useState(false)
   const [pendingRename, setPendingRename] = useState<null | ProfileInfo>(null)
@@ -320,7 +321,7 @@ export function ProfileRail() {
         )}
 
         {/* Admins only: create profile button */}
-        {isAdmin && (
+        {canCreateProfile && (
         <Tip label={p.newProfile}>
           <button
             aria-label={p.newProfile}
