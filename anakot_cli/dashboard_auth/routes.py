@@ -659,6 +659,30 @@ async def api_auth_profile_for_user(request: Request):
             "needs_onboarding": False,
         }
 
+    # Fallback: if the mapping file was lost (e.g. Railway volume recreated) but
+    # a profile directory still exists, auto-recover the mapping.  Check the
+    # profiles directory for a dir matching the user's email prefix (the naming
+    # convention used during onboarding).
+    if sess.email:
+        from pathlib import Path
+        from anakot_constants import get_anakot_home
+
+        profiles_dir = get_anakot_home() / "profiles"
+        email_prefix = sess.email.split("@")[0].lower()
+        email_prefix_sanitized = re.sub(r"[^a-z0-9_-]", "", email_prefix.replace(" ", "-"))[:63]
+        if email_prefix_sanitized and profiles_dir.exists():
+            for child in profiles_dir.iterdir():
+                if child.is_dir() and child.name == email_prefix_sanitized:
+                    # Found a matching profile directory — auto-restore the mapping
+                    from anakot_cli.dashboard_auth.user_profiles import set_profile_for_user
+
+                    set_profile_for_user(sess.user_id, child.name)
+                    return {
+                        "profile": child.name,
+                        "profiles": [child.name],
+                        "needs_onboarding": False,
+                    }
+
     return {"profile": None, "profiles": [], "needs_onboarding": True}
 
 

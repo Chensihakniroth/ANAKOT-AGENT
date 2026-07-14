@@ -316,65 +316,34 @@ export function WebLandingPage({
   }
 
   // ── Render ──
-  return (authRequired ? !isAuthenticated : !dismissed) ? (
+  // Show nothing when:
+  //   1) Auth mode + already authenticated (user is in the app)
+  //   2) No-auth mode (hero landing page is removed — go straight to app)
+  return (isAuthMode && !isAuthenticated) ? (
     <div
       className="fixed inset-0 z-[1500] flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#011627' }}
     >
       <ShaderBackground className="pointer-events-none absolute inset-0" />
 
-      {isAuthMode ? (
-        /* ── Auth mode: clean centered card ── */
-        <div className="relative z-10 mx-auto w-full max-w-sm px-4">
-          <div className="rounded-2xl border border-white/[0.06] bg-[#0b2942]/60 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
-            <div className="flex flex-col items-center gap-5 mb-6">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-[#82aaff]/10">
-                <BrandMark className="size-7" />
-              </div>
-              <div className="text-center">
-                <h1 className="text-lg font-semibold text-[#d6deeb] m-0">Anakot Agent</h1>
-                <p className="text-sm text-[#637777] mt-1 m-0">Sign in to continue</p>
-              </div>
+      {/* ── Auth mode: clean centered card ── */}
+      <div className="relative z-10 mx-auto w-full max-w-sm px-4">
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0b2942]/60 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
+          <div className="flex flex-col items-center gap-5 mb-6">
+            <div className="flex size-12 items-center justify-center rounded-xl bg-[#82aaff]/10">
+              <BrandMark className="size-7" />
             </div>
-            <div className="min-h-[100px]">
-              {ctaSection}
+            <div className="text-center">
+              <h1 className="text-lg font-semibold text-[#d6deeb] m-0">Anakot Agent</h1>
+              <p className="text-sm text-[#637777] mt-1 m-0">Sign in to continue</p>
             </div>
-            <p className="text-xs text-center text-[#4a5a6a] mt-6 m-0">{footerText}</p>
           </div>
-        </div>
-      ) : (
-        /* ── No auth: full landing with hero, feature cards ── */
-        <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center gap-8 px-6 py-12">
-          <div className="flex flex-col items-center gap-5">
-            <div className="flex size-20 items-center justify-center rounded-2xl bg-white/10 shadow-lg shadow-black/20">
-              <BrandMark className="size-12" />
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">Anakot Agent</h1>
-            <p className="max-w-lg text-center text-base leading-relaxed text-white/60 sm:text-lg">
-              {'Your AI agent platform \u2014 chat, automate, and orchestrate from anywhere. ' +
-               'Open source, runs on your own infra.'}
-            </p>
-          </div>
-          <div className="flex flex-col items-center">
+          <div className="min-h-[100px]">
             {ctaSection}
           </div>
-          <div className="mt-4 grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-            {FEATURES.map(f => (
-              <div
-                key={f.title}
-                className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.08]"
-              >
-                <span className="mt-0.5 shrink-0 text-lg" aria-hidden="true">{f.icon}</span>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-white/85">{f.title}</h3>
-                  <p className="mt-0.5 text-xs leading-relaxed text-white/50">{f.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-white/30">{footerText}</p>
+          <p className="text-xs text-center text-[#4a5a6a] mt-6 m-0">{footerText}</p>
         </div>
-      )}
+      </div>
     </div>
   ) : null
 }
