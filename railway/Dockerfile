@@ -88,6 +88,9 @@ EXPOSE ${PORT:-8080}
 COPY railway/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-USER root
+# Switch to non-root user so the chmod 555 actually blocks writes.
+# Root bypasses all filesystem permissions — running as root makes
+# the read-only guard meaningless.
+USER anakot
 
 ENTRYPOINT ["/entrypoint.sh"]

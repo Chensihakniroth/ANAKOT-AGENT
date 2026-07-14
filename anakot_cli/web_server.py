@@ -10228,6 +10228,74 @@ app.include_router(_dashboard_auth_router)
 mount_spa(app)
 
 
+def _ensure_repo_readonly_for_web_server() -> None:
+    """Make the anakot-agent repo read-only at startup (web server).
+
+    Strips write bits from the repo so the AI agent cannot modify its
+    own source code via any path — shell commands, write_file, exec, etc.
+
+    Only works on Linux and when the process is NOT running as root
+    (root bypasses filesystem permissions).  Non-fatal: warns on failure.
+    """
+    if sys.platform == "win32":
+        return
+
+    # Find the repo root by walking up from cwd looking for pyproject.toml
+    try:
+        cwd = Path.cwd().resolve()
+        repo_root = None
+        for parent in [cwd] + list(cwd.parents):
+            pypath = parent / "pyproject.toml"
+            if pypath.is_file():
+                try:
+                    content = pypath.read_text(encoding="utf-8")
+                    if 'name = "anakot-agent"' in content:
+                        repo_root = parent
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        repo_root = None
+
+    if repo_root is None:
+        _log.warning(
+            "Cannot locate anakot-agent repo — skipping read-only guard. "
+            "Make sure the repo is mounted read-only in your deployment."
+        )
+        return
+
+    # Check if we're running as root — if so, chmod is meaningless
+    if os.geteuid() == 0:
+        _log.warning(
+            "Running as root — chmod 555 on %s would be bypassed by root "
+            "privileges. Switch to a non-root user in your Dockerfile.",
+            repo_root,
+        )
+        return
+
+    made_readonly = 0
+    failed = 0
+    for root, dirs, files in os.walk(repo_root):
+        for fname in files:
+            try:
+                os.chmod(os.path.join(root, fname), stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                made_readonly += 1
+            except PermissionError:
+                failed += 1
+        for dname in dirs:
+            dpath = os.path.join(root, dname)
+            try:
+                mode = os.stat(dpath).st_mode
+                os.chmod(dpath, mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+            except PermissionError:
+                failed += 1
+
+    _log.info(
+        "Repo %s set read-only (%d files, %d skips)",
+        repo_root, made_readonly, failed,
+    )
+
+
 def start_server(
     host: str = "127.0.0.1",
     port: int = 9119,
@@ -10348,6 +10416,12 @@ def start_server(
                 "Skipping browser-open: no DISPLAY or WAYLAND_DISPLAY detected "
                 "(headless Linux). Pass --no-open to suppress this detection."
             )
+
+    # ── Self-modification guard: make repo read-only ─────────────────────
+    # Strips write bits from the anakot-agent repo so the AI agent cannot
+    # modify its own source code, even through shell commands (rm, sed, git).
+    # Only effective when the process runs as a non-root user.
+    _ensure_repo_readonly_for_web_server()
 
     print(f"  Anakot Web UI → http://{host}:{port}")
     # proxy_headers defaults to False so _ws_client_is_allowed sees the real
