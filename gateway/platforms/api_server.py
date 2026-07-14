@@ -40,6 +40,8 @@ import os
 import socket as _socket
 import re
 import sqlite3
+import stat
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -4222,6 +4224,73 @@ class APIServerAdapter(BasePlatformAdapter):
     # BasePlatformAdapter interface
     # ------------------------------------------------------------------
 
+    def _ensure_repo_readonly(self) -> None:
+        """Make the anakot-agent repo root read-only at the OS level.
+
+        On Linux this uses ``os.chmod`` to strip write bits.  This is
+        the only layer that physically blocks ALL write attempts, including
+        terminal shell commands (``echo >``, ``sed -i``, ``git commit``).
+
+        Non-fatal: if the repo can't be located or chmod fails, we log
+        a warning and continue (defence-in-depth is still layered below
+        via the system-prompt guard and tool-level path guard).
+        """
+        if sys.platform == "win32":
+            return  # Windows DACLs don't map to Unix chmod cleanly
+
+        # Find the anakot-agent repo root by walking up from cwd looking
+        # for ``pyproject.toml`` that declares ``name = "anakot-agent"``.
+        try:
+            cwd = Path.cwd().resolve()
+            repo_root: Optional[Path] = None
+            for parent in [cwd] + list(cwd.parents):
+                pypath = parent / "pyproject.toml"
+                if pypath.is_file():
+                    try:
+                        content = pypath.read_text(encoding="utf-8")
+                        if 'name = "anakot-agent"' in content:
+                            repo_root = parent
+                            break
+                    except Exception:
+                        continue
+        except Exception:
+            repo_root = None
+
+        if repo_root is None:
+            logger.warning(
+                "[%s] Could not locate anakot-agent repo root — "
+                "skipping OS-level read-only enforcement. "
+                "See deployment docs for Docker mount alternatives.",
+                self.name,
+            )
+            return
+
+        made_readonly = 0
+        failed = 0
+        for root, dirs, files in os.walk(repo_root):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                try:
+                    os.chmod(fpath, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                    made_readonly += 1
+                except PermissionError:
+                    failed += 1
+            for dname in dirs:
+                dpath = os.path.join(root, dname)
+                try:
+                    # Strip write bits but keep execute (x) for traversal.
+                    mode = os.stat(dpath).st_mode
+                    os.chmod(dpath, mode & ~(
+                        stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH
+                    ))
+                except PermissionError:
+                    failed += 1
+
+        logger.info(
+            "[%s] Repo %s set read-only (%d files, %d chmod failures)",
+            self.name, repo_root, made_readonly, failed,
+        )
+
     async def connect(self) -> bool:
         """Start the aiohttp web server."""
         if not AIOHTTP_AVAILABLE:
@@ -4327,6 +4396,12 @@ class APIServerAdapter(BasePlatformAdapter):
                 return False
             except (ConnectionRefusedError, OSError):
                 pass  # port is free
+
+            # OS-level read-only enforcement — physically blocks ALL write
+            # attempts including terminal shell commands (echo >, sed, git).
+            # This is defense-in-depth: the tool-level guard blocks
+            # write_file/patch, but only fs permissions stop everything.
+            self._ensure_repo_readonly()
 
             self._runner = web.AppRunner(self._app)
             await self._runner.setup()
