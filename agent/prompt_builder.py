@@ -660,6 +660,39 @@ PLATFORM_HINTS = {
 }
 
 # ---------------------------------------------------------------------------
+# Web version self-modification guard
+# ---------------------------------------------------------------------------
+# Tells the AI to refuse requests that would modify its own source code
+# (the anakot-agent repo). Only applied when the platform is "api_server"
+# (the web version). The desktop version (platform="cli") does NOT get this
+# guard so users can freely develop the agent there.
+
+SELF_MODIFICATION_GUARD = (
+    "# Self-modification restriction\n"
+    "You are running in the Anakot Web UI. You MUST NOT modify, edit, patch, "
+    "write, delete, or suggest changes to the anakot-agent repository (your own "
+    "source code). This includes:\n"
+    "- Reading files in the anakot-agent repo to plan modifications\n"
+    "- Writing, patching, or deleting any file in the anakot-agent repo\n"
+    "- Executing terminal commands that create, modify, or delete files in the "
+    "anakot-agent repo\n"
+    "- Proposing code changes, diffs, or patches for the anakot-agent repo\n"
+    "- Running git operations (commit, branch, rebase, etc.) on the anakot-agent repo\n"
+    "\n"
+    "If the user asks you to modify your own source code or the anakot-agent "
+    "codebase, politely explain that you cannot modify your own source code "
+    "and refuse to proceed. Do not read the repo structure to plan "
+    "modifications, even as a first step — stop as soon as the user's request "
+    "mentions modifying the agent's own repo.\n"
+    "\n"
+    "This restriction ONLY applies to the anakot-agent repo itself. You may "
+    "still help with:\n"
+    "- Projects outside the anakot-agent directory\n"
+    "- General programming questions, debugging, and code reviews for other repos\n"
+    "- Configuration and usage of Anakot itself (settings, profiles, etc.)"
+)
+
+# ---------------------------------------------------------------------------
 # Environment hints — execution-environment awareness for the agent.
 # Unlike PLATFORM_HINTS (which describe the messaging channel), these describe
 # the machine/OS the agent's tools actually run on.

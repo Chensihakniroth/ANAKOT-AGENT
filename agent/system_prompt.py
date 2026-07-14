@@ -36,6 +36,7 @@ from agent.prompt_builder import (
     PLATFORM_HINTS,
     SESSION_SEARCH_GUIDANCE,
     SKILLS_GUIDANCE,
+    SELF_MODIFICATION_GUARD,
     STEER_CHANNEL_NOTE,
     TASK_COMPLETION_GUIDANCE,
     TOOL_USE_ENFORCEMENT_GUIDANCE,
@@ -284,6 +285,11 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
                 stable_parts.append(_entry.platform_hint)
         except Exception:
             pass
+
+    # Self-modification guard: only for the web version (api_server platform).
+    # The desktop version (cli) must remain unconstrained for development.
+    if platform_key == "api_server":
+        stable_parts.append(SELF_MODIFICATION_GUARD)
 
     # ── Context tier (cwd-dependent, may change between sessions) ─
     context_parts: List[str] = []
