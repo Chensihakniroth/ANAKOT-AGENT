@@ -786,6 +786,13 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
     # Persist the mapping
     set_profile_for_user(sess.user_id, profile_name)
 
+    # Seed the bundled factory skills into the new profile
+    from anakot_cli import profiles as profiles_mod
+    try:
+        profiles_mod.seed_profile_skills(profile_dir, quiet=True)
+    except Exception:
+        _log.exception("Failed to seed skills for profile %r", profile_name)
+
     # Symlink profile's config.yaml and .env to the global (admin-owned) files.
     # Every web user reads the admin's configuration (API keys, model providers,
     # tool settings) while only their skills/memory stay per-user. The symlink
