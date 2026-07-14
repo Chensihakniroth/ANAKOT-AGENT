@@ -72,6 +72,14 @@ for VAR in \
   fi
 done
 
+# ── Fix Railway volume ownership ────────────────────────────────────────────
+# Railway mounts a persistent volume at /data that is root-owned from earlier
+# deployments.  The bind mount overlays the Dockerfile layer, so chown/chmod
+# in the Dockerfile is silently lost.  We fix ownership at runtime — AFTER
+# seeding new config files — so both existing and freshly-created files are
+# accessible to the anakot server process.
+chown -R anakot:anakot "$ANAKOT_HOME"
+
 # ── Start the server ─────────────────────────────────────────────────────────
 # We call web_server's start_server() directly — same as `anakot dashboard`
 # would. open_browser=False because Railway is headless.
@@ -82,13 +90,12 @@ done
 # The entrypoint itself remains root to write to the Railway volume.
 echo "→ Starting Anakot Web UI on 0.0.0.0:${PORT}"
 
-# Write the server script to /tmp (avoid quoting nightmares with su -c)
+# Write the server launcher to a temp file to avoid nested-quote hell
 cat > /tmp/run_anakot_server.py << 'PYEOF'
 from anakot_cli.main import _sync_bundled_skills_quietly
 from anakot_cli.web_server import start_server
 import os
 
-# Seed bundled skills into ANAKOT_HOME/skills/ — same as anakot dashboard does
 _sync_bundled_skills_quietly()
 
 start_server(
@@ -100,5 +107,6 @@ start_server(
 PYEOF
 
 # Drop privileges: run as `anakot` so chmod 555 on /app is effective.
-exec su -s /bin/sh anakot -c \
+# -p preserves Railway env vars (PORT, API keys, etc.)
+exec su -p -s /bin/sh anakot -c \
   ". /app/.venv/bin/activate && exec python /tmp/run_anakot_server.py"

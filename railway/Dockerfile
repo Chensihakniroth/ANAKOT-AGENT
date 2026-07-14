@@ -88,10 +88,10 @@ EXPOSE ${PORT:-8080}
 COPY railway/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# The entrypoint runs as root so it can write to the Railway volume
-# at /data (which is root-owned due to an existing bind mount).
-# The entrypoint drops privileges to `anakot` before starting the
-# server — see the `exec su -s /bin/sh anakot` line.
+# The entrypoint runs as root so it can chown the Railway volume at
+# /data (root-owned from earlier deployments — bind mount overwrites
+# Dockerfile layer) and seed config files.  It then drops privileges
+# to `anakot` for the server so chmod 555 on /app is effective.
 USER root
 
 ENTRYPOINT ["/entrypoint.sh"]
