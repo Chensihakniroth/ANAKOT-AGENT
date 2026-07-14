@@ -1,19 +1,32 @@
 import { cn } from '@/lib/utils'
 
-const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
-
-// Brand badge: nous-girl mark on a white tile, identical in light/dark.
-// Fills the tile (softly rounded); size via className (default size-14).
+// Brand badge: "AK" monogram on a dark rounded tile.
+// Inline SVG — zero network requests, no file dependencies.
 export function BrandMark({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
       className={cn(
-        'inline-flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white',
+        'inline-flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md',
         className
       )}
       {...props}
     >
-      <img alt="" className="size-full object-contain" src={assetPath('callmemo-girl.jpg')} />
+      <svg viewBox="0 0 28 28" className="size-full" aria-hidden="true">
+        <rect width="28" height="28" rx="5" fill="#0f172a" />
+        <text
+          x="50%"
+          y="50%"
+          dominantBaseline="central"
+          textAnchor="middle"
+          fill="#82aaff"
+          fontSize="14"
+          fontWeight="700"
+          fontFamily="system-ui, sans-serif"
+          letterSpacing="-0.5"
+        >
+          AK
+        </text>
+      </svg>
     </span>
   )
 }
