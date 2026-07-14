@@ -7559,8 +7559,6 @@ async def list_profiles_endpoint(request: Request):
 
             entry = get_user_profiles(sess.user_id)
             allowed = set(entry.get("profiles", [])) if entry else set()
-            # Always allow the default profile (it belongs to no single user)
-            allowed.add("default")
             all_profiles = [p for p in all_profiles if p.get("name") in allowed]
 
     return {"profiles": all_profiles}

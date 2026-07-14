@@ -222,13 +222,13 @@ export function ProfileRail() {
           <ProfilePill active={isAll} glyph="layers" label={p.allProfiles} onSelect={() => setShowAllProfiles(true)} />
         ))}
 
-      {/* Single-profile: the active default's home icon next to the create +. */}
-      {!multiProfile && defaultProfile && (
+      {/* Single-profile: show the only profile (whether default or named). */}
+      {!multiProfile && profiles.length === 1 && (
         <ProfilePill
           active
           glyph="home"
-          label={defaultProfile.name}
-          onSelect={() => selectProfile(defaultProfile.name)}
+          label={profiles[0].name}
+          onSelect={() => selectProfile(profiles[0].name)}
         />
       )}
 
