@@ -316,7 +316,7 @@ export function WebLandingPage({
   }
 
   // ── Render ──
-  return (
+  return (authRequired ? !isAuthenticated : !dismissed) ? (
     <div
       className="fixed inset-0 z-[1500] flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#011627' }}
@@ -376,5 +376,5 @@ export function WebLandingPage({
         </div>
       )}
     </div>
-  )
+  ) : null
 }
