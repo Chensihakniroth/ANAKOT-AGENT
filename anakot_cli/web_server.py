@@ -7567,7 +7567,8 @@ async def list_profiles_endpoint(request: Request):
 
 
 @app.post("/api/profiles")
-async def create_profile_endpoint(body: ProfileCreate):
+async def create_profile_endpoint(body: ProfileCreate, request: Request):
+    _require_admin(request)
     from anakot_cli import profiles as profiles_mod
     explicit_source = (body.clone_from or "").strip()
     if explicit_source:

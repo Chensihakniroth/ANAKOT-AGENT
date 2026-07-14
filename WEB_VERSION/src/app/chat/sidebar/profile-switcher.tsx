@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAuth } from '@/hooks/use-auth'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { PROFILE_SWATCHES, profileColorSoft, resolveProfileColor } from '@/lib/profile-color'
@@ -100,6 +101,8 @@ export function ProfileRail() {
   const order = useStore($profileOrder)
   const colors = useStore($profileColors)
   const navigate = useNavigate()
+  const { user: authUser } = useAuth()
+  const isAdmin = authUser?.is_admin ?? false
 
   const [createOpen, setCreateOpen] = useState(false)
   const [pendingRename, setPendingRename] = useState<null | ProfileInfo>(null)
@@ -316,6 +319,8 @@ export function ProfileRail() {
           </DndContext>
         )}
 
+        {/* Admins only: create profile button */}
+        {isAdmin && (
         <Tip label={p.newProfile}>
           <button
             aria-label={p.newProfile}
@@ -326,9 +331,10 @@ export function ProfileRail() {
             <Codicon name="add" size="0.75rem" />
           </button>
         </Tip>
+        )}
       </div>
 
-      {multiProfile && (
+      {isAdmin && multiProfile && (
         <ProfilePill active={false} glyph="ellipsis" label={p.manageProfiles} onSelect={() => navigate(PROFILES_ROUTE)} />
       )}
 
