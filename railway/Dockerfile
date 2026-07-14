@@ -88,9 +88,10 @@ EXPOSE ${PORT:-8080}
 COPY railway/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Switch to non-root user so the chmod 555 actually blocks writes.
-# Root bypasses all filesystem permissions — running as root makes
-# the read-only guard meaningless.
-USER anakot
+# The entrypoint runs as root so it can write to the Railway volume
+# at /data (which is root-owned due to an existing bind mount).
+# The entrypoint drops privileges to `anakot` before starting the
+# server — see the `exec su -s /bin/sh anakot` line.
+USER root
 
 ENTRYPOINT ["/entrypoint.sh"]

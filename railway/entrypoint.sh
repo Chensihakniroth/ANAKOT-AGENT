@@ -76,19 +76,29 @@ done
 # We call web_server's start_server() directly — same as `anakot dashboard`
 # would. open_browser=False because Railway is headless.
 # allow_public=True skips the auth gate (Railway provides its own HTTPS).
+#
+# The server process runs as the `anakot` user (via su) so that the
+# chmod 555 on /app actually prevents the AI from modifying the repo.
+# The entrypoint itself remains root to write to the Railway volume.
 echo "→ Starting Anakot Web UI on 0.0.0.0:${PORT}"
 
-exec python -c "
+# Write the server script to /tmp (avoid quoting nightmares with su -c)
+cat > /tmp/run_anakot_server.py << 'PYEOF'
 from anakot_cli.main import _sync_bundled_skills_quietly
 from anakot_cli.web_server import start_server
+import os
 
 # Seed bundled skills into ANAKOT_HOME/skills/ — same as anakot dashboard does
 _sync_bundled_skills_quietly()
 
 start_server(
     host='0.0.0.0',
-    port=${PORT},
+    port=int(os.environ.get('PORT', 8080)),
     open_browser=False,
     allow_public=True,
 )
-"
+PYEOF
+
+# Drop privileges: run as `anakot` so chmod 555 on /app is effective.
+exec su -s /bin/sh anakot -c \
+  ". /app/.venv/bin/activate && exec python /tmp/run_anakot_server.py"
