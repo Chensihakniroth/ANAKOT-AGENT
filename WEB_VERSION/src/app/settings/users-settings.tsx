@@ -53,7 +53,7 @@ export function UsersSettings() {
     setError(null)
     try {
       const data = await api<UsersApiData>({ path: '/api/admin/users' })
-      setUsers(data.users ?? [])
+      setUsers(Array.isArray(data?.users) ? data.users : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users')
     } finally {

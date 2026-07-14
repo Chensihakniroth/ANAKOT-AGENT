@@ -14,6 +14,7 @@ import { useI18n } from '@/i18n'
 import { ShieldCheck } from '@/lib/icons'
 import { api } from '@/lib/web-anakot-desktop'
 import { notify, notifyError } from '@/store/notifications'
+import type { AnakotConfigRecord } from '@/types/anakot'
 
 import { EmptyState, LoadingState, SettingsContent, SettingsSection } from './primitives'
 
@@ -70,22 +71,34 @@ export function GrantsSettings() {
     setLoading(true)
     setError(null)
     try {
-      const [userData, mcpData, toolsetData] = await Promise.all([
+      const [userData, configData] = await Promise.all([
         api<{ users: UserMeta[] }>({ path: '/api/admin/users' }),
-        api<{ mcp_servers: Record<string, { transport: string }> }>({ path: '/api/mcp/list' }).catch(
-          () => ({ mcp_servers: {} }),
-        ),
-        api<ToolsetInfo[]>({ path: '/api/tools/toolsets' }).catch(() => [] as ToolsetInfo[]),
+        api<AnakotConfigRecord>({ path: '/api/config' }).catch(() => null),
       ])
 
-      setUsers(userData.users ?? [])
-      setMcpList(
-        Object.entries(mcpData.mcp_servers ?? {}).map(([name, srv]) => ({
-          name,
-          transport: srv.transport || 'stdio',
-        })),
-      )
-      setToolsetList(Array.isArray(toolsetData) ? toolsetData : [])
+      const usersArray = Array.isArray(userData?.users) ? userData.users : []
+      setUsers(usersArray)
+
+      // Extract MCP servers from full config
+      const mcpServers = (configData as any)?.mcp_servers
+      if (mcpServers && typeof mcpServers === 'object' && !Array.isArray(mcpServers)) {
+        setMcpList(
+          Object.entries(mcpServers).map(([name, srv]: [string, any]) => ({
+            name,
+            transport: srv.transport || 'stdio',
+          })),
+        )
+      } else {
+        setMcpList([])
+      }
+
+      // Available toolsets — extract from config
+      const toolsets = (configData as any)?.toolsets
+      if (Array.isArray(toolsets)) {
+        setToolsetList(toolsets.map((ts: any) => ({ name: typeof ts === 'string' ? ts : ts.name, enabled: true })))
+      } else {
+        setToolsetList([])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
@@ -172,7 +185,9 @@ export function GrantsSettings() {
     }
   }, [selectedUserId, restrictMcp, restrictToolsets, allowedMcp, allowedToolsets, loadAll])
 
-  const selectedUser = users.find(u => u.user_id === selectedUserId)
+  // Guard: users must always be an array
+  const usersSafe = Array.isArray(users) ? users : []
+  const selectedUser = usersSafe.find(u => u.user_id === selectedUserId)
 
   if (loading) {
     return <LoadingState label="Loading grants data…" />
@@ -190,7 +205,7 @@ export function GrantsSettings() {
     )
   }
 
-  if (users.length === 0) {
+  if (usersSafe.length === 0) {
     return (
       <SettingsContent>
         <EmptyState title="No users" description="No users have registered yet." />
@@ -213,7 +228,7 @@ export function GrantsSettings() {
               <SelectValue placeholder="— Choose a user —" />
             </SelectTrigger>
             <SelectContent>
-              {users.map(u => (
+              {usersSafe.map(u => (
                 <SelectItem key={u.user_id} value={u.user_id}>
                   {u.display_name || u.user_id}
                 </SelectItem>

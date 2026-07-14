@@ -8171,7 +8171,7 @@ async def admin_list_users(request: Request):
     """
     _require_admin(request)
     from anakot_cli.dashboard_auth.user_metadata import list_all_users
-    return {"users": list_all_users()}
+    return {"users": list(list_all_users().values())}
 
 
 @app.post("/api/admin/users/{user_id}/disable")
