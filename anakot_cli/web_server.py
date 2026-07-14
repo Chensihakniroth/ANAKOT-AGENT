@@ -7539,13 +7539,31 @@ def _write_profile_model(profile_dir: Path, provider: str, model: str) -> None:
 
 
 @app.get("/api/profiles")
-async def list_profiles_endpoint():
+async def list_profiles_endpoint(request: Request):
     from anakot_cli import profiles as profiles_mod
+
+    all_profiles = []
     try:
-        return {"profiles": [_profile_to_dict(p) for p in profiles_mod.list_profiles()]}
+        all_profiles = [_profile_to_dict(p) for p in profiles_mod.list_profiles()]
     except Exception:
         _log.exception("GET /api/profiles failed; falling back to profile directory scan")
-        return {"profiles": _fallback_profile_dicts(profiles_mod)}
+        all_profiles = _fallback_profile_dicts(profiles_mod)
+
+    # Gate: normal users only see profiles that belong to them.
+    # Admins see everything.
+    sess = getattr(request.state, "session", None)
+    if sess is not None and getattr(request.app.state, "auth_required", False):
+        from anakot_cli.dashboard_auth.user_metadata import is_admin
+        if not is_admin(sess.user_id):
+            from anakot_cli.dashboard_auth.user_profiles import get_user_profiles
+
+            entry = get_user_profiles(sess.user_id)
+            allowed = set(entry.get("profiles", [])) if entry else set()
+            # Always allow the default profile (it belongs to no single user)
+            allowed.add("default")
+            all_profiles = [p for p in all_profiles if p.get("name") in allowed]
+
+    return {"profiles": all_profiles}
 
 
 @app.post("/api/profiles")
