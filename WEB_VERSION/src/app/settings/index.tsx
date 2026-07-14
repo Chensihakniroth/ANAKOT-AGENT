@@ -64,7 +64,7 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
   const isAdmin = user?.is_admin ?? false
   const visibleSections = isAdmin
     ? SECTIONS
-    : SECTIONS.filter(s => s.id !== 'model' && s.id !== 'advanced')
+    : SECTIONS.filter(s => s.id !== 'model' && s.id !== 'advanced' && s.id !== 'memory')
 
   // Default to the first visible section for non-admin users,
   // since 'config:model' is hidden from them.
@@ -163,12 +163,14 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
               )}
             </>
           )}
+          {isAdmin && (
           <OverlayNavItem
             active={activeView === 'gateway'}
             icon={Globe}
             label={t.settings.nav.gateway}
             onClick={() => setActiveView('gateway')}
           />
+          )}
           {isAdmin && (
             <>
               <OverlayNavItem
