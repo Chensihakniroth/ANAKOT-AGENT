@@ -303,10 +303,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(MODE_KEY, next)
   }, [])
 
-  // Sync theme from backend config (config.yaml display.theme) — survives localStorage clears
-  const backendTheme = useBackendThemeName()
-  useSyncThemeFromBackend(backendTheme, setTheme)
-
   // The light/dark toggle (Shift+X by default) is owned by the keybind runtime
   // (`appearance.toggleMode`) so it shows up in the hotkey map and is rebindable.
 

@@ -1,7 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AnakotGateway } from '@/anakot'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { Button } from '@/components/ui/button'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -394,19 +393,11 @@ function BackgroundImageSettings() {
   )
 }
 
-export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null }) {
+export function AppearanceSettings() {
   const { t, isSavingLocale } = useI18n()
   const { themeName, mode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
   const a = t.settings.appearance
-
-  // Persist theme to config.yaml so it survives app restarts (localStorage may be cleared in dev)
-  const applyTheme = useCallback((name: string) => {
-    setTheme(name)
-    if (gateway) {
-      gateway.request('config.set', { key: 'display.theme', value: name }).catch(() => {})
-    }
-  }, [gateway, setTheme])
 
   const modeOptions = MODE_OPTIONS.map(({ id, icon }) => ({ icon, id, label: t.settings.modeOptions[id].label }))
 
@@ -461,7 +452,7 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
                         key={theme.name}
                         onClick={() => {
                           triggerHaptic('crisp')
-                          applyTheme(theme.name)
+                          setTheme(theme.name)
                         }}
                         type="button"
                       >
@@ -490,7 +481,7 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
                             triggerHaptic('selection')
                             unregisterCustomTheme(theme.name)
                             if (active) {
-                              applyTheme(DEFAULT_SKIN_NAME)
+                              setTheme(DEFAULT_SKIN_NAME)
                             }
                           }}
                           title="Delete installed theme"
