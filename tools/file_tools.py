@@ -355,6 +355,7 @@ def _check_cross_profile_path(filepath: str, task_id: str = "default") -> str | 
             get_container_mirror_warning,
             get_cross_profile_warning,
             get_sandbox_mirror_warning,
+            get_self_modification_warning,
         )
     except Exception:
         # Fail open on import error — the existing sensitive-path guard
@@ -370,6 +371,10 @@ def _check_cross_profile_path(filepath: str, task_id: str = "default") -> str | 
         resolved = filepath
 
     warning = get_cross_profile_warning(resolved)
+    if warning is not None:
+        return warning
+
+    warning = get_self_modification_warning(resolved)
     if warning is not None:
         return warning
 

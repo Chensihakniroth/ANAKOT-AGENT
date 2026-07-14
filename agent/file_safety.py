@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -637,4 +638,89 @@ def get_container_mirror_warning(
         f"explicit user direction, retry with ``cross_profile=True``. "
         f"(Defense-in-depth — not a security boundary; the terminal tool "
         f"can still bypass.)"
+)
+
+
+# ---------------------------------------------------------------------------
+# Self-modification guard — web version only
+# ---------------------------------------------------------------------------
+# The system prompt tells the AI not to modify its own repo. This is a
+# defence-in-depth tool-level guard that blocks write tools when the
+# target path is inside the anakot-agent repo AND the session is running
+# via the api_server platform (web version).
+
+_SELF_REPO_ROOT: Optional[str] = None
+_SELF_REPO_ROOT_LOCK = threading.Lock()
+
+
+def _resolve_self_repo_root() -> Optional[str]:
+    """Return the anakot-agent repo root path, or None.
+
+    Walks up from the current working directory looking for a
+    ``pyproject.toml`` that declares ``name = "anakot-agent"``.
+    Cached in a module-level variable after first resolution.
+    """
+    global _SELF_REPO_ROOT
+    if _SELF_REPO_ROOT is not None:
+        return _SELF_REPO_ROOT
+    with _SELF_REPO_ROOT_LOCK:
+        if _SELF_REPO_ROOT is not None:
+            return _SELF_REPO_ROOT
+        try:
+            cwd = Path.cwd().resolve()
+            for parent in [cwd] + list(cwd.parents):
+                pypath = parent / "pyproject.toml"
+                if pypath.is_file():
+                    try:
+                        content = pypath.read_text(encoding="utf-8")
+                        if 'name = "anakot-agent"' in content:
+                            _SELF_REPO_ROOT = str(parent)
+                            return _SELF_REPO_ROOT
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+        _SELF_REPO_ROOT = ""  # non-None sentinel so we don't retry
+        return None
+
+
+def get_self_modification_warning(path: str) -> Optional[str]:
+    """Return a warning when *path* targets the anakot-agent repo on web.
+
+    Only fires when the session platform is ``api_server`` (the web
+    version).  The desktop (cli) path is deliberately unguarded so users
+    can freely develop the agent there.
+
+    Returns ``None`` when the path is outside the repo, or we aren't on
+    the web platform.  The caller should surface the warning as a
+    tool-result error — it's a soft guard, same as cross-profile.
+    """
+    # Only apply on the web version.
+    try:
+        from gateway.session_context import get_session_env
+        platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
+    except Exception:
+        platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
+    if platform != "api_server":
+        return None
+
+    repo_root = _resolve_self_repo_root()
+    if not repo_root:
+        return None
+
+    try:
+        target = Path(os.path.expanduser(str(path))).resolve()
+    except (OSError, RuntimeError):
+        return None
+
+    try:
+        target.relative_to(Path(repo_root))
+    except ValueError:
+        return None
+
+    return (
+        f"Self-modification blocked: {path} is inside the anakot-agent "
+        f"repository (your own source code). You cannot modify your own "
+        f"source code via the web interface. Politely explain this to "
+        f"the user and refuse to proceed."
     )
