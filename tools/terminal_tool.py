@@ -258,7 +258,56 @@ from tools.approval import (
 
 
 def _check_all_guards(command: str, env_type: str) -> dict:
-    """Delegate to consolidated guard (tirith + dangerous cmd) with CLI callback."""
+    """Delegate to consolidated guard (tirith + dangerous cmd) with CLI callback.
+
+    Also checks self-modification: on the web version (api_server platform),
+    blocks terminal commands that reference the anakot-agent repo.
+    """
+    # Self-modification guard: block terminal commands that touch the
+    # anakot-agent repo on the web version.
+    try:
+        from gateway.session_context import get_session_env
+        _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
+    except Exception:
+        _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
+    if _platform == "api_server":
+        try:
+            from agent.file_safety import _resolve_self_repo_root
+            _repo_root = _resolve_self_repo_root()
+            if _repo_root:
+                _repo_str = str(Path(_repo_root).resolve())
+                # Check if the command references the repo path, or if the
+                # default terminal cwd is inside the repo.
+                _command_lower = command.lower()
+                if _repo_str.lower() in _command_lower:
+                    return {
+                        "approved": False,
+                        "message": (
+                            f"BLOCKED: This command references the anakot-agent "
+                            f"repository ({_repo_str}). You cannot modify or "
+                            f"inspect your own source code via the web interface. "
+                            f"Politely explain this to the user and refuse to proceed."
+                        ),
+                    }
+                # Also check if the default terminal cwd is inside the repo
+                _cwd = os.environ.get("TERMINAL_CWD", "") or ""
+                if _cwd:
+                    try:
+                        Path(_cwd).resolve().relative_to(Path(_repo_root).resolve())
+                        return {
+                            "approved": False,
+                            "message": (
+                                f"BLOCKED: The terminal is operating inside the "
+                                f"anakot-agent repository. You cannot work on your "
+                                f"own source code via the web interface. "
+                                f"Politely explain this to the user and refuse to proceed."
+                            ),
+                        }
+                    except ValueError:
+                        pass
+        except Exception:
+            pass
+
     return _check_all_guards_impl(command, env_type,
                                   approval_callback=_get_approval_callback())
 

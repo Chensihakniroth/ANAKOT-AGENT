@@ -1531,6 +1531,36 @@ def check_execute_code_guard(code: str, env_type: str) -> dict:
     trusted-by-config (set a gateway/ask surface or ``approvals.cron_mode`` to
     require approval).
     """
+    # Self-modification guard: block execute_code that touches the
+    # anakot-agent repo on the web version.
+    try:
+        from gateway.session_context import get_session_env as _gse
+        _platform = _gse("ANAKOT_SESSION_PLATFORM", "") or ""
+    except Exception:
+        _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
+    if _platform == "api_server":
+        try:
+            from agent.file_safety import _resolve_self_repo_root
+            _repo_root = _resolve_self_repo_root()
+            if _repo_root:
+                _repo_str = os.path.realpath(_repo_root).lower()
+                if _repo_str in code.lower():
+                    return {
+                        "approved": False,
+                        "message": (
+                            f"BLOCKED: This Python script references the anakot-agent "
+                            f"repository. You cannot modify or inspect your own source "
+                            f"code via the web interface. "
+                            f"Politely explain this to the user and refuse to proceed."
+                        ),
+                        "pattern_key": "self_modification",
+                        "description": "execute_code script targeting own repo",
+                        "outcome": "blocked",
+                        "user_consent": False,
+                    }
+        except Exception:
+            pass
+
     pattern_key = "execute_code"
     description = (
         "execute_code script execution. The script can spawn subprocesses or "
