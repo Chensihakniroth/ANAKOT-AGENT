@@ -6,6 +6,7 @@ import { $sessions, $sessionsLoading } from '@/store/session'
 import { searchSessions, type SessionSearchResult } from '@/anakot'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { sessionTitle } from '@/lib/chat-runtime'
 
 export function SearchPanel() {
   const { t } = useI18n()
@@ -87,7 +88,7 @@ export function SearchPanel() {
                 type="button"
               >
                 <Codicon name="symbol-file" size="0.75rem" className="shrink-0" />
-                <span className="truncate">{session.title || 'Untitled'}</span>
+                <span className="truncate">{sessionTitle(session)}</span>
               </button>
             ))}
             {serverMatches.map(match => (

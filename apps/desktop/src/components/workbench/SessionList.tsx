@@ -390,12 +390,12 @@ function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, rename
       onContextMenu={e => onContextMenu(e, session.id)}
       onDoubleClick={e => {
         e.preventDefault()
-        onDoubleClick(session.id, session.title || 'Untitled')
+        onDoubleClick(session.id, session.title?.trim() || session.preview?.trim() || 'Untitled')
       }}
       type="button"
     >
       <Codicon name="symbol-file" size="0.625rem" className="shrink-0" />
-      <span className="truncate">{session.title || 'Untitled'}</span>
+      <span className="truncate">{session.title?.trim() || session.preview?.trim() || 'Untitled'}</span>
       {session.preview != null && session.preview !== '' && (
         <p className="mt-0.5 line-clamp-2 text-[0.6rem] leading-tight text-muted-foreground/60">
           {session.preview}

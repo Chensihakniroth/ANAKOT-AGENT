@@ -1,4 +1,5 @@
 import { useStore } from '@nanostores/react'
+import { sessionTitle } from '@/lib/chat-runtime'
 import { Codicon } from '@/components/ui/codicon'
 import { $selectedStoredSessionId, $sessions, $currentModel, $activeSessionId } from '@/store/session'
 import { cn } from '@/lib/utils'
@@ -23,7 +24,7 @@ export function SessionTab() {
     >
       <Codicon name="symbol-file" size="0.625rem" className="text-muted-foreground" />
       <span className="max-w-[120px] truncate font-medium">
-        {session.title || 'Untitled'}
+        {sessionTitle(session)}
       </span>
       {model && (
         <span className="rounded-sm bg-(--bg-quaternary) px-1 py-0.5 text-[0.55rem] text-muted-foreground">
