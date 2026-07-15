@@ -1258,7 +1258,7 @@ def _spawn_anakot_action(subcommand: List[str], name: str) -> subprocess.Popen:
         "stdin": subprocess.DEVNULL,
         "stdout": log_file,
         "stderr": subprocess.STDOUT,
-        "env": {**os.environ, "ANAKOT_NONINTERACTIVE": "1", "ANAKOT_SESSION_PLATFORM": "web_server"},
+        "env": {**os.environ, "ANAKOT_NONINTERACTIVE": "1"},
     }
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = (

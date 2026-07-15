@@ -80,6 +80,9 @@ done
 # accessible to the anakot server process.
 chown -R anakot:anakot "$ANAKOT_HOME"
 
+# ── Tell guards this is the web version ──────────────────────────────────
+export ANAKOT_SESSION_PLATFORM="web_server"
+
 # ── Start the server ─────────────────────────────────────────────────────────
 # We call web_server's start_server() directly — same as `anakot dashboard`
 # would. open_browser=False because Railway is headless.
