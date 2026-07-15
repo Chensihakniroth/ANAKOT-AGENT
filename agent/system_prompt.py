@@ -103,6 +103,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # Pointer to the anakot-agent skill + docs for user questions about Anakot itself.
     stable_parts.append(ANAKOT_AGENT_HELP_GUIDANCE)
 
+    # Self-modification guard — must be early in the prompt for maximum impact.
+    # Tells the AI to IMMEDIATELY refuse any request to modify the anakot-agent
+    # repo. Only applied on the web version (api_server platform); the desktop
+    # (cli) stays unconstrained for development.
+    _platform_key = (agent.platform or "").lower().strip()
+    if _platform_key == "api_server":
+        stable_parts.append(SELF_MODIFICATION_GUARD)
+
     # Universal task-completion / no-fabrication guidance.  Applied to ALL
     # models regardless of tool_use_enforcement gating — the failure modes
     # this targets (stopping after a stub; fabricating output when a real
@@ -273,23 +281,17 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
             f"after explicit direction."
         )
 
-    platform_key = (agent.platform or "").lower().strip()
-    if platform_key in PLATFORM_HINTS:
-        stable_parts.append(PLATFORM_HINTS[platform_key])
-    elif platform_key:
+    if _platform_key in PLATFORM_HINTS:
+        stable_parts.append(PLATFORM_HINTS[_platform_key])
+    elif _platform_key:
         # Check plugin registry for platform-specific LLM guidance
         try:
             from gateway.platform_registry import platform_registry
-            _entry = platform_registry.get(platform_key)
+            _entry = platform_registry.get(_platform_key)
             if _entry and _entry.platform_hint:
                 stable_parts.append(_entry.platform_hint)
         except Exception:
             pass
-
-    # Self-modification guard: only for the web version (api_server platform).
-    # The desktop version (cli) must remain unconstrained for development.
-    if platform_key == "api_server":
-        stable_parts.append(SELF_MODIFICATION_GUARD)
 
     # ── Context tier (cwd-dependent, may change between sessions) ─
     context_parts: List[str] = []

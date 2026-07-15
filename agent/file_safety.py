@@ -306,6 +306,29 @@ def get_read_block_error(path: str) -> Optional[str]:
             "(Defense-in-depth — not a security boundary; the terminal tool can still bypass.)"
         )
 
+    # ── Self-modification guard: block reads to the anakot-agent repo ───
+    # on the web version (api_server platform). The desktop (cli) stays
+    # unconstrained. Same check as get_self_modification_warning but for reads.
+    try:
+        from gateway.session_context import get_session_env
+        _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
+    except Exception:
+        _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
+    if _platform == "api_server":
+        _repo_root = _resolve_self_repo_root()
+        if _repo_root:
+            try:
+                resolved.relative_to(Path(_repo_root))
+            except ValueError:
+                pass
+            else:
+                return (
+                    f"Access denied: {path} is inside the anakot-agent "
+                    "repository (your own source code). You cannot read or "
+                    "modify your own source code via the web interface. "
+                    "Politely explain this to the user and refuse to proceed."
+                )
+
     return None
 
 

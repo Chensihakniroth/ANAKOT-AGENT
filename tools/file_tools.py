@@ -1302,6 +1302,37 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
     try:
         offset, limit = normalize_search_pagination(offset, limit)
 
+        # ── Self-modification guard: block searches inside the anakot-agent repo ───
+        # on the web version (api_server platform). The desktop (cli) stays
+        # unconstrained.
+        try:
+            from gateway.session_context import get_session_env
+            _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
+        except Exception:
+            _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
+        if _platform == "api_server":
+            try:
+                from agent.file_safety import _resolve_self_repo_root
+                _repo_root = _resolve_self_repo_root()
+                if _repo_root:
+                    _resolved = Path(path).resolve()
+                    _resolved_repo = Path(_repo_root).resolve()
+                    try:
+                        _resolved.relative_to(_resolved_repo)
+                    except ValueError:
+                        pass
+                    else:
+                        return json.dumps({
+                            "error": (
+                                f"Access denied: '{path}' is inside the anakot-agent "
+                                "repository (your own source code). You cannot read or "
+                                "modify your own source code via the web interface. "
+                                "Politely explain this to the user and refuse to proceed."
+                            ),
+                        })
+            except Exception:
+                pass
+
         # Track searches to detect *consecutive* repeated search loops.
         # Include pagination args so users can page through truncated
         # results without tripping the repeated-search guard.

@@ -316,33 +316,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export const useTheme = (): ThemeContextValue => useContext(ThemeContext)
 
-/** Sync the desktop skin with the active Anakot backend theme on connect. */
-export function useSyncThemeFromBackend(backendThemeName: string | undefined, setTheme: (name: string) => void) {
-  useEffect(() => {
-    if (backendThemeName && (BUILTIN_THEMES[backendThemeName] || $customThemes.get()[backendThemeName])) {
-      setTheme(backendThemeName)
-    }
-  }, [backendThemeName, setTheme])
-}
 
-/** Read display.theme from the backend config so the theme survives localStorage clears. */
-function useBackendThemeName(): string | undefined {
-  const [theme, setTheme] = useState<string | undefined>(undefined)
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const { getAnakotConfig } = await import('@/anakot')
-        const cfg = await getAnakotConfig()
-        if (!cancelled && cfg.display?.theme && typeof cfg.display.theme === 'string') {
-          setTheme(cfg.display.theme)
-        }
-      } catch {
-        // Config read failed — fall back to localStorage
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-  return theme
-}
