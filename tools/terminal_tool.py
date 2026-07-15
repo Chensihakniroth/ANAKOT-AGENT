@@ -270,7 +270,7 @@ def _check_all_guards(command: str, env_type: str) -> dict:
         _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
     except Exception:
         _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
-    if _platform == "api_server":
+    if _platform in ("api_server", "web_server"):
         try:
             from agent.file_safety import _resolve_self_repo_root
             _repo_root = _resolve_self_repo_root()
@@ -1937,7 +1937,7 @@ def terminal_tool(
             from agent.file_safety import _resolve_self_repo_root
             from gateway.session_context import get_session_env as _sw_gse
             _sw_platform = _sw_gse("ANAKOT_SESSION_PLATFORM", "") or ""
-            if _sw_platform == "api_server":
+            if _sw_platform in ("api_server", "web_server"):
                 _sw_repo = _resolve_self_repo_root()
                 if _sw_repo:
                     _sw_cwd = str(Path(cwd).resolve())

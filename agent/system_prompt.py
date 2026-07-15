@@ -108,7 +108,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # repo. Only applied on the web version (api_server platform); the desktop
     # (cli) stays unconstrained for development.
     _platform_key = (agent.platform or "").lower().strip()
-    if _platform_key == "api_server":
+    if _platform_key in ("api_server", "web_server"):
         stable_parts.append(SELF_MODIFICATION_GUARD)
 
     # Universal task-completion / no-fabrication guidance.  Applied to ALL

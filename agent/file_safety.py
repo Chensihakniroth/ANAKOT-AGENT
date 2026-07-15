@@ -314,7 +314,7 @@ def get_read_block_error(path: str) -> Optional[str]:
         _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
     except Exception:
         _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
-    if _platform == "api_server":
+    if _platform in ("api_server", "web_server"):
         _repo_root = _resolve_self_repo_root()
         if _repo_root:
             try:
@@ -724,7 +724,7 @@ def get_self_modification_warning(path: str) -> Optional[str]:
         platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
     except Exception:
         platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
-    if platform != "api_server":
+    if platform not in ("api_server", "web_server"):
         return None
 
     repo_root = _resolve_self_repo_root()

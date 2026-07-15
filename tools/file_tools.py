@@ -1310,7 +1310,7 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
             _platform = get_session_env("ANAKOT_SESSION_PLATFORM", "") or ""
         except Exception:
             _platform = os.environ.get("ANAKOT_SESSION_PLATFORM", "") or ""
-        if _platform == "api_server":
+        if _platform in ("api_server", "web_server"):
             try:
                 from agent.file_safety import _resolve_self_repo_root
                 _repo_root = _resolve_self_repo_root()
