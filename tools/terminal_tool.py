@@ -1928,6 +1928,37 @@ def terminal_tool(
                     "status": "error",
                 }, ensure_ascii=False)
 
+        # Self-modification guard (web only): if the terminal's working
+        # directory is inside the anakot-agent repo, block ALL commands.
+        # This catches `pwd`, `git log`, `ls`, `find`, `grep` etc. that
+        # run inside the repo without explicitly naming its path.
+        # Unconditional — not bypassable by force=True.
+        try:
+            from agent.file_safety import _resolve_self_repo_root
+            from gateway.session_context import get_session_env as _sw_gse
+            _sw_platform = _sw_gse("ANAKOT_SESSION_PLATFORM", "") or ""
+            if _sw_platform == "api_server":
+                _sw_repo = _resolve_self_repo_root()
+                if _sw_repo:
+                    _sw_cwd = str(Path(cwd).resolve())
+                    _sw_repo_resolved = str(Path(_sw_repo).resolve())
+                    if _sw_cwd == _sw_repo_resolved or _sw_cwd.startswith(_sw_repo_resolved + os.sep):
+                        return json.dumps({
+                            "output": "",
+                            "exit_code": -1,
+                            "error": (
+                                "I cannot do that — the anakot-agent repository "
+                                "is off-limits in the web interface. I'm "
+                                "programmed to refuse all terminal commands "
+                                "that operate on my own source code. If you "
+                                "need to modify the agent, use the Desktop "
+                                "version instead."
+                            ),
+                            "status": "error",
+                        }, ensure_ascii=False)
+        except Exception:
+            pass
+
         # Start cleanup thread
         _start_cleanup_thread()
 
