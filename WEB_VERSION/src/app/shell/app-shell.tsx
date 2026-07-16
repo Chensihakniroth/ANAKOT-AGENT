@@ -4,6 +4,7 @@ import { type ReactNode } from 'react'
 import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
 import { SidebarProvider } from '@/components/ui/sidebar'
+import { useVisualViewport } from '@/hooks/use-visual-viewport'
 import { PanelLeftIcon } from '@/lib/icons'
 import { $sidebarOpen, setSidebarOpen, toggleSidebarOpen } from '@/store/layout'
 import { $connection } from '@/store/session'
@@ -31,11 +32,20 @@ export function AppShell({
   const sidebarOpen = useStore($sidebarOpen)
   const connection = useStore($connection)
 
+  const { vvHeight, keyboardOpen } = useVisualViewport()
+
+  // When the mobile keyboard opens, constrain the app to the visible viewport
+  // height.  The composer is `position: absolute; bottom: 0` and mobile
+  // browsers don't shrink `100dvh` / `100vh` when the keyboard appears, so
+  // the composer would hide behind the keyboard.
+  const shellHeight = keyboardOpen && vvHeight !== null ? `${vvHeight}px` : undefined
+
   return (
     <SidebarProvider
       className="h-screen min-h-0 flex-col bg-background"
       onOpenChange={setSidebarOpen}
       open={sidebarOpen}
+      style={shellHeight ? { height: shellHeight } : undefined}
     >
       <main
         className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none"
@@ -65,11 +75,13 @@ export function AppShell({
 
       <KeybindPanel />
 
-      {/* Mobile floating sidebar toggle */}
+      {/* Mobile floating sidebar toggle — hidden when keyboard is open so it
+          doesn't overlap the chat composer (bottom-left corner). */}
       <button
         aria-label="Toggle sidebar"
         className="mobile-sidebar-toggle"
         onClick={toggleSidebarOpen}
+        style={{ display: keyboardOpen ? 'none' : undefined }}
         type="button"
       >
         <PanelLeftIcon />
