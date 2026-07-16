@@ -63,9 +63,11 @@ export function ContextMenu({
           <ContextMenuItem disabled={!onPickFiles} icon={FileText} onSelect={onPickFiles}>
             {c.files}
           </ContextMenuItem>
-          <ContextMenuItem disabled={!onPickFolders} icon={FolderOpen} onSelect={onPickFolders}>
-            {c.folder}
-          </ContextMenuItem>
+          {onPickFolders && (
+            <ContextMenuItem icon={FolderOpen} onSelect={onPickFolders}>
+              {c.folder}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem disabled={!onPickImages} icon={ImageIcon} onSelect={onPickImages}>
             {c.images}
           </ContextMenuItem>

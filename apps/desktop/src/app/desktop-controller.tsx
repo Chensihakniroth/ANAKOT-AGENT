@@ -788,7 +788,7 @@ export function DesktopController() {
       onEdit={editMessage}
       onPasteClipboardImage={() => void composer.pasteClipboardImage()}
       onPickFiles={() => void composer.pickContextPaths('file')}
-      onPickFolders={() => void composer.pickContextPaths('folder')}
+      onPickFolders={typeof (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ === 'undefined' ? () => void composer.pickContextPaths('folder') : undefined}
       onPickImages={() => void composer.pickImages()}
       onReload={reloadFromMessage}
       onRemoveAttachment={(id: string) => void composer.removeAttachment(id)}
