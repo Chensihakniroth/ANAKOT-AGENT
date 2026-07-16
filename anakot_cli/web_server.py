@@ -64,7 +64,7 @@ from gateway.status import get_running_pid, read_runtime_status
 from utils import env_var_enabled
 
 try:
-    from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -9322,6 +9322,12 @@ def mount_spa(application: FastAPI):
 
     application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 
+    # Mount uploaded files for browser preview (used by the web composer).
+    _uploads = get_anakot_home() / "uploads"
+    if _uploads.is_dir() or (_uploads.parent.is_dir() and not _uploads.exists()):
+        _uploads.mkdir(parents=True, exist_ok=True)
+        application.mount("/uploads", StaticFiles(directory=str(_uploads)), name="uploads")
+
     @application.get("/{full_path:path}")
     async def serve_spa(full_path: str, request: Request):
         prefix = _normalise_prefix(request.headers.get("x-forwarded-prefix"))
@@ -10244,6 +10250,49 @@ _mount_plugin_api_routes()
 # not whether the routes exist.
 from anakot_cli.dashboard_auth.routes import router as _dashboard_auth_router  # noqa: E402
 app.include_router(_dashboard_auth_router)
+
+
+# ---------------------------------------------------------------------------
+# File upload endpoint (used by the web version's composer for attachments).
+# ---------------------------------------------------------------------------
+import uuid as _uuid
+
+_UPLOADS_DIR: Path = get_anakot_home() / "uploads"
+
+
+@app.post("/api/attach/upload")
+async def upload_attachment(file: UploadFile):
+    """Accept an uploaded file, save it to the server's uploads dir, and return
+    the absolute server path plus a preview URL that the web UI can embed.
+
+    The returned ``path`` is used in @file:/@image: refs sent to the gateway,
+    and ``preview_url`` is served via the /uploads/ static mount for browser
+    preview.
+    """
+    _UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Preserve original extension for content-type sniffing
+    original_name = (file.filename or "file").strip()
+    ext = Path(original_name).suffix if "." in original_name else ""
+
+    # Unique name: timestamp + short uuid suffix + original extension
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    unique_name = f"{stamp}_{_uuid.uuid4().hex[:8]}{ext}"
+    dest = _UPLOADS_DIR / unique_name
+
+    try:
+        content = await file.read()
+        dest.write_bytes(content)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save upload: {exc}")
+
+    return {
+        "ok": True,
+        "path": str(dest.resolve()),
+        "filename": unique_name,
+        "preview_url": f"/uploads/{unique_name}",
+    }
+
 
 mount_spa(app)
 

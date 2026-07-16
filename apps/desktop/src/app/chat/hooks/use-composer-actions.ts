@@ -14,6 +14,67 @@ import { notify, notifyError } from '@/store/notifications'
 
 import type { ImageDetachResponse } from '../../types'
 
+// ---------------------------------------------------------------------------
+// Web-mode file upload — used by the composer attachment hooks when the
+// Electron IPC methods (saveImageBuffer, selectPaths, etc.) are unavailable.
+// Posts the file to the server-side /api/attach/upload endpoint and returns
+// the server path (for @file:@image: refs) and a preview URL (for the browser).
+// ---------------------------------------------------------------------------
+interface UploadResult {
+  path: string
+  previewUrl: string
+}
+
+async function uploadFileViaApi(
+  file: File | Blob,
+  filename?: string,
+): Promise<UploadResult | null> {
+  try {
+    const formData = new FormData()
+    formData.append('file', file, filename || 'attachment')
+    const headers: Record<string, string> = {}
+    const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__
+
+    if (typeof token === 'string' && token) {
+      headers['X-Anakot-Session-Token'] = token
+    }
+
+    const resp = await fetch('/api/attach/upload', { method: 'POST', body: formData, headers })
+    if (!resp.ok) return null
+    const data = (await resp.json()) as { ok: boolean; path: string; preview_url: string }
+    if (!data.ok || !data.path) return null
+    return { path: data.path, previewUrl: data.preview_url }
+  } catch {
+    return null
+  }
+}
+
+// Detect whether we're running in the web version (vs Electron desktop).
+// On the desktop the preload script makes these methods available; on the web
+// they are undefined and we fall back to the server upload API.
+const hasElectronIpc = !!(window as Window).anakotDesktop?.saveImageBuffer
+
+/** Open a browser file picker (web fallback for Electron's selectPaths). */
+function pickFilesViaBrowser(
+  options: { accept?: string; multiple?: boolean; directory?: boolean },
+): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    if (options.accept) input.accept = options.accept
+    if (options.multiple) input.multiple = true
+    if (options.directory) input.setAttribute('webkitdirectory', '')
+    input.style.display = 'none'
+    document.body.appendChild(input)
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files || [])
+      document.body.removeChild(input)
+      resolve(files)
+    })
+    input.click()
+  })
+}
+
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico)$/i
 
 const BLOB_MIME_EXTENSION: Record<string, string> = {
@@ -231,6 +292,31 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
   const pickContextPaths = useCallback(
     async (kind: 'file' | 'folder') => {
+      // Web mode: use browser file picker instead of Electron native dialog
+      if (!hasElectronIpc) {
+        if (kind === 'folder') {
+          notify({
+            kind: 'warning',
+            title: 'Attach folder',
+            message: 'Folder selection is not supported in the web version yet. Use files instead.'
+          })
+
+          return
+        }
+
+        const files = await pickFilesViaBrowser({ multiple: true })
+
+        for (const file of files) {
+          const result = await uploadFileViaApi(file, file.name)
+
+          if (result) {
+            attachContextFilePath(result.path)
+          }
+        }
+
+        return
+      }
+
       const paths = await window.anakotDesktop?.selectPaths({
         title: kind === 'file' ? 'Add files as context' : 'Add folders as context',
         defaultPath: currentCwd || undefined,
@@ -279,7 +365,7 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
     [currentCwd]
   )
 
-  const attachImagePath = useCallback(async (filePath: string) => {
+  const attachImagePath = useCallback(async (filePath: string, previewUrl?: string) => {
     if (!filePath) {
       return false
     }
@@ -294,11 +380,19 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
     attachToMain(baseAttachment)
 
-    try {
-      const previewUrl = await window.anakotDesktop?.readFileDataUrl(filePath)
+    // If a previewUrl was provided (web mode after upload), use it directly.
+    // Otherwise fall back to readFileDataUrl (desktop IPC).
+    if (previewUrl) {
+      addComposerAttachment({ ...baseAttachment, previewUrl })
 
-      if (previewUrl) {
-        addComposerAttachment({ ...baseAttachment, previewUrl })
+      return true
+    }
+
+    try {
+      const desktopPreviewUrl = await window.anakotDesktop?.readFileDataUrl(filePath)
+
+      if (desktopPreviewUrl) {
+        addComposerAttachment({ ...baseAttachment, previewUrl: desktopPreviewUrl })
       }
 
       return true
@@ -317,6 +411,19 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
       if (blob.type && !blob.type.startsWith('image/')) {
         return false
+      }
+
+      // Web mode: upload blob to server instead of saving via Electron IPC
+      if (!hasElectronIpc) {
+        const result = await uploadFileViaApi(blob, `image${blobExtension(blob)}`)
+
+        if (!result) {
+          notify({ kind: 'error', title: copy.imageAttach, message: copy.imageWriteFailed })
+
+          return false
+        }
+
+        return attachImagePath(result.path, result.previewUrl)
       }
 
       try {
@@ -341,6 +448,24 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
   )
 
   const pickImages = useCallback(async () => {
+    // Web mode: use browser file picker instead of Electron native dialog
+    if (!hasElectronIpc) {
+      const files = await pickFilesViaBrowser({
+        accept: 'image/png,image/jpeg,image/gif,image/webp,image/bmp,image/tiff',
+        multiple: true,
+      })
+
+      for (const file of files) {
+        const result = await uploadFileViaApi(file, file.name)
+
+        if (result) {
+          await attachImagePath(result.path, result.previewUrl)
+        }
+      }
+
+      return
+    }
+
     const paths = await window.anakotDesktop?.selectPaths({
       title: copy.attachImages,
       defaultPath: currentCwd || undefined,
@@ -362,6 +487,45 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
   }, [attachImagePath, copy.attachImages, currentCwd, t.composer.images])
 
   const pasteClipboardImage = useCallback(async () => {
+    // Web mode: use the Clipboard API instead of Electron IPC
+    if (!hasElectronIpc) {
+      try {
+        const items = await navigator.clipboard.read()
+
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith('image/'))
+
+          if (!imageType) {
+            continue
+          }
+
+          const blob = await item.getType(imageType)
+
+          if (!blob || blob.size === 0) {
+            continue
+          }
+
+          const result = await uploadFileViaApi(blob, `clipboard${blobExtension(blob)}`)
+
+          if (result) {
+            await attachImagePath(result.path, result.previewUrl)
+
+            return
+          }
+        }
+
+        notify({
+          kind: 'warning',
+          title: copy.clipboard,
+          message: copy.noClipboardImage
+        })
+      } catch (err) {
+        notifyError(err, copy.clipboardPasteFailed)
+      }
+
+      return
+    }
+
     try {
       const path = await window.anakotDesktop?.saveClipboardImage()
 
@@ -455,11 +619,24 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         const fallbackPath =
           !knownPath && window.anakotDesktop?.getPathForFile ? window.anakotDesktop.getPathForFile(file) : ''
 
-        const filePath = knownPath || fallbackPath || ''
+        // Web mode: when no path is available (getPathForFile is undefined),
+        // upload the dropped file to the server to get a resolvable path.
+        let filePath = knownPath || fallbackPath || ''
+        let webPreviewUrl: string | undefined
+
+        if (!filePath && file && !hasElectronIpc) {
+          const uploaded = await uploadFileViaApi(file, file.name)
+
+          if (uploaded) {
+            filePath = uploaded.path
+            webPreviewUrl = uploaded.previewUrl
+          }
+        }
+
         const isImage = file.type.startsWith('image/') || isImagePath(file.name) || (filePath && isImagePath(filePath))
 
         if (isImage) {
-          if ((filePath && (await attachImagePath(filePath))) || (await attachImageBlob(file))) {
+          if ((filePath && (await attachImagePath(filePath, webPreviewUrl))) || (await attachImageBlob(file))) {
             attached = true
 
             continue
