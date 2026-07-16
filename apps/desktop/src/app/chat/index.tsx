@@ -46,6 +46,8 @@ import type { ModelOptionsResponse } from '@/types/anakot'
 import { routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass } from '../shell/titlebar'
 
+import { useIsMobile } from '@/hooks/use-mobile'
+
 import { ChatDropOverlay } from './chat-drop-overlay'
 import { ChatSwapOverlay } from './chat-swap-overlay'
 import { ChatBar, ChatBarFallback } from './composer'
@@ -100,6 +102,7 @@ function ChatHeader({
   onToggleSelectedPin,
   selectedSessionId
 }: ChatHeaderProps) {
+  const isMobile = useIsMobile()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
 
@@ -116,6 +119,11 @@ function ChatHeader({
     : selectedSessionId
       ? pinnedSessionIds.includes(selectedSessionId)
       : false
+
+  // Don't render a duplicate header on mobile — the MobileShell adds its own.
+  if (isMobile) {
+    return null
+  }
 
   // A brand-new session has no session to pin/delete/rename, so the header is
   // just a dead "New session" label + chevron. Drop it (and its border)

@@ -99,6 +99,8 @@ import { useRouteResume } from './session/hooks/use-route-resume'
 import { useSessionActions } from './session/hooks/use-session-actions'
 import { useSessionStateCache } from './session/hooks/use-session-state-cache'
 import { AppShell } from './shell/app-shell'
+import { MobileShell } from './mobile/mobile-shell'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useOverlayRouting } from './shell/hooks/use-overlay-routing'
 import { useStatusSnapshot } from './shell/hooks/use-status-snapshot'
 import { useStatusbarItems } from './shell/hooks/use-statusbar-items'
@@ -148,6 +150,7 @@ function sessionsToKeep(scope?: string): Set<string> {
 }
 
 export function DesktopController() {
+  const isMobile = useIsMobile()
   const queryClient = useQueryClient()
   const location = useLocation()
   const navigate = useNavigate()
@@ -812,6 +815,22 @@ export function DesktopController() {
   const railSide = panesFlipped ? 'left' : 'right'
 
   const rightRailCollapsed = useStore($rightRailCollapsed)
+
+  // Mobile: render compact layout with bottom nav + sheet
+  if (isMobile) {
+    return (
+      <>
+        <MobileShell
+          sessionList={chatPanel}
+          onNewSession={() => startFreshSessionDraft()}
+          onOpenSettings={openSettings}
+        >
+          {chatView}
+        </MobileShell>
+        {overlays}
+      </>
+    )
+  }
 
   const previewPane = (
     <Pane
