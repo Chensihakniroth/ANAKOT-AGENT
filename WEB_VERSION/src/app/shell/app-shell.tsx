@@ -1,9 +1,11 @@
 import { useStore } from '@nanostores/react'
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { SidebarProvider } from '@/components/ui/sidebar'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useVisualViewport } from '@/hooks/use-visual-viewport'
 import { PanelLeftIcon } from '@/lib/icons'
 import { $sidebarOpen, setSidebarOpen, toggleSidebarOpen } from '@/store/layout'
@@ -18,6 +20,8 @@ interface AppShellProps {
   leftStatusbarItems?: readonly StatusbarItem[]
   onOpenSettings: () => void
   overlays?: ReactNode
+  /** Content for the mobile sidebar drawer (session list, etc.) */
+  sidebarContent?: ReactNode
   statusbarItems?: readonly StatusbarItem[]
 }
 
@@ -27,18 +31,29 @@ export function AppShell({
   leftStatusbarItems,
   onOpenSettings,
   overlays,
+  sidebarContent,
   statusbarItems
 }: AppShellProps) {
   const sidebarOpen = useStore($sidebarOpen)
   const connection = useStore($connection)
 
   const { vvHeight, keyboardOpen } = useVisualViewport()
+  const isMobile = useIsMobile()
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
 
   // When the mobile keyboard opens, constrain the app to the visible viewport
   // height.  The composer is `position: absolute; bottom: 0` and mobile
   // browsers don't shrink `100dvh` / `100vh` when the keyboard appears, so
   // the composer would hide behind the keyboard.
   const shellHeight = keyboardOpen && vvHeight !== null ? `${vvHeight}px` : undefined
+
+  const handleToggleSidebar = () => {
+    if (isMobile) {
+      setMobileSheetOpen(true)
+    } else {
+      toggleSidebarOpen()
+    }
+  }
 
   return (
     <SidebarProvider
@@ -76,16 +91,33 @@ export function AppShell({
       <KeybindPanel />
 
       {/* Mobile floating sidebar toggle — hidden when keyboard is open so it
-          doesn't overlap the chat composer (bottom-left corner). */}
+          doesn't overlap the chat composer (bottom-left corner). On mobile,
+          opens a Sheet drawer with the session list instead of toggling the
+          desktop pane (which is hidden by CSS at the mobile breakpoint). */}
       <button
         aria-label="Toggle sidebar"
         className="mobile-sidebar-toggle"
-        onClick={toggleSidebarOpen}
+        onClick={handleToggleSidebar}
         style={{ display: keyboardOpen ? 'none' : undefined }}
         type="button"
       >
         <PanelLeftIcon />
       </button>
+
+      {/* Mobile sidebar Sheet — slide-out drawer from the left containing the
+          session list. Only renders on mobile; on desktop the sidebar is part
+          of the PaneShell grid layout. */}
+      {isMobile && (
+        <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+          <SheetContent
+            side="left"
+            className="flex w-[80vw] max-w-sm flex-col p-0"
+            showCloseButton={false}
+          >
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
+      )}
 
       <NotificationStack />
     </SidebarProvider>

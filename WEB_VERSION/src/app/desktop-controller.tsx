@@ -918,6 +918,7 @@ export function DesktopController() {
         leftStatusbarItems={leftStatusbarItems}
         onOpenSettings={openSettings}
         overlays={overlays}
+        sidebarContent={chatPanel}
         statusbarItems={statusbarItems}
       >
       {/* Sidebar — Explorer / Search / Chat panels */}
