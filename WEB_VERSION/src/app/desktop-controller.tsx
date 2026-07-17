@@ -10,6 +10,7 @@ import { useGroupRegistry } from '@/app/shell/use-group-registry'
 
 import { GatewayOfflineDialog } from '@/components/gateway-offline-dialog'
 import { LoginPage } from '@/components/login-page'
+import { SignInPage } from '@/components/ui/sign-in'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { BrandMark } from '@/components/brand-mark'
 import { useAuth } from '@/hooks/use-auth'
@@ -973,17 +974,15 @@ export function DesktopController() {
   )
   }
 
-  // Not authenticated yet → show the login page.
+  // Not authenticated yet → show the sign-in page.
   return (
     <>
-      <LoginPage
-        authLoading={authLoading}
+      <SignInPage
+        loading={authLoading}
+        error={authError}
         providers={providers}
-        providersLoading={providersLoading}
-        authError={authError}
-        onLogin={login}
         onPasswordLogin={passwordLogin}
-        onRetry={retry}
+        onLogin={login}
       />
       <GatewayOfflineDialog />
     </>
