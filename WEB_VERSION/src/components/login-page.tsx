@@ -62,8 +62,8 @@ function GenericProviderIcon({ className = 'size-5' }: { className?: string }) {
   )
 }
 
-function ProviderIcon({ name }: { name: string }) {
-  const n = name.toLowerCase()
+function ProviderIcon({ provider }: { provider: AuthProvider }) {
+  const n = (provider.name + ' ' + provider.display_name).toLowerCase()
   if (n.includes('google')) return <GoogleIcon className="size-[18px]" />
   if (n.includes('github') || n.includes('gitlab')) return <GitHubIcon className="size-[18px]" />
   if (n.includes('microsoft') || n.includes('azure') || n.includes('entra')) return <MicrosoftIcon className="size-[18px]" />
@@ -99,7 +99,10 @@ function OAuthButton({
   onKeyDown: (e: React.KeyboardEvent) => void
 }) {
   // Treat OIDC providers as Google for a branded sign-in experience.
-  const isGoogle = provider.name.toLowerCase().includes('google') || provider.name.toLowerCase().includes('oidc')
+  const isGoogle =
+    provider.name.toLowerCase().includes('google') ||
+    provider.name.toLowerCase().includes('oidc') ||
+    provider.display_name.toLowerCase().includes('oidc')
 
   // Google gets its own branded button — the rest get a unified dark style.
   if (isGoogle) return <GoogleButton onClick={onClick} />
@@ -111,7 +114,7 @@ function OAuthButton({
       className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-sm font-medium text-[#e1e7ef] transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.07] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#82aaff]/60"
     >
       <span className="flex size-[18px] items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
-        <ProviderIcon name={provider.name} />
+        <ProviderIcon provider={provider} />
       </span>
       <span className="flex-1 text-left">
         Continue with <strong className="font-semibold">{provider.display_name}</strong>
