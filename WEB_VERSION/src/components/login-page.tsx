@@ -1,8 +1,8 @@
 /**
- * Login Page — clean professional auth page.
+ * Login Page — immersive, stylish auth page.
  *
- * Features a centered glass-card with polished OAuth buttons.
- * Only renders when auth is required + user is not yet authenticated.
+ * Layered depth with animated ambient effects, geometric decor,
+ * and a premium glass card. Pure Tailwind, no extra deps.
  */
 import { useCallback, useState } from 'react'
 
@@ -66,7 +66,10 @@ function ProviderIcon({ name }: { name: string }) {
   const n = name.toLowerCase()
   if (n.includes('google')) return <GoogleIcon className="size-[18px]" />
   if (n.includes('github') || n.includes('gitlab')) return <GitHubIcon className="size-[18px]" />
-  if (n.includes('microsoft') || n.includes('azure') || n.includes('entra') || n.includes('oidc')) return <MicrosoftIcon className="size-[18px]" />
+  if (n.includes('microsoft') || n.includes('azure') || n.includes('entra')) return <MicrosoftIcon className="size-[18px]" />
+  // OIDC / generic OAuth providers render as Google — the user wants
+  // the familiar Google-branded sign-in button for their OIDC provider.
+  if (n.includes('oidc')) return <GoogleIcon className="size-[18px]" />
   return <GenericProviderIcon className="size-[18px]" />
 }
 
@@ -76,7 +79,7 @@ function GoogleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="group relative flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl bg-white px-5 py-3 text-sm font-medium text-[#1f1f1f] shadow-sm transition-all duration-200 hover:bg-[#f8f9fa] hover:shadow-md active:scale-[0.98]"
+      className="group relative flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl bg-white px-5 py-3 text-sm font-medium text-[#1f1f1f] shadow-lg shadow-black/[0.15] transition-all duration-300 hover:bg-[#f8f9fa] hover:shadow-xl hover:shadow-black/[0.2] hover:-translate-y-0.5 active:scale-[0.98]"
     >
       <GoogleIcon className="size-[18px]" />
       <span>Continue with Google</span>
@@ -95,7 +98,8 @@ function OAuthButton({
   onClick: () => void
   onKeyDown: (e: React.KeyboardEvent) => void
 }) {
-  const isGoogle = provider.name.toLowerCase().includes('google')
+  // Treat OIDC providers as Google for a branded sign-in experience.
+  const isGoogle = provider.name.toLowerCase().includes('google') || provider.name.toLowerCase().includes('oidc')
 
   // Google gets its own branded button — the rest get a unified dark style.
   if (isGoogle) return <GoogleButton onClick={onClick} />
@@ -195,7 +199,7 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
       <button
         type="submit"
         disabled={loading || !username.trim() || !password}
-        className="relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#82aaff] px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:bg-[#6b96e0] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+        className="relative flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#82aaff] to-[#a78bfa] px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-[#82aaff]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#82aaff]/30 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
           <>
@@ -331,37 +335,80 @@ export function LoginPage({
       className="fixed inset-0 z-[1500] flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#011627' }}
     >
-      {/* Animated gradient overlay */}
+      {/* Animated gradient background */}
       <ShaderBackground className="pointer-events-none absolute inset-0" />
 
-      {/* Subtle top accent line */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[480px] h-px bg-gradient-to-r from-transparent via-[#82aaff]/30 to-transparent" />
+      {/* Decorative floating elements */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        {/* Large glow orb — top left */}
+        <div className="absolute -top-32 -left-32 size-[500px] rounded-full bg-[#82aaff]/5 blur-[120px]" />
+        {/* Secondary glow — bottom right */}
+        <div className="absolute -bottom-40 -right-24 size-[400px] rounded-full bg-[#a78bfa]/5 blur-[120px]" />
+
+        {/* Decorative ring — top area */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 size-[600px] rounded-full border border-white/[0.02]" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 size-[500px] rounded-full border border-white/[0.015]" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 size-[400px] rounded-full border border-white/[0.01]" />
+
+        {/* Floating diamond dots */}
+        <div className="absolute top-[15%] right-[12%] size-1.5 rounded-full bg-[#82aaff]/20" />
+        <div className="absolute bottom-[25%] left-[10%] size-1 rounded-full bg-[#a78bfa]/15" />
+        <div className="absolute top-[35%] right-[8%] size-2 rounded-full bg-white/[0.04]" />
+        <div className="absolute bottom-[30%] right-[20%] size-1.5 rounded-full bg-white/[0.03]" />
+      </div>
+
+      {/* Top accent gradient line */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-px bg-gradient-to-r from-transparent via-[#82aaff]/40 to-transparent" />
 
       <div className="relative z-10 mx-auto w-full max-w-sm px-5">
-        <div className="relative rounded-2xl border border-white/[0.06] bg-[#0d2942]/70 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
-          {/* Inner glow */}
-          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/[0.04] ring-inset" />
+        <div className="relative group">
+          {/* Outer glow behind card */}
+          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-b from-[#82aaff]/10 to-[#a78bfa]/10 blur-xl opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
 
-          {/* Header */}
-          <div className="flex flex-col items-center gap-4 mb-7">
-            <div className="flex size-12 items-center justify-center rounded-xl bg-[#82aaff]/10 ring-1 ring-[#82aaff]/10">
-              <BrandMark className="size-7 text-[#82aaff]" />
-            </div>
-            <div className="text-center">
-              <h1 className="text-xl font-semibold tracking-tight text-[#e1e7ef] m-0">Welcome back</h1>
-              <p className="text-sm text-[#637777] mt-1.5 m-0">Sign in to your account</p>
+          {/* Card with gradient border via pseudo-layer */}
+          <div className="relative rounded-2xl bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-[1px] shadow-2xl shadow-black/50">
+            <div className="rounded-2xl bg-[#0a1e33]/80 backdrop-blur-2xl p-8">
+              {/* Inner subtle glow */}
+              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/[0.05] ring-inset" />
+
+              {/* Brand icon with animated pulse ring */}
+              <div className="flex flex-col items-center gap-4 mb-7">
+                <div className="relative">
+                  {/* Glow ring behind icon */}
+                  <div className="absolute -inset-3 rounded-full bg-[#82aaff]/10 animate-pulse" />
+                  <div className="absolute -inset-1.5 rounded-full bg-[#82aaff]/15" />
+                  <div className="relative flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#82aaff]/20 to-[#a78bfa]/10 ring-1 ring-[#82aaff]/15">
+                    <BrandMark className="size-7 text-[#82aaff]" />
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h1 className="text-xl font-semibold tracking-tight bg-gradient-to-r from-[#e1e7ef] to-[#a5b4fc] bg-clip-text text-transparent m-0">
+                    Welcome back
+                  </h1>
+                  <p className="text-sm text-[#637777] mt-1.5 m-0">Sign in to your account</p>
+                </div>
+              </div>
+
+              {/* CTA */}
+              <div className="min-h-[80px] relative z-[1]">
+                {ctaSection}
+              </div>
+
+              {/* Footer */}
+              <div className="mt-7 pt-5 border-t border-white/[0.04]">
+                <p className="text-[11px] text-center text-[#4a5a6a] m-0 tracking-wider uppercase">
+                  Open source &middot; Private &middot; Secure
+                </p>
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* CTA */}
-          <div className="min-h-[80px]">
-            {ctaSection}
-          </div>
-
-          {/* Footer */}
-          <p className="text-[11px] text-center text-[#4a5a6a] mt-7 m-0 tracking-wide">
-            Open source &middot; Private &middot; Secure
-          </p>
+        {/* Bottom accent */}
+        <div className="mt-6 flex justify-center gap-1.5">
+          <div className="size-1 rounded-full bg-[#82aaff]/20" />
+          <div className="size-1 rounded-full bg-[#82aaff]/30" />
+          <div className="size-1 rounded-full bg-[#82aaff]/20" />
         </div>
       </div>
     </div>

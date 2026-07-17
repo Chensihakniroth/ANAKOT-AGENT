@@ -91,8 +91,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^4.1.10"
   }
 }

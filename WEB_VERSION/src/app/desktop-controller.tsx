@@ -906,27 +906,22 @@ export function DesktopController() {
     )
   }
 
-  return (
-    <>
-      <LoginPage
-        authLoading={authLoading}
-        providers={providers}
-        providersLoading={providersLoading}
-        authError={authError}
-        onLogin={login}
-        onPasswordLogin={passwordLogin}
-        onRetry={retry}
-      />
-      <AppShell
-        activityBar={<ActivityBar />}
-        leftStatusbarItems={leftStatusbarItems}
-        onOpenSettings={openSettings}
-        overlays={overlays}
-        sidebarContent={chatPanel}
-        statusbarItems={statusbarItems}
-      >
-      {/* Sidebar — Explorer / Search / Chat panels */}
-      <Pane
+  // Authenticated, onboarding resolved (or not needed) → show the app without
+  // the login-page overlay.  LoginPage uses `fixed inset-0 z-[1500]` so it
+  // would sit on top of AppShell and block the entire UI.
+  if (!authRequired || (isAuthenticated && !onboardingLoading && !needsOnboarding)) {
+    return (
+      <>
+        <AppShell
+          activityBar={<ActivityBar />}
+          leftStatusbarItems={leftStatusbarItems}
+          onOpenSettings={openSettings}
+          overlays={overlays}
+          sidebarContent={chatPanel}
+          statusbarItems={statusbarItems}
+        >
+          {/* Sidebar — Explorer / Search / Chat panels */}
+          <Pane
         disabled={terminalTakeoverActive}
         id="chat-sidebar"
         maxWidth={SIDEBAR_MAX_WIDTH}
@@ -973,6 +968,23 @@ export function DesktopController() {
       {/* Preview pane (right side) */}
       {previewPane}
     </AppShell>
+      <GatewayOfflineDialog />
+    </>
+  )
+  }
+
+  // Not authenticated yet → show the login page.
+  return (
+    <>
+      <LoginPage
+        authLoading={authLoading}
+        providers={providers}
+        providersLoading={providersLoading}
+        authError={authError}
+        onLogin={login}
+        onPasswordLogin={passwordLogin}
+        onRetry={retry}
+      />
       <GatewayOfflineDialog />
     </>
   )
