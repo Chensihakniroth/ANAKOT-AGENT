@@ -1509,4 +1509,111 @@ canvas {
   box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
 
+/* ── Sheet (shadcn/Radix UI) slide animations ────────────────────────────
+   Tailwind CSS v4 doesn't ship animate-in/out, slide-in-from-*, or
+   fade-in-* utilities, so the class names on shadcn Sheet are inert.
+   We bring back the expected Radix UI dialog animations below.
+   ----------------------------------------------------------------------- */
 
+@keyframes sheet-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sheet-overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Slide from left */
+@keyframes sheet-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes sheet-out-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
+/* Slide from right */
+@keyframes sheet-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes sheet-out-right {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+
+/* Slide from top */
+@keyframes sheet-in-top {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes sheet-out-top {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-100%); }
+}
+
+/* Slide from bottom */
+@keyframes sheet-in-bottom {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes sheet-out-bottom {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+[data-slot="sheet-overlay"][data-state="open"] {
+  animation: sheet-overlay-in 0.2s ease-out both;
+}
+[data-slot="sheet-overlay"][data-state="closed"] {
+  animation: sheet-overlay-out 0.15s ease-in both;
+}
+
+[data-slot="sheet-content"][data-state="open"] {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
+}
+[data-slot="sheet-content"][data-state="closed"] {
+  animation-duration: 0.2s;
+  animation-timing-function: ease-in;
+  animation-fill-mode: both;
+}
+
+/* Side-specific slide keyframes — mapped via the inline side class.
+   shadcn Sheet applies these classes alongside data-state, so the
+   animation-name can piggyback on the same selectors. */
+.sheet-content[data-state="open"]:where([class*="slide-in-from-left"]),
+[data-slot="sheet-content"][data-state="open"]:where([class*="slide-in-from-left"]) {
+  animation-name: sheet-in-left;
+}
+.sheet-content[data-state="closed"]:where([class*="slide-out-to-left"]),
+[data-slot="sheet-content"][data-state="closed"]:where([class*="slide-out-to-left"]) {
+  animation-name: sheet-out-left;
+}
+.sheet-content[data-state="open"]:where([class*="slide-in-from-right"]),
+[data-slot="sheet-content"][data-state="open"]:where([class*="slide-in-from-right"]) {
+  animation-name: sheet-in-right;
+}
+.sheet-content[data-state="closed"]:where([class*="slide-out-to-right"]),
+[data-slot="sheet-content"][data-state="closed"]:where([class*="slide-out-to-right"]) {
+  animation-name: sheet-out-right;
+}
+.sheet-content[data-state="open"]:where([class*="slide-in-from-top"]),
+[data-slot="sheet-content"][data-state="open"]:where([class*="slide-in-from-top"]) {
+  animation-name: sheet-in-top;
+}
+.sheet-content[data-state="closed"]:where([class*="slide-out-to-top"]),
+[data-slot="sheet-content"][data-state="closed"]:where([class*="slide-out-to-top"]) {
+  animation-name: sheet-out-top;
+}
+.sheet-content[data-state="open"]:where([class*="slide-in-from-bottom"]),
+[data-slot="sheet-content"][data-state="open"]:where([class*="slide-in-from-bottom"]) {
+  animation-name: sheet-in-bottom;
+}
+.sheet-content[data-state="closed"]:where([class*="slide-out-to-bottom"]),
+[data-slot="sheet-content"][data-state="closed"]:where([class*="slide-out-to-bottom"]) {
+  animation-name: sheet-out-bottom;
+}
