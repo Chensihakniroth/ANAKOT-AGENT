@@ -1485,11 +1485,12 @@ canvas {
 .mobile-sidebar-toggle {
   display: none;
   position: fixed;
-  left: 0.5rem;
-  /* Raised above the composer area — 4.5rem puts the button above the
-     ~3.5rem composer zone so it doesn't overlap the input. */
-  bottom: 4.5rem;
-  z-index: 40;
+  left: 0.75rem;
+  /* Top-left corner — standard mobile hamburger menu position. On the
+     landing page the top area is empty; when a chat is open the toggle
+     sits above the session title header (z-index keeps it visible). */
+  top: 0.75rem;
+  z-index: 50;
   height: 2.75rem;
   width: 2.75rem;
   align-items: center;

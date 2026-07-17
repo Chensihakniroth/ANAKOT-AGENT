@@ -90,10 +90,10 @@ export function AppShell({
 
       <KeybindPanel />
 
-      {/* Mobile floating sidebar toggle — hidden when keyboard is open so it
-          doesn't overlap the chat composer (bottom-left corner). On mobile,
-          opens a Sheet drawer with the session list instead of toggling the
-          desktop pane (which is hidden by CSS at the mobile breakpoint). */}
+      {/* Mobile sidebar toggle — top-left corner, standard mobile hamburger
+          menu position. Hidden when keyboard is open. On mobile, opens a
+          Sheet drawer with the session list instead of toggling the desktop
+          pane (which is hidden by CSS at the mobile breakpoint). */}
       <button
         aria-label="Toggle sidebar"
         className="mobile-sidebar-toggle"
