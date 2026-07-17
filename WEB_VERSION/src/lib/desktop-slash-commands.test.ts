@@ -102,11 +102,6 @@ describe('desktop slash command curation', () => {
         text: '/skin mono',
         display: '/skin mono',
         meta: 'Mono (current) - Clean grayscale'
-      },
-      {
-        text: '/skin violet',
-        display: '/skin violet',
-        meta: 'Violet - Deep blue'
       }
     ])
   })

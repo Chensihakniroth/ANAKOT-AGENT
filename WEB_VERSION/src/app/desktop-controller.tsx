@@ -9,7 +9,7 @@ import { useSkinCommand } from '@/themes/use-skin-command'
 import { useGroupRegistry } from '@/app/shell/use-group-registry'
 
 import { GatewayOfflineDialog } from '@/components/gateway-offline-dialog'
-import { WebLandingPage } from '@/components/web-landing-page'
+import { LoginPage } from '@/components/login-page'
 import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { BrandMark } from '@/components/brand-mark'
 import { useAuth } from '@/hooks/use-auth'
@@ -881,6 +881,12 @@ export function DesktopController() {
     </Pane>
   )
 
+  // When auth is required + session exists: wait for onboarding check to resolve
+  // before rendering the app shell, so the main UI doesn't flash briefly.
+  if (authRequired && isAuthenticated && onboardingLoading) {
+    return <div className="fixed inset-0" style={{ backgroundColor: '#011627' }} />
+  }
+
   // When auth is required + session exists + needs onboarding: onboarding dialog.
   if (authRequired && isAuthenticated && needsOnboarding) {
     return (
@@ -902,9 +908,7 @@ export function DesktopController() {
 
   return (
     <>
-      <WebLandingPage
-        authRequired={authRequired}
-        isAuthenticated={isAuthenticated}
+      <LoginPage
         authLoading={authLoading}
         providers={providers}
         providersLoading={providersLoading}

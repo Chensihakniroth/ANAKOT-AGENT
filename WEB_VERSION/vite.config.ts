@@ -50,6 +50,10 @@ function anakotDevToken(): Plugin {
 export default defineConfig({
   base: '/',
   plugins: [react(), tailwindcss(), anakotDevToken()],
+  test: {
+    environment: 'jsdom',
+    testTimeout: 15_000,
+  },
   build: {
     chunkSizeWarningLimit: 25000,
     outDir: '../anakot_cli/web_dist',

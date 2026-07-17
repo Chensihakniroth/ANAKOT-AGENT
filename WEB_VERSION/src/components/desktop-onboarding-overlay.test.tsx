@@ -54,18 +54,13 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
-  it('features callmemo Portal and hides other providers behind a disclosure', () => {
-    setProviders([provider('anthropic', 'Anthropic Claude'), provider('nous', 'callmemo Portal')])
+  it('shows all providers directly when no provider is featured', () => {
+    setProviders([provider('anthropic', 'Anthropic Claude'), provider('openai-codex', 'OpenAI Codex / ChatGPT')])
     render(<Picker ctx={ctx} />)
 
-    expect(screen.getByText('callmemo Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
-    expect(screen.queryByText('Anthropic API Key')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
-
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
+    expect(screen.getByText('OpenAI OAuth (ChatGPT)')).toBeTruthy()
+    expect(screen.queryByText('Other sign-in options')).toBeNull()
   })
 
   it('shows every provider directly when callmemo Portal is absent', () => {
@@ -75,7 +70,6 @@ describe('onboarding Picker', () => {
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
     expect(screen.getByText('OpenAI OAuth (ChatGPT)')).toBeTruthy()
     expect(screen.queryByText('Other sign-in options')).toBeNull()
-    expect(screen.queryByText('Recommended')).toBeNull()
   })
 
   it('offers "choose later" on first run and persists the skip', () => {

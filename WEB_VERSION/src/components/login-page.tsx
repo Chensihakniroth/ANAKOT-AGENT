@@ -1,13 +1,8 @@
 /**
- * Web Landing Page — combined hero landing + login.
+ * Login Page — shown when the server requires authentication.
  *
- * Two modes depending on auth config:
- *   1) No auth required   → full hero + "Get Started" + feature cards
- *   2) Auth required       → clean centered login card (no feature cards)
- *
- * The page only dismisses when the user clicks "Get Started" (or authenticates).
- * It NEVER auto-dismisses based on gateway state — this prevents the landing
- * from flashing and disappearing before the browser paints (React 18 batching).
+ * Clean centered card with OAuth buttons and/or password form.
+ * Only renders when auth is required + user is not yet authenticated.
  */
 import { useCallback, useState } from 'react'
 
@@ -17,9 +12,7 @@ import type { AuthProvider } from '@/hooks/use-auth'
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
-interface WebLandingPageProps {
-  authRequired?: boolean
-  isAuthenticated?: boolean
+interface LoginPageProps {
   authLoading?: boolean
   providers?: AuthProvider[]
   providersLoading?: boolean
@@ -28,23 +21,6 @@ interface WebLandingPageProps {
   onPasswordLogin?: (providerName: string, username: string, password: string) => Promise<boolean>
   onRetry?: () => void
 }
-
-// ── Feature cards ──────────────────────────────────────────────────────────────
-
-interface Feature {
-  icon: string
-  title: string
-  description: string
-}
-
-const FEATURES: Feature[] = [
-  { icon: '\u2728', title: 'AI Chat', description: 'Multi-turn conversations with any model \u2014 Claude, GPT, Gemini, and more.' },
-  { icon: '\uD83D\uDCAC', title: 'Sessions', description: 'Organise chats into sessions. Branch, fork, and revisit past conversations.' },
-  { icon: '\u23F0', title: 'Cron', description: 'Schedule autonomous agent runs. Monitor, alert, and automate.' },
-  { icon: '\u2709\uFE0F', title: 'Messaging', description: 'Connect Telegram, Discord, SMS. The agent messages you where you are.' },
-  { icon: '\uD83D\uDCE6', title: 'Artifacts', description: 'Code previews, rendered documents, and live output from agent tools.' },
-  { icon: '\uD83E\uDDE0', title: 'Skills', description: 'Extend the agent with custom skills, plugins, and knowledge graph.' },
-]
 
 // ── Provider icon ──────────────────────────────────────────────────────────────
 
@@ -119,11 +95,11 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label htmlFor="landing-username" className="block text-sm font-medium text-[#637777] mb-1.5">
+        <label htmlFor="login-username" className="block text-sm font-medium text-[#637777] mb-1.5">
           Email or username
         </label>
         <input
-          id="landing-username"
+          id="login-username"
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -134,11 +110,11 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
         />
       </div>
       <div>
-        <label htmlFor="landing-password" className="block text-sm font-medium text-[#637777] mb-1.5">
+        <label htmlFor="login-password" className="block text-sm font-medium text-[#637777] mb-1.5">
           Password
         </label>
         <input
-          id="landing-password"
+          id="login-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -180,9 +156,7 @@ function PasswordForm({ providerName, providerDisplayName, onPasswordLogin }: Pa
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export function WebLandingPage({
-  authRequired,
-  isAuthenticated,
+export function LoginPage({
   authLoading,
   providers = [],
   providersLoading,
@@ -190,10 +164,8 @@ export function WebLandingPage({
   onLogin,
   onPasswordLogin,
   onRetry,
-}: WebLandingPageProps) {
-  const [dismissed, setDismissed] = useState(false)
-
-  const handleGetStarted = useCallback(() => setDismissed(true), [])
+}: LoginPageProps) {
+  const isLoading = authLoading || providersLoading
 
   const handleLogin = useCallback(
     (providerName: string) => onLogin?.(providerName),
@@ -210,30 +182,20 @@ export function WebLandingPage({
     [handleLogin],
   )
 
-  if (dismissed) return null
-
-  const isAuthMode = authRequired && !isAuthenticated
-  const isAuthLoading = authLoading || providersLoading
-
   const passwordProvider = providers.find((p) => p.supports_password)
   const oauthProviders = providers.filter((p) => !p.supports_password)
-
-  // ── Footer text ──
-  const footerText = isAuthMode
-    ? 'Auth required \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
-    : 'No account needed \u00B7 Open source \u00B7 Self-hosted \u00B7 Private'
 
   // ── CTA section ──
   let ctaSection: React.ReactNode
 
-  if (isAuthMode && isAuthLoading) {
+  if (isLoading) {
     ctaSection = (
       <div className="flex flex-col items-center gap-3">
         <div className="h-10 w-full animate-pulse rounded-lg bg-white/[0.04]" />
         <div className="h-10 w-3/4 animate-pulse rounded-lg bg-white/[0.04]" />
       </div>
     )
-  } else if (isAuthMode && authError && providers.length === 0) {
+  } else if (authError && providers.length === 0) {
     ctaSection = (
       <div className="flex flex-col items-center gap-3">
         <div className="flex items-center gap-2 rounded-lg bg-[#ef5350]/10 px-3 py-2 text-sm text-[#ef5350]">
@@ -251,7 +213,7 @@ export function WebLandingPage({
         </button>
       </div>
     )
-  } else if (isAuthMode && oauthProviders.length > 0) {
+  } else if (oauthProviders.length > 0) {
     ctaSection = (
       <div className="flex flex-col gap-3">
         {oauthProviders.map((p) => (
@@ -289,7 +251,7 @@ export function WebLandingPage({
         )}
       </div>
     )
-  } else if (isAuthMode && passwordProvider && onPasswordLogin) {
+  } else if (passwordProvider && onPasswordLogin) {
     ctaSection = (
       <PasswordForm
         providerName={passwordProvider.name}
@@ -297,36 +259,22 @@ export function WebLandingPage({
         onPasswordLogin={onPasswordLogin}
       />
     )
-  } else if (isAuthMode && providers.length === 0 && !authLoading) {
+  } else if (providers.length === 0) {
     ctaSection = (
       <div className="text-center">
         <p className="text-sm text-[#637777] m-0">No sign-in methods are configured.</p>
         <p className="text-xs text-[#4a5a6a] mt-1 m-0">Contact your administrator.</p>
       </div>
     )
-  } else {
-    ctaSection = (
-      <button
-        className="inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 min-w-[180px] rounded-xl bg-white/90 px-6 text-sm font-semibold text-[#011627] shadow-lg shadow-black/20 transition-all hover:bg-white hover:shadow-xl active:scale-[0.98]"
-        onClick={handleGetStarted}
-      >
-        Get Started
-      </button>
-    )
   }
 
-  // ── Render ──
-  // Show nothing when:
-  //   1) Auth mode + already authenticated (user is in the app)
-  //   2) No-auth mode (hero landing page is removed — go straight to app)
-  return (isAuthMode && !isAuthenticated) ? (
+  return (
     <div
       className="fixed inset-0 z-[1500] flex flex-col items-center justify-center overflow-hidden"
       style={{ backgroundColor: '#011627' }}
     >
       <ShaderBackground className="pointer-events-none absolute inset-0" />
 
-      {/* ── Auth mode: clean centered card ── */}
       <div className="relative z-10 mx-auto w-full max-w-sm px-4">
         <div className="rounded-2xl border border-white/[0.06] bg-[#0b2942]/60 backdrop-blur-xl p-8 shadow-2xl shadow-black/40">
           <div className="flex flex-col items-center gap-5 mb-6">
@@ -341,9 +289,9 @@ export function WebLandingPage({
           <div className="min-h-[100px]">
             {ctaSection}
           </div>
-          <p className="text-xs text-center text-[#4a5a6a] mt-6 m-0">{footerText}</p>
+          <p className="text-xs text-center text-[#4a5a6a] mt-6 m-0">Auth required · Open source · Self-hosted · Private</p>
         </div>
       </div>
     </div>
-  ) : null
+  )
 }

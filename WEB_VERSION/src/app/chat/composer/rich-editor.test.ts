@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
 import { composerPlainText, renderComposerContents, RICH_INPUT_SLOT } from './rich-editor'

@@ -14,8 +14,10 @@ import { BrandMark } from '@/components/brand-mark'
 import { $desktopBoot } from '@/store/boot'
 import { $gatewayState } from '@/store/session'
 
-// Time to wait before showing the offline dialog (ms)
-const OFFLINE_TIMEOUT_MS = 10_000
+// Time to wait before showing the offline dialog (ms).
+// Matches the exponential backoff ceiling (15s) plus a buffer so the
+// dialog doesn't appear before the final retry attempt fires.
+const OFFLINE_TIMEOUT_MS = 30_000
 
 export function GatewayOfflineDialog() {
   const gatewayState = useStore($gatewayState)
@@ -90,9 +92,9 @@ export function GatewayOfflineDialog() {
               Gateway Not Available
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-[#637777] m-0">
-              {'The agent gateway is not running on this server. ' +
-               'Chat, sessions, and agent interaction require a running gateway. ' +
-               'Start it from your admin panel or local desktop.'}
+              {'The agent gateway could not be reached. ' +
+               'The system will keep retrying in the background. ' +
+               'Chat, sessions, and agent interaction require a running gateway.'}
             </p>
           </div>
 

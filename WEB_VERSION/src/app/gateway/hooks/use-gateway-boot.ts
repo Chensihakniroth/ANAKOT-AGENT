@@ -293,7 +293,20 @@ export function useGatewayBoot({
 
     async function boot() {
       try {
-        const conn = await desktop.getConnection()
+        // Resolve the active profile *before* establishing the connection so
+        // the first backend contact targets the correct profile from the start.
+        // Defaulting to 'default' is safe because the profile preference always
+        // has one active entry (the user's primary profile, or 'default').
+        let profileKey = 'default'
+        try {
+          const pref = await desktop.profile?.get?.()
+          profileKey = (pref?.profile ?? '').trim() || 'default'
+        } catch {
+          // fall through with 'default'
+        }
+        $activeGatewayProfile.set(profileKey)
+
+        const conn = await desktop.getConnection(profileKey)
 
         if (cancelled) {
           return
@@ -317,18 +330,10 @@ export function useGatewayBoot({
           return
         }
 
-        // Record which profile the primary (window) backend booted as, so
-        // same-profile resumes are no-op swaps and any reconnect targets the
-        // right backend. Best-effort: a missing preference means "default".
-        try {
-          const pref = await desktop.profile?.get?.()
-          const profileKey = (pref?.profile ?? '').trim() || 'default'
-          $activeGatewayProfile.set(profileKey)
-          setPrimaryGateway(gateway, profileKey)
-          void ensureGatewayForProfile(profileKey)
-        } catch {
-          $activeGatewayProfile.set('default')
-        }
+        // Record the resolved profile on the primary gateway (already resolved
+        // above, so this is just bookkeeping for reconnect).
+        setPrimaryGateway(gateway, profileKey)
+        void ensureGatewayForProfile(profileKey)
 
         setDesktopBootStep({
           phase: 'renderer.config',

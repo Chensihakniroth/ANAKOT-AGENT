@@ -101,8 +101,12 @@ describe('ToolsetConfigPanel', () => {
     const elevenlabs = await screen.findByRole('button', { name: /ElevenLabs/ })
     fireEvent.click(elevenlabs)
 
-    // Click "Set" to reveal the input for the unset key.
-    fireEvent.click(await screen.findByRole('button', { name: 'Set' }))
+    // Open the Radix dropdown menu and select "Set".
+    // Radix portals the content outside the React tree; use document.body
+    // to find the menuitem after the trigger fires pointerDown.
+    const trigger = await screen.findByRole('button', { name: /Actions for/ })
+    fireEvent.pointerDown(trigger)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Set' }))
 
     const input = await screen.findByPlaceholderText('ElevenLabs API key')
     fireEvent.change(input, { target: { value: 'sk-test-123' } })

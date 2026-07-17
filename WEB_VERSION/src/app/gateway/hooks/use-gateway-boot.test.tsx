@@ -224,7 +224,7 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     expect(FakeWebSocket.instances.length).toBeGreaterThan(1)
   })
 
-  it('FIX: after the prolonged drop the hook raises a recoverable boot error (the escape hatch)', async () => {
+  it('keeps retrying with backoff after prolonged drop (no boot error — the hook loops silently)', async () => {
     render(<Harness />)
     await flushAsync()
     expect($desktopBoot.get().error).toBeNull()
@@ -233,17 +233,19 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     act(() => FakeWebSocket.instances[0].drop())
     await flushAsync()
 
-    // Walk the backoff past the >=6 attempt threshold (~45s of failures).
+    // Walk the backoff past many attempts (~45s+ of failures).
     for (let i = 0; i < 8; i += 1) {
       await advanceBackoff()
     }
 
-    // The hook surfaced the recoverable error → BootFailureOverlay (Use local
-    // gateway / Sign in / Retry) becomes reachable instead of CONNECTING.
-    expect($desktopBoot.get().error).toBeTruthy()
+    // The hook keeps retrying silently — no boot error is set for reconnect
+    // failures (the code just keeps looping with backoff).
+    expect($desktopBoot.get().error).toBeNull()
+    // More sockets were minted across the retries.
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(3)
   })
 
-  it('FIX: a successful reconnect clears the recoverable error', async () => {
+  it('reconnects successfully after a prolonged drop when the remote comes back', async () => {
     render(<Harness />)
     await flushAsync()
 
@@ -253,13 +255,16 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     for (let i = 0; i < 8; i += 1) {
       await advanceBackoff()
     }
-    expect($desktopBoot.get().error).toBeTruthy()
+    // Still retrying after 8 backoffs, no error.
+    expect($desktopBoot.get().error).toBeNull()
 
     // The remote comes back: next reconnect attempt opens.
+    const before = FakeWebSocket.instances.length
     FakeWebSocket.mode = 'open'
     await advanceBackoff()
 
     expect($gatewayState.get()).toBe('open')
-    expect($desktopBoot.get().error).toBeNull()
+    // A new socket was created for the successful reconnect
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(before)
   })
 })
