@@ -7243,7 +7243,15 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
     # graph (including apps/desktop with its Electron + node-pty deps) is never
     # resolved here.  Without --workspace the root package.json's apps/* glob
     # would pull in desktop on every web build. See #38772.
-    npm_workspace_args: tuple[str, ...] = ("--workspace", "WEB_VERSION")
+    # CRITICAL: only pass --workspace when running from the repo root.
+    # When web_dir has its own package-lock.json, _workspace_root returns
+    # web_dir itself — and `npm ci --workspace WEB_VERSION` from inside the
+    # workspace directory silently fails (exits 1, --silent hides output).
+    # See issue #39291.
+    if npm_cwd == web_dir:
+        npm_workspace_args: tuple[str, ...] = ()
+    else:
+        npm_workspace_args: tuple[str, ...] = ("--workspace", "WEB_VERSION")
     if _is_termux_startup_environment():
         npm_cwd, npm_workspace_args = _termux_workspace_install_context(web_dir)
     r1 = _run_npm_install_deterministic(
