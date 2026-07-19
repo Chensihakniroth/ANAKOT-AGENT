@@ -72,6 +72,18 @@ export function useRouteResume({
     if (!hasSettledRef.current) {
       if (gatewayOpen) {
         hasSettledRef.current = true
+        // Create the session immediately instead of waiting for the next
+        // render cycle. Without this, users can get stuck on a loading
+        // animation with no session until they manually click "New Session".
+        if (
+          !routedSessionId &&
+          isNewChatRoute(locationPathname) &&
+          !creatingSessionRef.current &&
+          (selectedStoredSessionId || activeSessionId || !freshDraftReady) &&
+          !rawHashLooksLikeSession()
+        ) {
+          startFreshSessionDraft(true)
+        }
       }
       return
     }

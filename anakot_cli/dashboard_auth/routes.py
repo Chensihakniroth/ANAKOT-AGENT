@@ -734,6 +734,20 @@ async def api_auth_onboard(request: Request, body: _OnboardBody):
     # Already onboarded?
     if has_profile_for_user(sess.user_id):
         existing = get_profile_for_user(sess.user_id)
+        # Verify profile directory exists — recreate if missing (e.g. volume rebuild)
+        from anakot_cli import profiles as profiles_mod
+        profile_dir = profiles_mod.get_profile_dir(existing)
+        if not profile_dir.exists():
+            _log.warning("Profile %r directory missing, recreating", existing)
+            profile_dir = await asyncio.wait_for(
+                asyncio.to_thread(
+                    create_profile,
+                    name=existing,
+                    no_alias=True,
+                    no_skills=False,
+                ),
+                timeout=20,
+            )
         return {"ok": True, "profile": existing, "already_onboarded": True}
 
     # Check if profile name is taken

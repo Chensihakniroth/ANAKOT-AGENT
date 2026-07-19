@@ -1733,7 +1733,7 @@ async def get_sessions(
             profile_name = get_profile_for_user(sess.user_id)
             if profile_name:
                 db_path = profiles_mod.get_profile_dir(profile_name) / "state.db"
-                db = SessionDB(db_path=db_path) if db_path.exists() else SessionDB()
+                db = SessionDB(db_path=db_path)
             else:
                 db = SessionDB()
         else:
@@ -1920,7 +1920,7 @@ async def search_sessions(request: Request, q: str = "", limit: int = 20):
             if pname:
                 home = profiles_mod.get_profile_dir(pname)
                 pdb = Path(home) / "state.db"
-                db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+                db = SessionDB(db_path=pdb)
             else:
                 db = SessionDB()
         else:
@@ -5528,7 +5528,7 @@ async def bulk_delete_sessions_endpoint(request: Request, body: BulkDeleteSessio
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5561,7 +5561,7 @@ async def count_empty_sessions_endpoint(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB(read_only=True)
     else:
@@ -5606,7 +5606,7 @@ async def delete_empty_sessions_endpoint(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5639,7 +5639,7 @@ async def get_session_stats(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB(read_only=True)
     else:
@@ -5695,8 +5695,7 @@ def _open_session_db_for_profile(profile: Optional[str], request: Optional[Reque
             if pname:
                 home = profiles_mod.get_profile_dir(pname)
                 pdb = Path(home) / "state.db"
-                if pdb.exists():
-                    return SessionDB(db_path=pdb)
+                return SessionDB(db_path=pdb)
 
     return SessionDB()
 
@@ -5819,7 +5818,7 @@ async def export_session_endpoint(session_id: str, request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5863,7 +5862,7 @@ async def prune_sessions_endpoint(request: Request, body: SessionPrune):
             home = profiles_mod.get_profile_dir(pname)
             home_path = home
             pdb = home / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
             home_path = get_anakot_home()

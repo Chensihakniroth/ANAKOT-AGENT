@@ -14,6 +14,8 @@ import { setSessions } from '@/store/session'
 interface SessionListProps {
   onSelectSession: (sessionId: string) => void
   onNewSession: () => void
+  /** Create a new session in a specific workspace directory. */
+  onNewSessionInWorkspace?: (path: string | null) => void
 }
 
 interface SessionGroup {
@@ -43,7 +45,7 @@ function groupSessionsByWorkspace(sessions: SessionInfo[], noWorkspaceLabel: str
   return [...groups.values()]
 }
 
-export function SessionList({ onSelectSession, onNewSession }: SessionListProps) {
+export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorkspace }: SessionListProps) {
   const { t } = useI18n()
   const sessions = useStore($sessions)
   const selectedId = useStore($selectedStoredSessionId)
@@ -96,9 +98,9 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
     [unpinnedSessions, t.sidebar?.noWorkspace]
   )
 
-  // All groups start collapsed
+  // Collapse only "No workspace" by default; named workspace groups start expanded
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    return new Set(workspaceGroups.map(g => g.id))
+    return new Set(workspaceGroups.filter(g => g.id === '__no_workspace__').map(g => g.id))
   })
 
   const toggleGroup = (groupId: string) => {
@@ -280,6 +282,16 @@ export function SessionList({ onSelectSession, onNewSession }: SessionListProps)
                     <span className="text-[0.55rem] text-muted-foreground/50">
                       {group.sessions.length}
                     </span>
+                    {onNewSessionInWorkspace && (
+                      <button
+                        className="flex items-center justify-center rounded-sm p-0.5 opacity-0 hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-foreground hover:bg-(--ui-control-hover-background)"
+                        onClick={e => { e.stopPropagation(); onNewSessionInWorkspace(group.path) }}
+                        title={`New session in ${group.label}`}
+                        type="button"
+                      >
+                        <Codicon name="plus" size="0.625rem" />
+                      </button>
+                    )}
                   </button>
                   {!isCollapsed && group.sessions.map(session => (
                     <SessionRow

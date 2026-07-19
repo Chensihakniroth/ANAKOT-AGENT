@@ -3198,10 +3198,12 @@ def _(rid, params: dict) -> dict:
     # workspace (see _ensure_session_db_row); otherwise it lands in "No
     # workspace" instead of whatever folder the desktop launched in.
     raw_cwd = str(params.get("cwd") or "").strip()
-    try:
-        explicit_cwd = bool(raw_cwd) and os.path.isdir(os.path.abspath(os.path.expanduser(raw_cwd)))
-    except Exception:
-        explicit_cwd = False
+    # Any explicitly-passed workspace path is trusted — no os.path.isdir()
+    # guard. The session's cwd is persisted to the DB row so the sidebar can
+    # group by workspace, even if the directory doesn't happen to exist on
+    # this machine at creation time (e.g. network drive, WSL path, or
+    # race condition with a removable volume).
+    explicit_cwd = bool(raw_cwd)
     resolved_cwd = _completion_cwd(params)
     _enable_gateway_prompts()
 
