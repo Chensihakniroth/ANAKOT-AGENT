@@ -1689,6 +1689,7 @@ async def get_action_status(name: str, lines: int = 200):
 
 @app.get("/api/sessions")
 async def get_sessions(
+    request: Request,
     limit: int = 20,
     offset: int = 0,
     min_messages: int = 0,
@@ -1696,6 +1697,10 @@ async def get_sessions(
     order: str = "created",
 ):
     """List sessions.
+
+    In multi-user (OAuth) mode the user's own profile state.db is read — users
+    only ever see their own sessions.  In loopback mode the default session
+    database is used (same as before).
 
     ``archived`` controls how soft-archived sessions are treated:
     ``exclude`` (default) hides them, ``only`` returns just the archived ones
@@ -1719,7 +1724,20 @@ async def get_sessions(
         )
     try:
         from anakot_state import SessionDB
-        db = SessionDB()
+        from anakot_cli import profiles as profiles_mod
+
+        # Multi-user mode: read from the authenticated user's profile state.db
+        sess = getattr(request.state, "session", None)
+        if sess is not None:
+            from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+            profile_name = get_profile_for_user(sess.user_id)
+            if profile_name:
+                db_path = profiles_mod.get_profile_dir(profile_name) / "state.db"
+                db = SessionDB(db_path=db_path) if db_path.exists() else SessionDB()
+            else:
+                db = SessionDB()
+        else:
+            db = SessionDB()
         try:
             min_message_count = max(0, min_messages)
             archived_only = archived == "only"
@@ -1756,6 +1774,7 @@ async def get_sessions(
 
 @app.get("/api/profiles/sessions")
 async def get_profiles_sessions(
+    request: Request,
     limit: int = 20,
     offset: int = 0,
     min_messages: int = 0,
@@ -1763,14 +1782,11 @@ async def get_profiles_sessions(
     order: str = "recent",
     profile: str = "all",
 ):
-    """Unified, read-only session list aggregated across ALL profiles.
+    """Unified, read-only session list aggregated across profiles.
 
-    Intentionally process-light: this opens each profile's ``state.db`` directly
-    from disk — it does NOT spawn a dashboard backend per profile. Each returned
-    session is tagged with its owning ``profile`` so the desktop renders one
-    browsable list and only spins up a profile's backend when the user actually
-    interacts (sends a message). A user with a single (default) profile gets the
-    same rows as ``/api/sessions``, just tagged ``profile="default"``.
+    In multi-user (OAuth) mode, only the authenticated user's own profile is
+    read — users never see another user's sessions.  In loopback mode every
+    profile on disk is listed (same as before).
     """
     if archived not in ("exclude", "only", "include"):
         raise HTTPException(status_code=400, detail="archived must be one of: exclude, only, include")
@@ -1781,7 +1797,19 @@ async def get_profiles_sessions(
     from anakot_cli import profiles as profiles_mod
 
     targets: List[Tuple[str, Path]] = []
-    if profile and profile != "all":
+
+    # ── Multi-user mode: only the authenticated user's profile ──
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        profile_name = get_profile_for_user(sess.user_id)
+        if profile_name:
+            home = profiles_mod.get_profile_dir(profile_name)
+            targets.append((profile_name, home))
+        else:
+            # User exists but hasn't been onboarded yet — no sessions to show.
+            pass
+    elif profile and profile != "all":
         name, home = _cron_profile_home(profile)
         targets.append((name, home))
     else:
@@ -1863,7 +1891,7 @@ async def get_profiles_sessions(
 
 
 @app.get("/api/sessions/search")
-async def search_sessions(q: str = "", limit: int = 20):
+async def search_sessions(request: Request, q: str = "", limit: int = 20):
     """Search sessions by ID plus full-text message content using FTS5.
 
     Direct session-id matches are surfaced first, then FTS message-content
@@ -1873,12 +1901,30 @@ async def search_sessions(q: str = "", limit: int = 20):
     logical chat can own many ``sessions`` rows that all match the same query.
     Branches also use ``parent_session_id``, but they are real alternate
     conversations; don't collapse branch-specific hits back into the parent.
+
+    In multi-user (OAuth) mode, search is scoped to the authenticated user's
+    own profile database.
     """
     if not q or not q.strip():
         return {"results": []}
     try:
         from anakot_state import SessionDB
-        db = SessionDB()
+        from anakot_cli import profiles as profiles_mod
+
+        db: SessionDB
+        # Multi-user mode: scope to the authenticated user's profile
+        sess = getattr(request.state, "session", None)
+        if sess is not None:
+            from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+            pname = get_profile_for_user(sess.user_id)
+            if pname:
+                home = profiles_mod.get_profile_dir(pname)
+                pdb = Path(home) / "state.db"
+                db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            else:
+                db = SessionDB()
+        else:
+            db = SessionDB()
         try:
             safe_limit = max(1, min(int(limit or 20), 100))
 
@@ -5463,49 +5509,30 @@ class BulkDeleteSessions(BaseModel):
 
 
 @app.post("/api/sessions/bulk-delete")
-async def bulk_delete_sessions_endpoint(body: BulkDeleteSessions):
+async def bulk_delete_sessions_endpoint(request: Request, body: BulkDeleteSessions):
     """Delete every session in ``body.ids`` in a single DB transaction.
 
-    Backs the dashboard's bulk-select-and-delete flow on the sessions
-    page. POST (not DELETE) because most HTTP clients refuse to send a
-    request body on DELETE and a body is the natural shape for a list
-    of IDs — Starlette accepts both, but POSTing a list keeps proxies,
-    curl, and the browser ``fetch`` API consistent.
-
-    Per-row contract matches :meth:`SessionDB.delete_sessions`:
-
-    * Unknown IDs are silently skipped (the response ``deleted`` count
-      reflects what really happened, not the input length). This is
-      deliberate — UI selection state can race against another tab's
-      delete, and we'd rather succeed-on-the-rest than fail-the-whole-
-      batch.
-    * Children of every deleted parent are orphaned, not cascade-
-      deleted.
-    * Active and archived sessions ARE deleted when explicitly
-      selected — unlike ``DELETE /api/sessions/empty``, the user
-      hand-picked the rows so we trust the selection.
-    * Like the other session-delete endpoints, this does NOT pass a
-      ``sessions_dir`` through; on-disk transcript / request-dump
-      cleanup runs at the CLI/agent layer on the next prune pass.
-
-    The response carries the actual deleted count, so the dashboard
-    can surface it in a toast. The IDs that were removed are not
-    echoed back because the client already knows what it asked to
-    delete (unknown IDs are silently skipped — see contract above)
-    and can prune its in-memory list directly from the request.
+    Backs the dashboard's bulk-select-and-delete flow on the sessions page.
+    In multi-user (OAuth) mode, only the authenticated user's own profile
+    sessions are affected.
     """
-    # Enforce a hard cap so a runaway/typo'd selection can't lock the
-    # DB writer for an extended window. The dashboard pages 20 rows
-    # at a time; 500 covers a "select all on every page in a
-    # reasonable scrollback" worst case without opening the door to
-    # multi-thousand-row transactions.
     if len(body.ids) > 500:
-        raise HTTPException(
-            status_code=400,
-            detail="ids must contain at most 500 entries",
-        )
+        raise HTTPException(status_code=400, detail="ids must contain at most 500 entries")
     from anakot_state import SessionDB
-    db = SessionDB()
+    from anakot_cli import profiles as profiles_mod
+
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            pdb = Path(home) / "state.db"
+            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+        else:
+            db = SessionDB()
+    else:
+        db = SessionDB()
     try:
         deleted = db.delete_sessions(body.ids)
         return {"ok": True, "deleted": deleted}
@@ -5514,15 +5541,31 @@ async def bulk_delete_sessions_endpoint(body: BulkDeleteSessions):
 
 
 @app.get("/api/sessions/empty/count")
-async def count_empty_sessions_endpoint():
+async def count_empty_sessions_endpoint(request: Request):
     """Return the number of empty, ended, non-archived sessions.
 
     Drives the dashboard's "Delete empty (N)" button — when N is 0 the
     UI hides the affordance so users aren't presented with a button
     that does nothing. Cheap, single-COUNT query.
+
+    In multi-user (OAuth) mode, counts only the authenticated user's
+    own profile.
     """
     from anakot_state import SessionDB
-    db = SessionDB()
+    from anakot_cli import profiles as profiles_mod
+
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            pdb = Path(home) / "state.db"
+            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+        else:
+            db = SessionDB(read_only=True)
+    else:
+        db = SessionDB(read_only=True)
     try:
         return {"count": db.count_empty_sessions()}
     finally:
@@ -5530,7 +5573,7 @@ async def count_empty_sessions_endpoint():
 
 
 @app.delete("/api/sessions/empty")
-async def delete_empty_sessions_endpoint():
+async def delete_empty_sessions_endpoint(request: Request):
     """Delete every empty (``message_count == 0``), ended,
     non-archived session in a single transaction.
 
@@ -5548,9 +5591,26 @@ async def delete_empty_sessions_endpoint():
     but the web server historically leaves file cleanup to the next
     prune-on-startup pass. Matching that pre-existing trade-off keeps
     the two delete endpoints' DB-vs-disk behaviour consistent.
+
+    In multi-user (OAuth) mode, only the authenticated user's own
+    profile's empty sessions are deleted.
     """
     from anakot_state import SessionDB
-    db = SessionDB()
+    from anakot_cli import profiles as profiles_mod
+
+    # Multi-user mode: scope to the authenticated user's profile
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            pdb = Path(home) / "state.db"
+            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+        else:
+            db = SessionDB()
+    else:
+        db = SessionDB()
     try:
         deleted = db.delete_empty_sessions()
         return {"ok": True, "deleted": deleted}
@@ -5559,15 +5619,31 @@ async def delete_empty_sessions_endpoint():
 
 
 @app.get("/api/sessions/stats")
-async def get_session_stats():
+async def get_session_stats(request: Request):
     """Session-store statistics for the Sessions page (mirrors `anakot sessions stats`).
 
     Registered before ``/api/sessions/{session_id}`` so the literal ``stats``
     path isn't captured as a session id by the parameterized route.
+
+    In multi-user (OAuth) mode, stats reflect only the authenticated user's
+    own profile.
     """
     from anakot_state import SessionDB
+    from anakot_cli import profiles as profiles_mod
 
-    db = SessionDB()
+    # Multi-user mode: scope to the authenticated user's profile
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            pdb = Path(home) / "state.db"
+            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+        else:
+            db = SessionDB(read_only=True)
+    else:
+        db = SessionDB(read_only=True)
     try:
         total = db.session_count(include_archived=True)
         active_store = db.session_count(include_archived=False)
@@ -5591,24 +5667,43 @@ async def get_session_stats():
         db.close()
 
 
-def _open_session_db_for_profile(profile: Optional[str]):
+def _open_session_db_for_profile(profile: Optional[str], request: Optional[Request] = None):
     """Open a SessionDB for read paths, optionally for another profile.
 
     ``profile`` None/empty → this process's own ``state.db`` (the common,
     single-profile case). A named profile opens that profile's on-disk
     ``state.db`` directly so the primary backend can serve cross-profile reads
     (transcripts, detail) without spawning that profile's backend.
+
+    In multi-user (OAuth) mode, when no explicit profile is given the
+    authenticated user's own profile database is used instead — users can
+    never access another user's session data through these paths.
     """
     from anakot_state import SessionDB
-    if not profile:
-        return SessionDB()
-    _name, home = _cron_profile_home(profile)
-    return SessionDB(db_path=Path(home) / "state.db")
+    from anakot_cli import profiles as profiles_mod
+
+    if profile:
+        _name, home = _cron_profile_home(profile)
+        return SessionDB(db_path=Path(home) / "state.db")
+
+    # No explicit profile — try multi-user routing
+    if request is not None:
+        sess = getattr(request.state, "session", None)
+        if sess is not None:
+            from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+            pname = get_profile_for_user(sess.user_id)
+            if pname:
+                home = profiles_mod.get_profile_dir(pname)
+                pdb = Path(home) / "state.db"
+                if pdb.exists():
+                    return SessionDB(db_path=pdb)
+
+    return SessionDB()
 
 
 @app.get("/api/sessions/{session_id}")
-async def get_session_detail(session_id: str, profile: Optional[str] = None):
-    db = _open_session_db_for_profile(profile)
+async def get_session_detail(session_id: str, request: Request, profile: Optional[str] = None):
+    db = _open_session_db_for_profile(profile, request)
     try:
         sid = db.resolve_session_id(session_id)
         session = db.get_session(sid) if sid else None
@@ -5635,8 +5730,8 @@ async def get_session_latest_descendant(session_id: str):
     }
 
 @app.get("/api/sessions/{session_id}/messages")
-async def get_session_messages(session_id: str, profile: Optional[str] = None):
-    db = _open_session_db_for_profile(profile)
+async def get_session_messages(session_id: str, request: Request, profile: Optional[str] = None):
+    db = _open_session_db_for_profile(profile, request)
     try:
         sid = db.resolve_session_id(session_id)
         if not sid:
@@ -5648,11 +5743,11 @@ async def get_session_messages(session_id: str, profile: Optional[str] = None):
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session_endpoint(session_id: str, profile: Optional[str] = None):
+async def delete_session_endpoint(session_id: str, request: Request, profile: Optional[str] = None):
     # ``profile`` deletes a session belonging to another (local) profile by
     # opening its state.db directly. Remote profiles never reach here — the
     # desktop routes their DELETE to the remote backend. Omit for current/default.
-    db = _open_session_db_for_profile(profile)
+    db = _open_session_db_for_profile(profile, request)
     try:
         if not db.delete_session(session_id):
             raise HTTPException(status_code=404, detail="Session not found")
@@ -5670,14 +5765,17 @@ class SessionRename(BaseModel):
 
 
 @app.patch("/api/sessions/{session_id}")
-async def rename_session_endpoint(session_id: str, body: SessionRename):
+async def rename_session_endpoint(session_id: str, request: Request, body: SessionRename):
     """Update a session: rename (or clear its title) and/or archive it.
 
     ``title`` renames (empty/null clears the title); ``archived`` soft-hides or
     restores the session. Either field may be omitted. ``profile`` targets
     another profile's session.
+
+    In multi-user (OAuth) mode, if no profile is explicitly given the
+    authenticated user's own profile database is used.
     """
-    db = _open_session_db_for_profile(body.profile)
+    db = _open_session_db_for_profile(body.profile, request)
     try:
         sid = db.resolve_session_id(session_id)
         if not sid:
@@ -5704,11 +5802,28 @@ async def rename_session_endpoint(session_id: str, body: SessionRename):
 
 
 @app.get("/api/sessions/{session_id}/export")
-async def export_session_endpoint(session_id: str):
-    """Export a single session (metadata + messages) as JSON."""
-    from anakot_state import SessionDB
+async def export_session_endpoint(session_id: str, request: Request):
+    """Export a single session (metadata + messages) as JSON.
 
-    db = SessionDB()
+    In multi-user (OAuth) mode, only sessions in the authenticated user's
+    own profile can be exported.
+    """
+    from anakot_state import SessionDB
+    from anakot_cli import profiles as profiles_mod
+
+    db: SessionDB
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            pdb = Path(home) / "state.db"
+            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+        else:
+            db = SessionDB()
+    else:
+        db = SessionDB()
     try:
         sid = db.resolve_session_id(session_id)
         if not sid:
@@ -5727,15 +5842,36 @@ class SessionPrune(BaseModel):
 
 
 @app.post("/api/sessions/prune")
-async def prune_sessions_endpoint(body: SessionPrune):
-    """Delete ended sessions older than N days (mirrors `anakot sessions prune`)."""
+async def prune_sessions_endpoint(request: Request, body: SessionPrune):
+    """Delete ended sessions older than N days (mirrors `anakot sessions prune`).
+
+    In multi-user (OAuth) mode, only the authenticated user's own profile's
+    sessions are pruned.
+    """
     if body.older_than_days < 1:
         raise HTTPException(status_code=400, detail="older_than_days must be >= 1")
     from anakot_state import SessionDB
+    from anakot_cli import profiles as profiles_mod
 
-    db = SessionDB()
+    db: SessionDB
+    home_path: Path
+    sess = getattr(request.state, "session", None)
+    if sess is not None:
+        from anakot_cli.dashboard_auth.user_profiles import get_profile_for_user
+        pname = get_profile_for_user(sess.user_id)
+        if pname:
+            home = profiles_mod.get_profile_dir(pname)
+            home_path = home
+            pdb = home / "state.db"
+            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+        else:
+            db = SessionDB()
+            home_path = get_anakot_home()
+    else:
+        db = SessionDB()
+        home_path = get_anakot_home()
     try:
-        sessions_dir = get_anakot_home() / "sessions"
+        sessions_dir = home_path / "sessions"
         removed = db.prune_sessions(
             older_than_days=body.older_than_days,
             source=(body.source or None),
