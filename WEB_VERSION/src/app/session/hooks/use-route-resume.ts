@@ -72,9 +72,6 @@ export function useRouteResume({
     if (!hasSettledRef.current) {
       if (gatewayOpen) {
         hasSettledRef.current = true
-        // Create the session immediately instead of waiting for the next
-        // render cycle. Without this, users can get stuck on a loading
-        // animation with no session until they manually click "New Session".
         if (
           !routedSessionId &&
           isNewChatRoute(locationPathname) &&
@@ -83,6 +80,13 @@ export function useRouteResume({
           !rawHashLooksLikeSession()
         ) {
           startFreshSessionDraft(true)
+        } else if (routedSessionId && !creatingSessionRef.current) {
+          // Covers the refresh-on-existing-session case: the gateway opens to
+          // find a routed session in the URL.  Without this the resume-vs-new
+          // decision is deferred to the next effect run, but by then
+          // `gatewayBecameOpen` is already false so `shouldResume` is never
+          // true → resumeSession is never called → stuck on spinner forever.
+          void resumeSession(routedSessionId, true)
         }
       }
       return
