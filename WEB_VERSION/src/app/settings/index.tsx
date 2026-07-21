@@ -268,16 +268,27 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
       {isMobile ? (
         /* ── Mobile layout ────────────────────────────────────────────── */
         <div className="flex h-full flex-col overflow-hidden">
-          {/* Sticky nav strip */}
-          <div className="flex shrink-0 items-center gap-1 border-b border-border/50 px-2 py-1.5">
+          {/* Sticky nav strip: back arrow + tappable section name */}
+          <div className="flex shrink-0 items-center gap-1 border-b border-border/50 px-1 py-1">
+            <button
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={onClose}
+              type="button"
+              aria-label={t.settings.closeSettings}
+            >
+              <Codicon name="chevron-left" size="1.125rem" />
+            </button>
+
+            <div className="flex-1" />
+
             <Sheet open={navSheetOpen} onOpenChange={setNavSheetOpen}>
               <SheetTrigger asChild>
                 <button
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
                   type="button"
                 >
-                  <Codicon name="menu" size="1rem" />
-                  <span className="max-w-[140px] truncate">{activeLabel()}</span>
+                  <span className="max-w-[160px] truncate">{activeLabel()}</span>
+                  <Codicon name="chevron-down" size="0.875rem" />
                 </button>
               </SheetTrigger>
               <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto px-2 pb-2" showCloseButton={false}>
@@ -285,6 +296,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
                 {sidebarContent}
               </SheetContent>
             </Sheet>
+
+            <div className="flex-1" />
           </div>
 
           {/* Scrollable settings content */}

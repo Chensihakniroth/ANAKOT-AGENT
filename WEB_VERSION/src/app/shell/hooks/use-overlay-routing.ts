@@ -75,6 +75,7 @@ export function useOverlayRouting() {
     messagingOpen,
     openAgents,
     openCommandCenterSection,
+    overlayOpen,
     profilesOpen,
     settingsOpen,
     skillsOpen,

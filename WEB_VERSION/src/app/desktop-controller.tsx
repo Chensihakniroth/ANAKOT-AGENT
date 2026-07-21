@@ -41,6 +41,7 @@ import { $codeReviewData } from '../store/code-review'
 import { $activeGatewayProfile, $freshSessionRequest, $newChatProfile, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
 import {
   $activeSessionId,
+  $connection,
   $currentCwd,
   $freshDraftReady,
   $gatewayState,
@@ -67,6 +68,7 @@ import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store
 import { SearchPanel } from '@/components/workbench/SearchPanel'
 import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
+import { SplashScreen } from '@/components/splash-screen'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
 import { SessionTab } from '@/components/workbench/SessionTab'
 import { WelcomeView } from '@/components/workbench/WelcomeView'
@@ -153,9 +155,11 @@ export function DesktopController() {
   const busyRef = useRef(false)
   const creatingSessionRef = useRef(false)
   const refreshSessionsRequestRef = useRef(0)
+  const firstConnectionEstablished = useRef(false)
 
   const gatewayState = useStore($gatewayState)
   const activeSessionId = useStore($activeSessionId)
+  const connection = useStore($connection)
   const currentCwd = useStore($currentCwd)
   const freshDraftReady = useStore($freshDraftReady)
   const filePreviewTarget = useStore($filePreviewTarget)
@@ -164,6 +168,15 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
+
+  // Track first connection — splash only shows on initial boot, not when
+  // the connection blinks during reconnects.
+  useEffect(() => {
+    if (connection && !firstConnectionEstablished.current) {
+      firstConnectionEstablished.current = true
+    }
+  }, [connection])
+  const showSplash = !firstConnectionEstablished.current
 
   // Auth gate: when the server requires auth (e.g. Railway deploy),
   // check session and show login page if not authenticated.
@@ -250,6 +263,7 @@ export function DesktopController() {
     messagingOpen,
     openAgents,
     openCommandCenterSection,
+    overlayOpen,
     profilesOpen,
     settingsOpen,
     skillsOpen,
@@ -824,6 +838,7 @@ export function DesktopController() {
       onPickFolders={() => void composer.pickContextPaths('folder')}
       onPickImages={() => void composer.pickImages()}
       onReload={reloadFromMessage}
+      onRefresh={() => { void resumeSession(selectedStoredSessionId!) }}
       onRemoveAttachment={(id: string) => void composer.removeAttachment(id)}
       onSteer={steerPrompt}
       onSubmit={submitText}
@@ -914,8 +929,10 @@ export function DesktopController() {
   if (!authRequired || (isAuthenticated && !onboardingLoading && !needsOnboarding)) {
     return (
       <>
+        <SplashScreen loading={showSplash} />
         <AppShell
           activityBar={<ActivityBar />}
+          isOverlay={overlayOpen}
           leftStatusbarItems={leftStatusbarItems}
           onOpenSettings={openSettings}
           onSwipeBack={closeOverlayToPreviousRoute}

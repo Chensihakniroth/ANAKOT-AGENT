@@ -9,6 +9,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { useVisualViewport } from '@/hooks/use-visual-viewport'
 import { useSwipeNavigation } from '@/hooks/use-swipe-navigation'
 import { PanelLeftIcon } from '@/lib/icons'
+import { cn } from '@/lib/utils'
 import { $sidebarOpen, setSidebarOpen, toggleSidebarOpen } from '@/store/layout'
 import { $connection } from '@/store/session'
 
@@ -19,6 +20,9 @@ import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 interface AppShellProps {
   activityBar?: ReactNode
   children: ReactNode
+  /** True when an overlay (Settings, Skills, etc.) is open on top of the main
+   *  chat surface. On mobile the floating top-left toggle is hidden. */
+  isOverlay?: boolean
   leftStatusbarItems?: readonly StatusbarItem[]
   onOpenSettings: () => void
   /** Callback on edge-swipe-right gesture (mobile back navigation). */
@@ -32,6 +36,7 @@ interface AppShellProps {
 export function AppShell({
   activityBar,
   children,
+  isOverlay,
   leftStatusbarItems,
   onOpenSettings,
   onSwipeBack,
@@ -102,13 +107,11 @@ export function AppShell({
 
       <KeybindPanel />
 
-      {/* Mobile sidebar toggle — top-left corner, standard mobile hamburger
-          menu position. Hidden when keyboard is open. On mobile, opens a
-          Sheet drawer with the session list instead of toggling the desktop
-          pane (which is hidden by CSS at the mobile breakpoint). */}
+      {/* Mobile sidebar toggle — top-left corner. Hidden when an overlay
+          is open (the overlay provides its own back/close header). */}
       <button
         aria-label="Toggle sidebar"
-        className="mobile-sidebar-toggle"
+        className={cn('mobile-sidebar-toggle', { 'mobile-sidebar-toggle--hidden': isOverlay })}
         onClick={handleToggleSidebar}
         style={{ display: keyboardOpen ? 'none' : undefined }}
         type="button"

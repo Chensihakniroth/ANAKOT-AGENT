@@ -14,6 +14,8 @@ import {
 import { Codicon } from '@/components/ui/codicon'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { triggerHaptic } from '@/lib/haptics'
+import { cn } from '@/lib/utils'
+import { $connection } from '@/store/session'
 
 interface TabItem {
   icon: string
@@ -48,6 +50,8 @@ export function MobileBottomTabBar({ onOpenSidebar }: MobileBottomTabBarProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const [moreOpen, setMoreOpen] = useState(false)
+  const connection = useStore($connection)
+  const connected = connection !== null
 
   /** Determine which route (if any) is active based on pathname. */
   const activeId = ((): string => {
@@ -99,12 +103,23 @@ export function MobileBottomTabBar({ onOpenSidebar }: MobileBottomTabBarProps) {
               key={tab.id}
               aria-label={tab.label}
               aria-current={isActive ? 'page' : undefined}
-              className={`mobile-bottom-tab ${isActive ? 'mobile-bottom-tab--active' : ''}`}
+              className={cn(
+                'mobile-bottom-tab',
+                isActive && 'mobile-bottom-tab--active'
+              )}
               onClick={() => handleTab(tab)}
               type="button"
             >
               <div className="mobile-bottom-tab__icon">
                 <Codicon name={tab.icon} size="1.25rem" />
+                {tab.id === 'settings' && (
+                  <span
+                    className={cn(
+                      'absolute -right-0.5 -top-0.5 size-1.5 rounded-full',
+                      connected ? 'bg-green-500' : 'bg-red-500'
+                    )}
+                  />
+                )}
               </div>
               <span className="mobile-bottom-tab__label">{tab.label}</span>
             </button>

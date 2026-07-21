@@ -13,6 +13,7 @@ import { useLocation } from 'react-router-dom'
 import { Thread } from '@/components/assistant-ui/thread'
 import { Backdrop } from '@/components/Backdrop'
 import { PromptOverlays } from '@/components/prompt-overlays'
+import { PullToRefreshOverlay } from '@/components/chat/pull-to-refresh'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { getGlobalModelOptions, type AnakotGateway } from '@/anakot'
@@ -82,6 +83,9 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onThreadMessagesChange: (messages: readonly ThreadMessage[]) => void
   onEdit: (message: AppendMessage) => Promise<void>
   onReload: (parentId: string | null) => Promise<void>
+  /** Pull-to-refresh callback (mobile). If omitted, pull-to-refresh is
+   *  purely visual feedback with no action. */
+  onRefresh?: () => void
   onTranscribeAudio?: (audio: Blob) => Promise<string>
 }
 
@@ -172,6 +176,7 @@ export function ChatView({
   onThreadMessagesChange,
   onEdit,
   onReload,
+  onRefresh,
   onTranscribeAudio
 }: ChatViewProps) {
   const location = useLocation()
@@ -339,47 +344,52 @@ export function ChatView({
         className="relative min-h-0 max-w-full flex-1 overflow-hidden bg-(--ui-chat-surface-background) contain-[layout_paint]"
         {...dropHandlers}
       >
-        <AssistantRuntimeProvider runtime={runtime}>
-          <Thread
-            clampToComposer={showChatBar}
-            cwd={currentCwd}
-            gateway={gateway}
-            intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
-            loading={threadLoading}
-            onBranchInNewChat={onBranchInNewChat}
-            onCancel={onCancel}
-            sessionId={activeSessionId}
-            sessionKey={threadKey}
-          />
-          {showChatBar && (
-            <Suspense fallback={<ChatBarFallback />}>
-              <ChatBar
-                busy={busy}
-                cwd={currentCwd}
-                disabled={!gatewayOpen}
-                focusKey={activeSessionId}
-                gateway={gateway}
-                maxRecordingSeconds={maxVoiceRecordingSeconds}
-                onAddContextRef={onAddContextRef}
-                onAddUrl={onAddUrl}
-                onAttachDroppedItems={onAttachDroppedItems}
-                onAttachImageBlob={onAttachImageBlob}
-                onCancel={onCancel}
-                onPasteClipboardImage={onPasteClipboardImage}
-                onPickFiles={onPickFiles}
-                onPickFolders={onPickFolders}
-                onPickImages={onPickImages}
-                onRemoveAttachment={onRemoveAttachment}
-                onSteer={onSteer}
-                onSubmit={onSubmit}
-                onTranscribeAudio={onTranscribeAudio}
-                queueSessionKey={selectedSessionId || activeSessionId}
-                sessionId={activeSessionId}
-                state={chatBarState}
-              />
-            </Suspense>
-          )}
-        </AssistantRuntimeProvider>
+        <PullToRefreshOverlay
+          onRefresh={onRefresh}
+          scrollSelector="[data-slot='aui_thread-viewport']"
+        >
+          <AssistantRuntimeProvider runtime={runtime}>
+            <Thread
+              clampToComposer={showChatBar}
+              cwd={currentCwd}
+              gateway={gateway}
+              intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
+              loading={threadLoading}
+              onBranchInNewChat={onBranchInNewChat}
+              onCancel={onCancel}
+              sessionId={activeSessionId}
+              sessionKey={threadKey}
+            />
+            {showChatBar && (
+              <Suspense fallback={<ChatBarFallback />}>
+                <ChatBar
+                  busy={busy}
+                  cwd={currentCwd}
+                  disabled={!gatewayOpen}
+                  focusKey={activeSessionId}
+                  gateway={gateway}
+                  maxRecordingSeconds={maxVoiceRecordingSeconds}
+                  onAddContextRef={onAddContextRef}
+                  onAddUrl={onAddUrl}
+                  onAttachDroppedItems={onAttachDroppedItems}
+                  onAttachImageBlob={onAttachImageBlob}
+                  onCancel={onCancel}
+                  onPasteClipboardImage={onPasteClipboardImage}
+                  onPickFiles={onPickFiles}
+                  onPickFolders={onPickFolders}
+                  onPickImages={onPickImages}
+                  onRemoveAttachment={onRemoveAttachment}
+                  onSteer={onSteer}
+                  onSubmit={onSubmit}
+                  onTranscribeAudio={onTranscribeAudio}
+                  queueSessionKey={selectedSessionId || activeSessionId}
+                  sessionId={activeSessionId}
+                  state={chatBarState}
+                />
+              </Suspense>
+            )}
+          </AssistantRuntimeProvider>
+        </PullToRefreshOverlay>
         <ChatDropOverlay kind={dragKind} />
         <ChatSwapOverlay profile={gatewaySwapTarget} />
       </div>
