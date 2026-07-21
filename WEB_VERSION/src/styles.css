@@ -1153,6 +1153,20 @@ canvas {
   margin: 0 !important;
 }
 
+/* Horizontal scroll shadows on code blocks — subtle gradients on both
+   edges that reveal themselves when the scroll position isn't at the
+   boundary.  The technique pairs local (scrolls-with-content) and
+   scroll (viewport-fixed) background layers so the fade naturally
+   shows only when content extends past the visible area. */
+[data-slot='aui_assistant-message-content'] .aui-md .aui-shiki {
+  background:
+    linear-gradient(to right, var(--ui-chat-surface-background) 8px, transparent 28px) left / 36px 100% local,
+    linear-gradient(to left,  var(--ui-chat-surface-background) 8px, transparent 28px) right / 36px 100% local,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,0.12) 0%, transparent 28px) left / 36px 100% scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.12) 0%, transparent 28px) right / 36px 100% scroll,
+    var(--ui-chat-surface-background);
+}
+
 [data-slot='aui_assistant-message-content'] .aui-md .aui-md-table {
   border-spacing: 0;
 }

@@ -1,11 +1,28 @@
 import { IconDownload, IconRefresh, IconUpload } from '@tabler/icons-react'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 import { Tip } from '@/components/ui/tooltip'
 import { getAnakotConfigDefaults, getAnakotConfigRecord, saveAnakotConfig } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Globe, Info, KeyRound, LogOut, Settings2, ShieldCheck, Sparkles, Users, Wrench, Zap } from '@/lib/icons'
+import {
+  Archive,
+  Globe,
+  Info,
+  KeyRound,
+  LogOut,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Wrench,
+  Zap,
+  type IconComponent,
+} from '@/lib/icons'
+import { cn } from '@/lib/utils'
+import { Codicon } from '@/components/ui/codicon'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -42,6 +59,9 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
 
 export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChanged, user }: SettingsPageProps) {
   const { t } = useI18n()
+  const isMobile = useIsMobile()
+  const [navSheetOpen, setNavSheetOpen] = useState(false)
+
   // Providers subnav (Accounts vs API keys) lives in its own param so each
   // sub-view is deep-linkable and survives a refresh.
   const [providerView, setProviderView] = useRouteEnumParam<ProviderView>('pview', PROVIDER_VIEWS, 'accounts')
@@ -74,178 +94,132 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
 
   const [activeView, setActiveView] = useRouteEnumParam('tab', SETTINGS_VIEWS, defaultTab)
 
-  const exportConfig = async () => {
-    try {
-      const cfg = await getAnakotConfigRecord()
-      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'anakot-config.json'
-      a.click()
-      URL.revokeObjectURL(url)
-      triggerHaptic('success')
-    } catch (err) {
-      notifyError(err, t.settings.exportFailed)
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  const navItem = (view: SettingsViewId, label: string, icon: IconComponent, isNested = false) => (
+    <OverlayNavItem
+      active={activeView === view}
+      icon={icon}
+      label={label}
+      nested={isNested}
+      onClick={() => {
+        setActiveView(view)
+        setNavSheetOpen(false)
+      }}
+    />
+  )
+
+  const activeLabel = () => {
+    const section = SECTIONS.find(s => `config:${s.id}` === activeView)
+    if (section) return t.settings.sections[section.id] ?? section.label
+    const navLabels: Record<string, string> = {
+      providers: t.settings.nav.providers,
+      gateway: t.settings.nav.gateway,
+      keys: t.settings.nav.apiKeys,
+      mcp: t.settings.nav.mcp,
+      toolsets: t.settings.nav.toolsets ?? 'Tool Backends',
+      users: 'Users',
+      grants: 'Grants',
+      sessions: t.settings.nav.archivedChats,
+      about: t.settings.nav.about,
     }
+    return navLabels[activeView] ?? activeView
   }
 
-  const resetConfig = async () => {
-    if (!window.confirm(t.settings.resetConfirm)) {
-      return
-    }
+  // ── Sidebar content (shared between desktop sidebar & mobile sheet) ──
 
-    try {
-      await saveAnakotConfig(await getAnakotConfigDefaults())
-      triggerHaptic('success')
-      onConfigSaved?.()
-    } catch (err) {
-      notifyError(err, t.settings.resetFailed)
-    }
-  }
-
-  const handleLogout = async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) {
-      return
-    }
-    triggerHaptic('warning')
-    try {
-      await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
-    } catch {
-      // Ignore — the redirect response may cause a fetch error
-    }
-    window.location.href = '/'
-  }
-
-  return (
-    <OverlayView closeLabel={t.settings.closeSettings} onClose={onClose}>
-      <OverlaySplitLayout>
-        <OverlaySidebar>
-          {visibleSections.map(s => {
-            const view = `config:${s.id}` as SettingsViewId
-
-            return (
-              <OverlayNavItem
-                active={activeView === view}
-                icon={s.icon}
-                key={s.id}
-                label={t.settings.sections[s.id] ?? s.label}
-                onClick={() => setActiveView(view)}
-              />
-            )
-          })}
-          <div className="my-2 h-px bg-border/30" />
-          {isAdmin && (
-            <>
-              <OverlayNavItem
-                active={activeView === 'providers'}
-                icon={Zap}
-                label={t.settings.nav.providers}
-                onClick={() => setActiveView('providers')}
-              />
-              {activeView === 'providers' && (
-                <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
-                  <OverlayNavItem
-                    active={providerView === 'accounts'}
-                    icon={Sparkles}
-                    label={t.settings.nav.providerAccounts}
-                    nested
-                    onClick={() => openProviderView('accounts')}
-                  />
-                  <OverlayNavItem
-                    active={providerView === 'keys'}
-                    icon={KeyRound}
-                    label={t.settings.nav.providerApiKeys}
-                    nested
-                    onClick={() => openProviderView('keys')}
-                  />
-                </div>
-              )}
-            </>
-          )}
-          {isAdmin && (
+  const sidebarContent = (
+    <>
+      {visibleSections.map(s => {
+        const view = `config:${s.id}` as SettingsViewId
+        return (
           <OverlayNavItem
-            active={activeView === 'gateway'}
-            icon={Globe}
-            label={t.settings.nav.gateway}
-            onClick={() => setActiveView('gateway')}
+            active={activeView === view}
+            icon={s.icon}
+            key={s.id}
+            label={t.settings.sections[s.id] ?? s.label}
+            onClick={() => {
+              setActiveView(view)
+              setNavSheetOpen(false)
+            }}
           />
-          )}
-          {isAdmin && (
-            <>
+        )
+      })}
+      <div className="my-2 h-px bg-border/30" />
+      {isAdmin && (
+        <>
+          {navItem('providers', t.settings.nav.providers, Zap)}
+          {activeView === 'providers' && (
+            <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
               <OverlayNavItem
-                active={activeView === 'keys'}
+                active={providerView === 'accounts'}
+                icon={Sparkles}
+                label={t.settings.nav.providerAccounts}
+                nested
+                onClick={() => {
+                  openProviderView('accounts')
+                  setNavSheetOpen(false)
+                }}
+              />
+              <OverlayNavItem
+                active={providerView === 'keys'}
                 icon={KeyRound}
-                label={t.settings.nav.apiKeys}
-                onClick={() => setActiveView('keys')}
+                label={t.settings.nav.providerApiKeys}
+                nested
+                onClick={() => {
+                  openProviderView('keys')
+                  setNavSheetOpen(false)
+                }}
               />
-              {activeView === 'keys' && (
-                <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
-                  <OverlayNavItem
-                    active={keysView === 'tools'}
-                    icon={Wrench}
-                    label={t.settings.nav.keysTools}
-                    nested
-                    onClick={() => openKeysView('tools')}
-                  />
-                  <OverlayNavItem
-                    active={keysView === 'settings'}
-                    icon={Settings2}
-                    label={t.settings.nav.keysSettings}
-                    nested
-                    onClick={() => openKeysView('settings')}
-                  />
-                </div>
-              )}
-            </>
+            </div>
           )}
-          {isAdmin && (
-            <OverlayNavItem
-              active={activeView === 'mcp'}
-              icon={Wrench}
-              label={t.settings.nav.mcp}
-              onClick={() => setActiveView('mcp')}
-            />
-          )}
-          {isAdmin && (
-            <OverlayNavItem
-              active={activeView === 'toolsets'}
-              icon={Wrench}
-              label={t.settings.nav.toolsets ?? 'Tool Backends'}
-              onClick={() => setActiveView('toolsets')}
-            />
-          )}
-          <div className="my-2 h-px bg-border/30" />
-          {isAdmin && (
-            <>
+        </>
+      )}
+      {isAdmin && navItem('gateway', t.settings.nav.gateway, Globe)}
+      {isAdmin && (
+        <>
+          {navItem('keys', t.settings.nav.apiKeys, KeyRound)}
+          {activeView === 'keys' && (
+            <div className="ml-3.5 flex flex-col gap-0.5 pl-1.5">
               <OverlayNavItem
-                active={activeView === 'users'}
-                icon={Users}
-                label="Users"
-                onClick={() => setActiveView('users')}
+                active={keysView === 'tools'}
+                icon={Wrench}
+                label={t.settings.nav.keysTools}
+                nested
+                onClick={() => {
+                  openKeysView('tools')
+                  setNavSheetOpen(false)
+                }}
               />
               <OverlayNavItem
-                active={activeView === 'grants'}
-                icon={ShieldCheck}
-                label="Grants"
-                onClick={() => setActiveView('grants')}
+                active={keysView === 'settings'}
+                icon={Settings2}
+                label={t.settings.nav.keysSettings}
+                nested
+                onClick={() => {
+                  openKeysView('settings')
+                  setNavSheetOpen(false)
+                }}
               />
-            </>
+            </div>
           )}
-          <OverlayNavItem
-            active={activeView === 'sessions'}
-            icon={Archive}
-            label={t.settings.nav.archivedChats}
-            onClick={() => setActiveView('sessions')}
-          />
-          <div className="my-2 h-px bg-border/30" />
-          <OverlayNavItem
-            active={activeView === 'about'}
-            icon={Info}
-            label={t.settings.nav.about}
-            onClick={() => setActiveView('about')}
-          />
-          <div className="mb-1 mt-2 h-px bg-border/30" />
+        </>
+      )}
+      {isAdmin && navItem('mcp', t.settings.nav.mcp, Wrench)}
+      {isAdmin && navItem('toolsets', t.settings.nav.toolsets ?? 'Tool Backends', Wrench)}
+      <div className="my-2 h-px bg-border/30" />
+      {isAdmin && (
+        <>
+          {navItem('users', 'Users', Users)}
+          {navItem('grants', 'Grants', ShieldCheck)}
+        </>
+      )}
+      {navItem('sessions', t.settings.nav.archivedChats, Archive)}
+      <div className="my-2 h-px bg-border/30" />
+      {navItem('about', t.settings.nav.about, Info)}
+      <div className="mb-1 mt-2 h-px bg-border/30" />
+      {!isMobile && (
+        <>
           <button
             className="flex h-7 w-full items-center justify-start gap-2 rounded-md border border-transparent bg-transparent px-2 text-left text-[length:var(--conversation-text-font-size)] font-normal text-destructive transition-colors hover:bg-destructive/10 hover:text-destructive"
             onClick={() => void handleLogout()}
@@ -282,42 +256,117 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
               </OverlayIconButton>
             </Tip>
           </div>
-        </OverlaySidebar>
+        </>
+      )}
+    </>
+  )
 
-        <OverlayMain className="px-0 pb-0 pt-[calc(var(--titlebar-height)+1rem)]">
-          {activeView === 'config:appearance' ? (
-            <AppearanceSettings />
-          ) : activeView === 'about' ? (
-            <AboutSettings />
-          ) : activeView === 'gateway' ? (
-            <GatewaySettings />
-          ) : activeView.startsWith('config:') ? (
-            <ConfigSettings
-              activeSectionId={activeView.slice('config:'.length)}
-              gateway={gateway}
-              importInputRef={importInputRef}
-              onConfigSaved={onConfigSaved}
-              onMainModelChanged={onMainModelChanged}
-            />
-          ) : activeView === 'providers' ? (
-            <ProvidersSettings onViewChange={setProviderView} view={providerView} />
-          ) : isAdmin && activeView === 'keys' ? (
-            <KeysSettings view={keysView} />
-          ) : isAdmin && activeView === 'toolsets' ? (
-            <ToolsetsSettings />
-          ) : isAdmin && activeView === 'mcp' ? (
-            <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
-          ) : isAdmin && activeView === 'users' ? (
-            <UsersSettings />
-          ) : isAdmin && activeView === 'grants' ? (
-            <GrantsSettings />
-          ) : (
-            <SessionsSettings />
-          )}
-        </OverlayMain>
-      </OverlaySplitLayout>
+  // ── Render: Desktop vs Mobile ────────────────────────────────────────
+
+  return (
+    <OverlayView closeLabel={t.settings.closeSettings} onClose={onClose}>
+      {isMobile ? (
+        /* ── Mobile layout ────────────────────────────────────────────── */
+        <div className="flex h-full flex-col overflow-hidden">
+          {/* Sticky nav strip */}
+          <div className="flex shrink-0 items-center gap-1 border-b border-border/50 px-2 py-1.5">
+            <Sheet open={navSheetOpen} onOpenChange={setNavSheetOpen}>
+              <SheetTrigger asChild>
+                <button
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                  type="button"
+                >
+                  <Codicon name="menu" size="1rem" />
+                  <span className="max-w-[140px] truncate">{activeLabel()}</span>
+                </button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto px-2 pb-2" showCloseButton={false}>
+                <div className="mx-auto mb-2 mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted" />
+                {sidebarContent}
+              </SheetContent>
+            </Sheet>
+          </div>
+
+          {/* Scrollable settings content */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SettingsContent />
+          </div>
+        </div>
+      ) : (
+        /* ── Desktop layout ───────────────────────────────────────────── */
+        <OverlaySplitLayout>
+          <OverlaySidebar>{sidebarContent}</OverlaySidebar>
+          <OverlayMain className="px-0 pb-0 pt-[calc(var(--titlebar-height)+1rem)]">
+            <SettingsContent />
+          </OverlayMain>
+        </OverlaySplitLayout>
+      )}
     </OverlayView>
   )
+
+  // ── Internal helpers ─────────────────────────────────────────────────
+
+  async function exportConfig() {
+    try {
+      const cfg = await getAnakotConfigRecord()
+      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'anakot-config.json'
+      a.click()
+      URL.revokeObjectURL(url)
+      triggerHaptic('success')
+    } catch (err) {
+      notifyError(err, t.settings.exportFailed)
+    }
+  }
+
+  async function resetConfig() {
+    if (!window.confirm(t.settings.resetConfirm)) return
+    try {
+      await saveAnakotConfig(await getAnakotConfigDefaults())
+      triggerHaptic('success')
+      onConfigSaved?.()
+    } catch (err) {
+      notifyError(err, t.settings.resetFailed)
+    }
+  }
+
+  async function handleLogout() {
+    if (!window.confirm('Are you sure you want to sign out?')) return
+    triggerHaptic('warning')
+    try {
+      await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // Ignore — the redirect response may cause a fetch error
+    }
+    window.location.href = '/'
+  }
+
+  function SettingsContent() {
+    if (activeView === 'config:appearance') return <AppearanceSettings />
+    if (activeView === 'about') return <AboutSettings />
+    if (activeView === 'gateway') return <GatewaySettings />
+    if (activeView.startsWith('config:')) {
+      return (
+        <ConfigSettings
+          activeSectionId={activeView.slice('config:'.length)}
+          gateway={gateway}
+          importInputRef={importInputRef}
+          onConfigSaved={onConfigSaved}
+          onMainModelChanged={onMainModelChanged}
+        />
+      )
+    }
+    if (activeView === 'providers') return <ProvidersSettings onViewChange={setProviderView} view={providerView} />
+    if (isAdmin && activeView === 'keys') return <KeysSettings view={keysView} />
+    if (isAdmin && activeView === 'toolsets') return <ToolsetsSettings />
+    if (isAdmin && activeView === 'mcp') return <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
+    if (isAdmin && activeView === 'users') return <UsersSettings />
+    if (isAdmin && activeView === 'grants') return <GrantsSettings />
+    return <SessionsSettings />
+  }
 }
 
 export { SettingsView as SettingsPage }
