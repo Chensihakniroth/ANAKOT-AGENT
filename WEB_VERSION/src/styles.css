@@ -1484,10 +1484,10 @@ canvas {
     display: none !important;
   }
 
-  /* — Composer: full-width, with safe-area bottom padding */
+  /* — Composer: full-width, with safe-area bottom padding + tab bar clearance */
   :root {
     --composer-width: 100%;
-    --composer-shell-pad-block-end: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+    --composer-shell-pad-block-end: calc(0.625rem + env(safe-area-inset-bottom, 0px) + 3.5rem);
   }
 }
 
