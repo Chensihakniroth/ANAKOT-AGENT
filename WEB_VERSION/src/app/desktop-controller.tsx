@@ -78,7 +78,8 @@ import {
   ChatPreviewRail,
   PREVIEW_RAIL_MAX_WIDTH,
   PREVIEW_RAIL_MIN_WIDTH,
-  PREVIEW_RAIL_PANE_WIDTH
+  PREVIEW_RAIL_PANE_WIDTH,
+  PreviewMobileSheet,
 } from './chat/right-rail'
 import { CommandPalette } from './command-palette'
 import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
@@ -917,6 +918,7 @@ export function DesktopController() {
           activityBar={<ActivityBar />}
           leftStatusbarItems={leftStatusbarItems}
           onOpenSettings={openSettings}
+          onSwipeBack={closeOverlayToPreviousRoute}
           overlays={overlays}
           sidebarContent={chatPanel}
           statusbarItems={statusbarItems}
@@ -970,6 +972,7 @@ export function DesktopController() {
       {previewPane}
     </AppShell>
       <GatewayOfflineDialog />
+      <PreviewMobileSheet onRestartServer={restartPreviewServer} />
     </>
   )
   }

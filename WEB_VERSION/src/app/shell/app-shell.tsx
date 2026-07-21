@@ -7,11 +7,13 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useVisualViewport } from '@/hooks/use-visual-viewport'
+import { useSwipeNavigation } from '@/hooks/use-swipe-navigation'
 import { PanelLeftIcon } from '@/lib/icons'
 import { $sidebarOpen, setSidebarOpen, toggleSidebarOpen } from '@/store/layout'
 import { $connection } from '@/store/session'
 
 import { KeybindPanel } from './keybind-panel'
+import { MobileBottomTabBar } from '@/components/workbench/MobileBottomTabBar'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 
 interface AppShellProps {
@@ -19,6 +21,8 @@ interface AppShellProps {
   children: ReactNode
   leftStatusbarItems?: readonly StatusbarItem[]
   onOpenSettings: () => void
+  /** Callback on edge-swipe-right gesture (mobile back navigation). */
+  onSwipeBack?: () => void
   overlays?: ReactNode
   /** Content for the mobile sidebar drawer (session list, etc.) */
   sidebarContent?: ReactNode
@@ -30,6 +34,7 @@ export function AppShell({
   children,
   leftStatusbarItems,
   onOpenSettings,
+  onSwipeBack,
   overlays,
   sidebarContent,
   statusbarItems
@@ -40,6 +45,7 @@ export function AppShell({
   const { vvHeight, keyboardOpen } = useVisualViewport()
   const isMobile = useIsMobile()
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
+  const { ref: mainRef } = useSwipeNavigation({ onBack: onSwipeBack })
 
   // When the mobile keyboard opens, constrain the app to the visible viewport
   // height.  The composer is `position: absolute; bottom: 0` and mobile
@@ -63,7 +69,8 @@ export function AppShell({
       style={shellHeight ? { height: shellHeight } : undefined}
     >
       <main
-        className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none"
+        className="appshell-main-content relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none"
+        ref={mainRef}
       >
         {/* Content row: ActivityBar + PaneShell */}
         <div className="flex min-h-0 flex-1 flex-row">
@@ -84,6 +91,11 @@ export function AppShell({
 
         {/* Status bar at bottom */}
         <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} />
+
+        {/* Mobile bottom tab bar — replaces the hidden activity bar on small screens */}
+        {isMobile && (
+          <MobileBottomTabBar onOpenSidebar={() => setMobileSheetOpen(true)} />
+        )}
       </main>
 
       {overlays}

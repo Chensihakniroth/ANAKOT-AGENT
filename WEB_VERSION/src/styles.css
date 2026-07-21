@@ -1417,6 +1417,16 @@ canvas {
     display: none !important;
   }
 
+  /* — Bottom tab bar: visible, add bottom padding so content doesn't hide behind it */
+  .mobile-bottom-tab-bar {
+    display: flex !important;
+  }
+
+  /* Push main content up above the fixed bottom bar */
+  .appshell-main-content {
+    padding-bottom: 3.5rem !important;
+  }
+
   /* — Overlay split layout: sidebar becomes a horizontal scrollable tab strip */
   .overlay-split-sidebar {
     grid-column: 1 !important;
@@ -1655,3 +1665,77 @@ canvas {
 .animate-delay-1000 { animation-delay: 1.0s;  }
 .animate-delay-1200 { animation-delay: 1.2s;  }
 .animate-delay-1400 { animation-delay: 1.4s;  }
+
+/* ── Mobile Bottom Tab Bar ─────────────────────────────────────────────────
+   Fixed bar at the bottom edge with safe-area inset. Hidden on desktop,
+   shown only at the mobile breakpoint via `display: flex !important`. */
+.mobile-bottom-tab-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 3.5rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-around;
+  background: var(--ui-activity-bar-background, #1a1a2e);
+  border-top: 1px solid var(--ui-stroke-tertiary, #2a2a3e);
+}
+
+.mobile-bottom-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 0.25rem 0;
+  border: none;
+  background: transparent;
+  color: var(--ui-text-tertiary, #8b8ba7);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: color 0.15s;
+}
+
+.mobile-bottom-tab:active {
+  opacity: 0.7;
+}
+
+.mobile-bottom-tab--active {
+  color: var(--dt-primary, #e879f9);
+  position: relative;
+}
+
+.mobile-bottom-tab--active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5rem;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--dt-primary, #e879f9);
+}
+
+.mobile-bottom-tab__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+}
+
+.mobile-bottom-tab__label {
+  font-size: 0.625rem;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
