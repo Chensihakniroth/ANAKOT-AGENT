@@ -86,7 +86,18 @@ export function useRouteResume({
           // decision is deferred to the next effect run, but by then
           // `gatewayBecameOpen` is already false so `shouldResume` is never
           // true → resumeSession is never called → stuck on spinner forever.
-          void resumeSession(routedSessionId, true)
+          //
+          // Don't resume if it's already the active session — prevents
+          // re-resume during /:sid -> /new transitions where the route
+          // hasn't updated yet but the session was already cleared.
+          const cachedRuntime = runtimeIdByStoredSessionIdRef.current.get(routedSessionId)
+          const alreadyActive =
+            routedSessionId === selectedStoredSessionIdRef.current &&
+            Boolean(cachedRuntime) &&
+            cachedRuntime === activeSessionIdRef.current
+          if (!alreadyActive) {
+            void resumeSession(routedSessionId, true)
+          }
         }
       }
       return

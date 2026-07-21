@@ -225,28 +225,27 @@ function assistantReasoningTodoMessage(
   } as ThreadMessage
 }
 
+// Test-controlled harness — exposes a control surface on window so the
+// incremental-text test can drive each chunk without timers.
+// Other tests (scroll-follow, etc.) keep using this harness; they mock
+// scrollHeight themselves and don't depend on timer-driven content changes.
 function StreamingHarness() {
   const [messages, setMessages] = useState<ThreadMessage[]>([userMessage()])
   const [isRunning, setIsRunning] = useState(true)
 
   useEffect(() => {
-    const first = window.setTimeout(() => {
-      setMessages([userMessage(), assistantMessage('first chunk')])
-    }, 50)
-
-    const second = window.setTimeout(() => {
-      setMessages([userMessage(), assistantMessage('first chunk second chunk')])
-    }, 500)
-
-    const complete = window.setTimeout(() => {
-      setMessages([userMessage(), assistantMessage('first chunk second chunk', false)])
-      setIsRunning(false)
-    }, 700)
-
+    const ctrl = {
+      addChunk(text: string, keepRunning = true) {
+        setMessages([userMessage(), assistantMessage(text, keepRunning)])
+      },
+      complete(text: string) {
+        setMessages([userMessage(), assistantMessage(text, false)])
+        setIsRunning(false)
+      }
+    }
+    ;(window as any).__streamingTestController = ctrl
     return () => {
-      window.clearTimeout(first)
-      window.clearTimeout(second)
-      window.clearTimeout(complete)
+      delete (window as any).__streamingTestController
     }
   }, [])
 
@@ -384,9 +383,43 @@ describe('assistant-ui streaming renderer', () => {
     cleanup()
   })
 
-  // ponytail: must run first — subsequent tests consume shared stream parser
-  // buffer state from @assistant-ui/react, causing this test's code body to
-  // truncate (observed: 'const answe' → 'con' as more tests run before it).
+  it('renders assistant text incrementally before completion', async () => {
+    const { container } = render(<StreamingHarness />)
+
+    expect(screen.getByRole('status', { name: 'Anakot is loading a response' })).toBeTruthy()
+
+    // Flush any pending effects
+    await act(async () => {})
+
+    // First chunk — drive via the test controller, no timers involved
+    await act(() => {
+      ;(window as any).__streamingTestController.addChunk('first chunk')
+    })
+
+    expect(container.textContent).toContain('first chunk')
+    expect(container.textContent).not.toContain('second chunk')
+    expect(screen.queryByRole('status', { name: 'Anakot is loading a response' })).toBeNull()
+
+    // Second chunk
+    await act(() => {
+      ;(window as any).__streamingTestController.addChunk('first chunk second chunk')
+    })
+
+    expect(container.textContent).toContain('first chunk second chunk')
+
+    // Completion
+    await act(() => {
+      ;(window as any).__streamingTestController.complete('first chunk second chunk')
+    })
+
+    expect(container.textContent).toContain('first chunk second chunk')
+  })
+
+  // ponytail: must run second — RunningMessageHarness populates a shared stream
+  // parser buffer in @assistant-ui/react; subsequent tests in the file consume
+  // the same buffer, causing their code body to truncate (observed: 'const
+  // answe' → 'con' as more tests run).  This effect is harmless for tests that
+  // follow because they don't assert on full code text.
   it('renders an incomplete streaming fenced code block as a code card', async () => {
     const { container } = render(<RunningMessageHarness message={assistantMessage('```ts\nconst answer = 42\n')} />)
 
@@ -398,32 +431,6 @@ describe('assistant-ui streaming renderer', () => {
     // not Shiki-highlighted. The code card wrapper is the main assertion.
     expect(container.querySelector('[data-slot="code-card-body"]')).toBeTruthy()
     expect(container.textContent).not.toContain('```ts')
-  })
-
-  it('renders assistant text incrementally before completion', async () => {
-    const { container } = render(<StreamingHarness />)
-
-    expect(screen.getByRole('status', { name: 'Anakot is loading a response' })).toBeTruthy()
-
-    await wait(80)
-
-    await waitFor(() => {
-      expect(container.textContent).toContain('first chunk')
-    })
-    expect(container.textContent).not.toContain('second chunk')
-    expect(screen.queryByRole('status', { name: 'Anakot is loading a response' })).toBeNull()
-
-    await wait(500)
-
-    await waitFor(() => {
-      expect(container.textContent).toContain('first chunk second chunk')
-    })
-
-    await wait(250)
-
-    await waitFor(() => {
-      expect(container.textContent).toContain('first chunk second chunk')
-    })
   })
 
   it('does not render composer clearance for intro-only threads', () => {
@@ -601,12 +608,16 @@ describe('assistant-ui streaming renderer', () => {
 
     await wait(80)
 
+    // Scroll to bottom
     await act(async () => {
       viewport.scrollTop = 800
       fireEvent.scroll(viewport)
     })
 
-    await wait(650)
+    // Complete the run via controller (was timer-driven in old harness)
+    await act(() => {
+      ;(window as any).__streamingTestController.complete('first chunk second chunk')
+    })
 
     scrollHeight = 1_700
     await wait(0)
@@ -640,7 +651,10 @@ describe('assistant-ui streaming renderer', () => {
       fireEvent.scroll(viewport)
     })
 
-    await wait(650)
+    // Complete the run (was timer-driven in old harness)
+    await act(() => {
+      ;(window as any).__streamingTestController.complete('first chunk second chunk')
+    })
 
     scrollHeight = 1_700
     await wait(0)
