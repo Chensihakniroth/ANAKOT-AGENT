@@ -1713,6 +1713,24 @@ canvas {
   }
 }
 
+/* — Mobile keyboard: push composer above the on-screen keyboard — */
+@media (max-width: 767.98px) {
+  [data-slot="aui_thread-viewport"] {
+    /* The visual viewport shrinks when the keyboard opens; the thread area
+       must give back that space so the composer isn't buried. */
+    padding-bottom: var(--mobile-keyboard-height, 0px) !important;
+    scroll-padding-bottom: var(--mobile-keyboard-height, 0px);
+  }
+
+  /* The composer itself floats at the bottom of the thread container —
+       translate it up by the keyboard height so it sits above the keyboard
+       instead of under it. */
+  [data-slot="composer-root"] {
+    transform: translateY(calc(-1 * var(--mobile-keyboard-height, 0px)));
+    transition: transform 0.15s ease-out;
+  }
+}
+
 .animate-element { animation: fade-slide-in 0.6s ease-out forwards; }
 .animate-slide-right { animation: slide-right-in 0.6s ease-out forwards; }
 .animate-testimonial { animation: testimonial-in 0.5s ease-out forwards; }

@@ -7,13 +7,14 @@ import {
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
-import { Suspense, useCallback, useMemo, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Thread } from '@/components/assistant-ui/thread'
 import { Backdrop } from '@/components/Backdrop'
 import { PromptOverlays } from '@/components/prompt-overlays'
 import { PullToRefreshOverlay } from '@/components/chat/pull-to-refresh'
+import { ScrollToBottomFab } from '@/components/chat/scroll-to-bottom-fab'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { getGlobalModelOptions, type AnakotGateway } from '@/anakot'
@@ -25,6 +26,8 @@ import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { $pinnedSessionIds, $timelineOpen } from '@/store/layout'
 import { $gatewaySwapTarget } from '@/store/profile'
+import { useMobileKeyboard } from '@/hooks/use-mobile-keyboard'
+import { useSwipeBack } from '@/hooks/use-swipe-back'
 import {
   $activeSessionId,
   $awaitingResponse,
@@ -198,6 +201,20 @@ export function ChatView({
   const timelineOpen = useStore($timelineOpen)
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
+  const { keyboardOpen } = useMobileKeyboard()
+  const threadViewportRef = useRef<HTMLDivElement | null>(null)
+  const navigate = useNavigate()
+
+  // Swipe right on the thread area to go back to the session list on mobile.
+  const swipeBackRef = useSwipeBack(() => navigate('/'))
+
+  // When the mobile keyboard opens, scroll the thread viewport to the bottom
+  // so the latest message and the composer are visible.
+  useEffect(() => {
+    if (!keyboardOpen) return
+    const vp = document.querySelector<HTMLElement>('[data-slot="aui_thread-viewport"]')
+    if (vp) vp.scrollTop = vp.scrollHeight
+  }, [keyboardOpen])
 
   const showIntro =
     !activeSessionId && !selectedSessionId && messages.length === 0 && !isRoutedSessionView
@@ -341,6 +358,7 @@ export function ChatView({
       <PromptOverlays />
 
       <div
+        ref={swipeBackRef}
         className="relative min-h-0 max-w-full flex-1 overflow-hidden bg-(--ui-chat-surface-background) contain-[layout_paint]"
         {...dropHandlers}
       >
@@ -392,6 +410,7 @@ export function ChatView({
         </PullToRefreshOverlay>
         <ChatDropOverlay kind={dragKind} />
         <ChatSwapOverlay profile={gatewaySwapTarget} />
+        <ScrollToBottomFab />
       </div>
       </div>
     </div>

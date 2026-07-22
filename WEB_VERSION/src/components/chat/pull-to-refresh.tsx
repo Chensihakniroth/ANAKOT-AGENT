@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { useIsMobile } from '@/hooks/use-mobile'
+import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
-
 interface PullToRefreshOverlayProps {
   /** Called when the user pulls past the threshold and releases. */
   onRefresh?: () => void | Promise<void>
@@ -51,67 +51,84 @@ function PullHandler({ onRefresh, scrollSelector, children }: PullToRefreshOverl
     return rootRef.current
   }, [scrollSelector])
 
-  const handlePointerDown = useCallback((e: PointerEvent) => {
+  // Use touch events directly on the scroll container for reliable mobile detection.
+  useEffect(() => {
     const el = scrollEl()
-    if (!el || e.pointerType !== 'touch') return
-    if (el.scrollTop > 2) return
+    if (!el) return
 
-    pullingRef.current = true
-    startYRef.current = e.clientY
-    currentPullRef.current = 0
-    setPulling(true)
-    setPullDistance(0)
-  }, [scrollEl])
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0]
+      if (!t) return
+      // Only start if the scroll container is at the top
+      if (el.scrollTop > 2) return
 
-  const handlePointerMove = useCallback((e: PointerEvent) => {
-    if (!pullingRef.current) return
-    const deltaY = e.clientY - startYRef.current
-    if (deltaY <= 0) {
+      pullingRef.current = true
+      startYRef.current = t.clientY
+      currentPullRef.current = 0
+      setPulling(true)
+      setPullDistance(0)
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!pullingRef.current) return
+      const t = e.touches[0]
+      if (!t) return
+
+      const deltaY = t.clientY - startYRef.current
+      if (deltaY <= 0) {
+        pullingRef.current = false
+        setPulling(false)
+        setPullDistance(0)
+        currentPullRef.current = 0
+        return
+      }
+
+      // If the user has scrolled away from top, cancel
+      if (el.scrollTop > 2) {
+        pullingRef.current = false
+        setPulling(false)
+        setPullDistance(0)
+        currentPullRef.current = 0
+        return
+      }
+
+      const distance = Math.min(deltaY * 0.5, maxPull)
+      currentPullRef.current = distance
+      setPullDistance(distance)
+    }
+
+    const onTouchEnd = async () => {
+      if (!pullingRef.current) return
       pullingRef.current = false
       setPulling(false)
-      setPullDistance(0)
-      currentPullRef.current = 0
-      return
-    }
-    const distance = Math.min(deltaY * 0.5, maxPull)
-    currentPullRef.current = distance
-    setPullDistance(distance)
-  }, [maxPull])
 
-  const handlePointerUp = useCallback(async () => {
-    if (!pullingRef.current) return
-    pullingRef.current = false
-    setPulling(false)
-
-    if (currentPullRef.current >= threshold) {
-      setRefreshing(true)
-      try {
-        await onRefresh?.()
-      } finally {
-        setRefreshing(false)
+      if (currentPullRef.current >= threshold) {
+        triggerHaptic('streamStart')
+        setRefreshing(true)
+        try {
+          await onRefresh?.()
+        } finally {
+          triggerHaptic('streamDone')
+          setRefreshing(false)
+          setPullDistance(0)
+          currentPullRef.current = 0
+        }
+      } else {
         setPullDistance(0)
         currentPullRef.current = 0
       }
-    } else {
-      setPullDistance(0)
-      currentPullRef.current = 0
     }
-  }, [onRefresh, threshold])
 
-  useEffect(() => {
-    const el = rootRef.current
-    if (!el) return
-    el.addEventListener('pointerdown', handlePointerDown)
-    el.addEventListener('pointermove', handlePointerMove)
-    el.addEventListener('pointerup', handlePointerUp)
-    el.addEventListener('pointercancel', handlePointerUp)
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+
     return () => {
-      el.removeEventListener('pointerdown', handlePointerDown)
-      el.removeEventListener('pointermove', handlePointerMove)
-      el.removeEventListener('pointerup', handlePointerUp)
-      el.removeEventListener('pointercancel', handlePointerUp)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
     }
-  }, [handlePointerDown, handlePointerMove, handlePointerUp])
+  }, [scrollEl, onRefresh, threshold, maxPull])
 
   const progress = Math.min(pullDistance / threshold, 1)
   const show = refreshing || pulling

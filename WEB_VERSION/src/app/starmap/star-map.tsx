@@ -837,7 +837,7 @@ export function StarMap({
         setPlaying(false)
       }
 
-      viewportRef.current = { ...drag.vp, x: drag.vp.x + dx, y: drag.vp.y + dy }
+      viewportRef.current = { ...drag.vp, x: drag.vp.x - dx, y: drag.vp.y - dy }
       invalidate()
     }
   }
@@ -924,43 +924,69 @@ export function StarMap({
   }
 
   /** Two-finger pinch-to-zoom for mobile touch screens. */
+  /** Single-finger pan state for touch. */
+  const touchPanRef = useRef<{ sx: number; sy: number; vp: Viewport } | null>(null)
+
   const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 2) {
+      touchPanRef.current = null
       const t = e.touches
       const d0 = Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY)
       const mx0 = (t[0]!.clientX + t[1]!.clientX) / 2
       const my0 = (t[0]!.clientY + t[1]!.clientY) / 2
       pinchRef.current = { d0, mx0, my0, vp0: { ...viewportRef.current } }
+    } else if (e.touches.length === 1) {
+      pinchRef.current = null
+      const t = e.touches[0]!
+      touchPanRef.current = { sx: t.clientX, sy: t.clientY, vp: { ...viewportRef.current } }
     }
   }
 
   const onTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    const pinch = pinchRef.current
-    if (!pinch || e.touches.length !== 2) return
+    // Two-finger pinch-to-zoom
+    if (e.touches.length === 2) {
+      const pinch = pinchRef.current
+      if (!pinch) return
+
+      setPlaying(false)
+
+      const t = e.touches
+      const d = Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY)
+      const ratio = d / pinch.d0
+      const k = clamp(pinch.vp0.k * ratio, ZOOM_MIN, ZOOM_MAX)
+
+      // Zoom toward the midpoint of the two fingers.
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const mx = (t[0]!.clientX + t[1]!.clientX) / 2 - rect.left
+      const my = (t[0]!.clientY + t[1]!.clientY) / 2 - rect.top
+      const vp0 = pinch.vp0
+      viewportRef.current = {
+        k,
+        x: mx - ((mx - vp0.x) / vp0.k) * k,
+        y: my - ((my - vp0.y) / vp0.k) * k,
+      }
+      invalidate()
+      return
+    }
+
+    // Single-finger pan (grab-and-drag, like Google Maps)
+    const pan = touchPanRef.current
+    if (!pan || e.touches.length !== 1) return
+
+    const t = e.touches[0]!
+    const dx = t.clientX - pan.sx
+    const dy = t.clientY - pan.sy
 
     setPlaying(false)
-
-    const t = e.touches
-    const d = Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY)
-    const ratio = d / pinch.d0
-    const k = clamp(pinch.vp0.k * ratio, ZOOM_MIN, ZOOM_MAX)
-
-    // Zoom toward the midpoint of the two fingers.
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const mx = (t[0]!.clientX + t[1]!.clientX) / 2 - rect.left
-    const my = (t[0]!.clientY + t[1]!.clientY) / 2 - rect.top
-    const vp0 = pinch.vp0
-    viewportRef.current = {
-      k,
-      x: mx - ((mx - vp0.x) / vp0.k) * k,
-      y: my - ((my - vp0.y) / vp0.k) * k,
-    }
+    // Move viewport opposite to finger direction (grab-and-drag feel)
+    viewportRef.current = { ...pan.vp, x: pan.vp.x - dx, y: pan.vp.y - dy }
     invalidate()
   }
 
   const onTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length < 2) pinchRef.current = null
+    if (e.touches.length === 0) touchPanRef.current = null
   }
 
   return (
