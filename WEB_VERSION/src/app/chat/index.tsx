@@ -340,7 +340,7 @@ export function ChatView({
   return (
     <div
       className={cn(
-        'relative isolate flex h-full min-w-0 overflow-hidden bg-(--ui-chat-surface-background)',
+        'chat-view-root relative isolate flex h-full min-w-0 overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
     >

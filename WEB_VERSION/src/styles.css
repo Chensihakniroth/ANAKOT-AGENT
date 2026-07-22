@@ -1713,21 +1713,19 @@ canvas {
   }
 }
 
-/* — Mobile keyboard: push composer above the on-screen keyboard — */
+/* — Mobile keyboard: keep the thread scrollable and the composer above the keyboard — */
 @media (max-width: 767.98px) {
   [data-slot="aui_thread-viewport"] {
-    /* The visual viewport shrinks when the keyboard opens; the thread area
-       must give back that space so the composer isn't buried. */
-    padding-bottom: var(--mobile-keyboard-height, 0px) !important;
+    /* scroll-padding lets the last message scroll above the keyboard. */
     scroll-padding-bottom: var(--mobile-keyboard-height, 0px);
   }
 
-  /* The composer itself floats at the bottom of the thread container —
-       translate it up by the keyboard height so it sits above the keyboard
-       instead of under it. */
-  [data-slot="composer-root"] {
-    transform: translateY(calc(-1 * var(--mobile-keyboard-height, 0px)));
-    transition: transform 0.15s ease-out;
+  /* On iOS the layout viewport doesn't shrink when the keyboard opens —
+     only the visual viewport does. Constrain the chat container height
+     so the composer stays above the keyboard. */
+  .chat-view-root {
+    height: calc(100dvh - var(--mobile-keyboard-height, 0px));
+    max-height: calc(100dvh - var(--mobile-keyboard-height, 0px));
   }
 }
 
