@@ -546,6 +546,12 @@ export function useMessageStream({
       })
 
       void refreshSessions().catch(() => undefined)
+      // Re-fetch after a delay to pick up the auto-generated title —
+      // the backend fires title generation in a background thread that
+      // may not have finished by the time the first refresh lands.
+      const _reTitleTimer = setTimeout(() => {
+        void refreshSessions().catch(() => undefined)
+      }, 3000)
 
       if (shouldHydrate) {
         void hydrateFromStoredSession(3, completedState.storedSessionId, sessionId)
