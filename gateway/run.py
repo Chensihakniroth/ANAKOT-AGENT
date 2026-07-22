@@ -18593,8 +18593,9 @@ class GatewayRunner:
                             effective_session_id,
                             title,
                         )
+                    _agent_session_db = getattr(agent, '_session_db', None) or self._session_db
                     maybe_auto_title(
-                        self._session_db,
+                        _agent_session_db,
                         effective_session_id,
                         message,
                         final_response,
