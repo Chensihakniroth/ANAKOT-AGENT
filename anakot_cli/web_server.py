@@ -5697,6 +5697,16 @@ def _open_session_db_for_profile(profile: Optional[str], request: Optional[Reque
                 pdb = Path(home) / "state.db"
                 return SessionDB(db_path=pdb)
 
+    # Fallback: in OAuth mode, falling through to root DB would silently
+    # read/write the wrong database. Use an in-memory SQLite DB so callers
+    # get clean 404s instead of cross-profile data leakage.
+    if getattr(request.app.state, "auth_required", False) if request is not None else False:
+        import logging as _logmod
+        _logmod.getLogger("web_server").warning(
+            "_open_session_db_for_profile: auth_required but profile "
+            "resolution failed — returning empty in-memory DB"
+        )
+        return SessionDB(db_path=":memory:")
     return SessionDB()
 
 
