@@ -253,6 +253,7 @@ export const zh: Translations = {
       mcp: 'MCP',
       toolsets: '工具集',
       pets: '宠物',
+      discord: 'Discord 状态',
       archivedChats: '已归档对话',
       about: '关于'
     },
@@ -335,6 +336,27 @@ export const zh: Translations = {
         anchorTitle: '宠物位置',
         anchorDesc: '将宠物吸附到某个角落或保持自由拖动。'
       }
+    },
+    discordRpc: {
+      title: 'Discord 状态',
+      desktopOnly: 'Discord 状态仅在桌面端可用。',
+      loading: '加载中…',
+      intro: '在您的 Discord 个人资料上显示您在 Anakot 中的活动。需要 Discord Application Client ID。',
+      toggleLabel: '启用 Discord 状态',
+      toggleDesc: '在 Discord 上以 Rich Presence 形式分享您的 Anakot 活动。',
+      clientIdLabel: '客户端 ID',
+      clientIdPlaceholder: '粘贴您的 Discord Application ID',
+      clientIdDesc: '来自 Discord Developer Portal 应用的客户端 ID。',
+      saving: '保存中…',
+      save: '保存',
+      howToTitle: '设置方法',
+      step1: '前往 Discord Developer Portal 创建新应用。',
+      step2: '从 OAuth2 / General 部分复制 Application ID（数字）。',
+      step3: '将 ID 粘贴到上方并点击保存。',
+      step4: '重启 Anakot Desktop 以使更改生效。',
+      devPortalLink: '打开 Discord Developer Portal',
+      savedMessage: '配置已保存。重启后生效。',
+      errorMessage: '保存配置失败。',
     },
     fieldLabels: defineFieldCopy({
       model: '默认模型',
@@ -859,7 +881,8 @@ export const zh: Translations = {
       skills: { title: '技能与工具', detail: '启用技能、工具集和提供者' },
       messaging: { title: '消息', detail: '设置 Telegram、Slack、Discord 等' },
       artifacts: { title: '产物', detail: '浏览生成的输出' },
-      pets: { title: '宠物', detail: '管理您的桌面宠物' }
+      pets: { title: '宠物', detail: '管理您的桌面宠物' },
+      discord: { title: 'Discord 状态', detail: '在 Discord 上显示您的活动' }
     },
     sectionEntries: {
       sessions: { title: '会话面板', detail: '搜索、置顶与管理会话' },

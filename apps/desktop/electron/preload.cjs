@@ -188,6 +188,16 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   getObsidianVaultPath: () => ipcRenderer.invoke('anakot:obsidian:getVaultPath'),
   scanObsidianVault: rootPath => ipcRenderer.invoke('anakot:obsidian:scanVault', rootPath),
 
+  // Discord Rich Presence
+  discordRpc: {
+    setActivity: activity => ipcRenderer.invoke('anakot:discord-rpc:set-activity', activity),
+    clearActivity: () => ipcRenderer.invoke('anakot:discord-rpc:clear-activity'),
+    getConfig: () => ipcRenderer.invoke('anakot:discord-rpc:get-config'),
+    updateConfig: patch => ipcRenderer.invoke('anakot:discord-rpc:update-config', patch),
+    buildDefaultActivity: opts => ipcRenderer.invoke('anakot:discord-rpc:build-default-activity', opts),
+    getConnectionStatus: () => ipcRenderer.invoke('anakot:discord-rpc:get-connection-status'),
+  },
+
   // Desktop Pet Overlay
   petOverlay: {
     open: request => ipcRenderer.invoke('anakot:pet-overlay:open', request),

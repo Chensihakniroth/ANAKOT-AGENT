@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Clock,
   Command,
+  Discord,
   FolderOpen,
   Hash,
   Loader2,
@@ -22,6 +23,7 @@ import { useI18n } from '@/i18n'
 import { formatModelStatusLabel } from '@/lib/model-status-label'
 import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { contextBarLabel, LiveDuration, usageContextLabel } from '@/lib/statusbar'
+import { useDiscordRpcStatus } from '@/lib/discord-rpc'
 import { cn } from '@/lib/utils'
 import { setSessionYolo } from '@/lib/yolo-session'
 import { $desktopActionTasks } from '@/store/activity'
@@ -106,6 +108,8 @@ export function useStatusbarItems({
   const workspaceFolder = currentCwd.trim()
     ? currentCwd.split(/[\\/]+/).filter(Boolean).pop() || currentCwd
     : null
+
+  const { status: discordStatus } = useDiscordRpcStatus()
 
   const contextUsage = useMemo(() => usageContextLabel(currentUsage), [currentUsage])
   const contextBar = useMemo(() => contextBarLabel(currentUsage), [currentUsage])
@@ -295,6 +299,27 @@ export function useStatusbarItems({
         title: copy.openCron,
         to: CRON_ROUTE,
         variant: 'action'
+      },
+      {
+        className: discordStatus?.connected
+          ? 'text-green-600 hover:text-green-600'
+          : 'opacity-40 hover:opacity-60',
+        icon: <Discord className="size-3" />,
+        id: 'discord-rpc',
+        label: 'Discord',
+        detail: discordStatus?.connected
+          ? discordStatus.user?.username
+          : discordStatus === null
+            ? undefined
+            : 'disconnected',
+        title: discordStatus?.connected
+          ? `Discord · ${discordStatus.user?.username || 'connected'}`
+          : discordStatus === null
+            ? 'Discord RPC'
+            : discordStatus?.error
+              ? `Discord RPC · ${discordStatus.error}`
+              : 'Discord RPC · not connected',
+        variant: 'text'
       }
     ],
     [
@@ -304,6 +329,7 @@ export function useStatusbarItems({
       commandCenterOpen,
       copy,
       currentCwd,
+      discordStatus,
       gatewayMenuContent,
       gatewayClassName,
       gatewayDetail,

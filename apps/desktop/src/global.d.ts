@@ -131,6 +131,16 @@ declare global {
         }
       }>
 
+      // Discord Rich Presence
+      discordRpc?: {
+        setActivity: (activity: DiscordRpcActivity) => Promise<{ ok: boolean; reason?: string }>
+        clearActivity: () => Promise<{ ok: boolean; reason?: string }>
+        getConfig: () => Promise<DiscordRpcConfig>
+        updateConfig: (patch: Partial<DiscordRpcConfig>) => Promise<{ ok: boolean; reason?: string }>
+        buildDefaultActivity: (opts?: DiscordRpcActivityOptions) => Promise<DiscordRpcActivity>
+        getConnectionStatus: () => Promise<{ connected: boolean; user: { username: string; discriminator: string; avatar: string | null } | null; error: string | null }>
+      }
+
       // Pet overlay — a secondary always-on-top transparent BrowserWindow
       petOverlay?: {
         open: (request?: {
@@ -637,4 +647,50 @@ export interface LearningNodeDetail {
   content: string
   message?: string
   error?: string
+}
+
+// ── Discord Rich Presence types ────────────────────────────────────────────
+
+/**
+ * Activity payload passed to discord-rpc setActivity().
+ * See: https://discord.com/developers/docs/rich-presence/how-to#updating-presence-update-presence-payload-fields
+ */
+export interface DiscordRpcActivity {
+  /** What the user is currently doing (shown as first line) */
+  details?: string
+  /** State (shown as second line, below details) */
+  state?: string
+  /** Unix timestamp (ms) for when this activity started */
+  startTimestamp?: number
+  /** Unix timestamp (ms) for when this activity ends */
+  endTimestamp?: number
+  /** Name of the large image key uploaded to Discord Developer Portal */
+  largeImageKey?: string
+  /** Tooltip text for the large image */
+  largeImageText?: string
+  /** Name of the small image key uploaded to Discord Developer Portal */
+  smallImageKey?: string
+  /** Tooltip text for the small image */
+  smallImageText?: string
+  /** Party info for "x of y" display */
+  party?: {
+    id?: string
+    size: [number, number]
+  }
+  /** Up to 2 buttons with label + url */
+  buttons?: Array<{ label: string; url: string }>
+  /** Whether this is an instance of a game session */
+  instance?: boolean
+}
+
+export interface DiscordRpcConfig {
+  enabled: boolean
+  clientId: string
+}
+
+export interface DiscordRpcActivityOptions {
+  details?: string
+  state?: string
+  startTimestamp?: number
+  buttons?: Array<{ label: string; url: string }>
 }

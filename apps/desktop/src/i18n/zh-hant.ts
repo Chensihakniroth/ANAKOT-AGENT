@@ -175,6 +175,7 @@ export const zhHant = defineLocale({
       mcp: 'MCP',
       toolsets: '工具集',
       archivedChats: '已封存聊天',
+      discord: 'Discord 狀態',
       about: '關於'
     },
     sections: {
@@ -213,6 +214,27 @@ export const zhHant = defineLocale({
       technicalDesc: '包含原始工具參數、結果與底層細節。',
       themeTitle: '主題',
       themeDesc: '僅限桌面端的調色盤。所選模式會套用在其上。'
+    },
+    discordRpc: {
+      title: 'Discord 狀態',
+      desktopOnly: 'Discord Rich Presence 僅在桌面端應用程式中可用。',
+      loading: '載入中…',
+      intro: '在您的 Discord 個人檔案上顯示您在 Anakot 中的活動。需要 Discord Application Client ID。',
+      toggleLabel: '啟用 Discord 狀態',
+      toggleDesc: '在 Discord 上以 Rich Presence 形式分享您的 Anakot 活動。',
+      clientIdLabel: '客戶端 ID',
+      clientIdPlaceholder: '貼上您的 Discord Application ID',
+      clientIdDesc: '來自 Discord Developer Portal 應用程式的客戶端 ID。',
+      saving: '儲存中…',
+      save: '儲存',
+      howToTitle: '設定方法',
+      step1: '前往 Discord Developer Portal 建立新應用程式。',
+      step2: '從 OAuth2 / General 區段複製 Application ID（數字）。',
+      step3: '將 ID 貼到上方並點擊儲存。',
+      step4: '重新啟動 Anakot Desktop 以使變更生效。',
+      devPortalLink: '開啟 Discord Developer Portal',
+      savedMessage: '設定已儲存。重新啟動後生效。',
+      errorMessage: '儲存設定失敗。',
     },
     fieldLabels: defineFieldCopy({
       model: '預設模型',
@@ -736,7 +758,8 @@ export const zhHant = defineLocale({
       settings: { title: '設定', detail: '設定 Anakot 桌面端' },
       skills: { title: '技能與工具', detail: '啟用技能、工具集和提供方' },
       messaging: { title: '訊息平台', detail: '設定 Telegram、Slack、Discord 等' },
-      artifacts: { title: '成品', detail: '瀏覽產生的輸出' }
+      artifacts: { title: '成品', detail: '瀏覽產生的輸出' },
+      discord: { title: 'Discord 狀態', detail: '在 Discord 上顯示您的活動' }
     },
     sectionEntries: {
       sessions: { title: '工作階段面板', detail: '搜尋、釘選和管理工作階段' },

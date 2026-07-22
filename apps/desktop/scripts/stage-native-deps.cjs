@@ -63,6 +63,44 @@ const NATIVE_DEPS = [
       `prebuilds/${TARGET_PLATFORM}-${TARGET_ARCH}/spawn-helper`,
       `prebuilds/${TARGET_PLATFORM}-${TARGET_ARCH}/conpty/*`
     ]
+  },
+  // discord-rpc — same workspace-hoist problem as node-pty, but it's a pure
+  // JS module (no .node binaries). electron-builder can't reach it when it's
+  // hoisted to the repo root, so we stage a copy alongside native deps and
+  // load from process.resourcesPath/native-deps/discord-rpc/ in packaged mode.
+  {
+    from: path.join(REPO_ROOT, 'node_modules', 'discord-rpc'),
+    to: path.join(STAGE_ROOT, 'discord-rpc'),
+    include: [
+      'package.json',
+      'src/**/*.js',
+      // the IPC transport files
+      'src/*.js'
+    ]
+  },
+  // node-fetch — runtime dependency of discord-rpc/src/client.js, hoisted.
+  // Nested under discord-rpc/node_modules/ so that require('node-fetch') from
+  // discord-rpc/src/client.js resolves correctly.
+  {
+    from: path.join(REPO_ROOT, 'node_modules', 'node-fetch'),
+    to: path.join(STAGE_ROOT, 'discord-rpc', 'node_modules', 'node-fetch'),
+    include: [
+      'package.json',
+      'lib/*',
+      'node_modules/**/*'
+    ]
+  },
+  // ws — runtime dependency of discord-rpc (websocket transport), hoisted.
+  // Nested under discord-rpc/node_modules/ for the same reason.
+  {
+    from: path.join(REPO_ROOT, 'node_modules', 'ws'),
+    to: path.join(STAGE_ROOT, 'discord-rpc', 'node_modules', 'ws'),
+    include: [
+      'package.json',
+      'index.js',
+      'lib/*',
+      'wrapper.mjs'
+    ]
   }
 ]
 

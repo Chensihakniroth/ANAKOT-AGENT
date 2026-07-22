@@ -204,6 +204,7 @@ export interface Translations {
       mcp: string
       toolsets: string
       pets: string
+      discord: string
       archivedChats: string
       about: string
     }
@@ -268,6 +269,27 @@ export interface Translations {
       }
     }
     fieldLabels: Record<string, string>
+    discordRpc: {
+      title: string
+      desktopOnly: string
+      loading: string
+      intro: string
+      toggleLabel: string
+      toggleDesc: string
+      clientIdLabel: string
+      clientIdPlaceholder: string
+      clientIdDesc: string
+      saving: string
+      save: string
+      howToTitle: string
+      step1: string
+      step2: string
+      step3: string
+      step4: string
+      devPortalLink: string
+      savedMessage: string
+      errorMessage: string
+    }
     fieldDescriptions: Record<string, string>
     about: {
       heading: string
@@ -602,7 +624,7 @@ export interface Translations {
     archivedChats: string
     sections: Record<'sessions' | 'system' | 'usage', string>
     sectionDescriptions: Record<'sessions' | 'system' | 'usage', string>
-    nav: Record<'newChat' | 'settings' | 'skills' | 'messaging' | 'artifacts' | 'pets', { title: string; detail: string }>
+    nav: Record<'newChat' | 'settings' | 'skills' | 'messaging' | 'artifacts' | 'pets' | 'discord', { title: string; detail: string }>
     sectionEntries: Record<'sessions' | 'system' | 'usage', { title: string; detail: string }>
     providerNavigate: string
     providerSessions: string

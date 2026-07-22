@@ -181,6 +181,7 @@ export const ja = defineLocale({
       mcp: 'MCP',
       toolsets: 'ツールセット',
       archivedChats: 'アーカイブ済みチャット',
+      discord: 'Discord プレゼンス',
       about: '情報'
     },
     sections: {
@@ -220,6 +221,27 @@ export const ja = defineLocale({
       technicalDesc: '生のツール引数、結果、低レベルの詳細を含めます。',
       themeTitle: 'テーマ',
       themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。'
+    },
+    discordRpc: {
+      title: 'Discord プレゼンス',
+      desktopOnly: 'Discord Rich Presence はデスクトップアプリでのみ利用可能です。',
+      loading: '読み込み中…',
+      intro: 'Anakot でのアクティビティを Discord プロフィールに表示します。Discord Application Client ID が必要です。',
+      toggleLabel: 'Discord プレゼンスを有効化',
+      toggleDesc: 'Anakot のアクティビティを Discord で Rich Presence として共有します。',
+      clientIdLabel: 'クライアント ID',
+      clientIdPlaceholder: 'Discord Application ID を貼り付け',
+      clientIdDesc: 'Discord Developer Portal のアプリケーションからのクライアント ID。',
+      saving: '保存中…',
+      save: '保存',
+      howToTitle: '設定方法',
+      step1: 'Discord Developer Portal にアクセスし、新しいアプリケーションを作成します。',
+      step2: 'OAuth2 / General セクションから Application ID（数値）をコピーします。',
+      step3: '上記の ID を貼り付けて「保存」をクリックします。',
+      step4: '変更を反映するには Anakot Desktop を再起動してください。',
+      devPortalLink: 'Discord Developer Portal を開く',
+      savedMessage: '設定を保存しました。再起動後に適用されます。',
+      errorMessage: '設定の保存に失敗しました。',
     },
     fieldLabels: defineFieldCopy({
       model: 'デフォルトモデル',
@@ -754,7 +776,8 @@ export const ja = defineLocale({
       settings: { title: '設定', detail: 'Anakot デスクトップを設定' },
       skills: { title: 'スキルとツール', detail: 'スキル、ツールセット、プロバイダーを有効化' },
       messaging: { title: 'メッセージング', detail: 'Telegram、Slack、Discord などを設定' },
-      artifacts: { title: 'アーティファクト', detail: '生成された出力を閲覧' }
+      artifacts: { title: 'アーティファクト', detail: '生成された出力を閲覧' },
+      discord: { title: 'Discord プレゼンス', detail: 'Discord でアクティビティを表示' }
     },
     sectionEntries: {
       sessions: { title: 'セッションパネル', detail: 'セッションの検索、ピン留め、管理' },

@@ -1679,6 +1679,40 @@ canvas {
   to { opacity: 1; filter: blur(0px); transform: translateY(0px) scale(1); }
 }
 
+/* — Landscape mobile: reduce chrome, maximize content area — */
+@media (orientation: landscape) and (max-height: 500px) {
+  .mobile-bottom-tab-bar {
+    height: 2.5rem;
+  }
+
+  .mobile-bottom-tab__label {
+    display: none;
+  }
+
+  .mobile-bottom-tab__icon {
+    height: 1.25rem;
+  }
+
+  .appshell-main-content {
+    padding-bottom: 2.75rem !important;
+  }
+
+  .mobile-sidebar-toggle {
+    top: 0.375rem;
+    left: 0.375rem;
+    width: 1.625rem;
+    height: 1.625rem;
+  }
+
+  [data-slot="composer-root"] [data-slot="rich-input"] {
+    min-height: 36px !important;
+  }
+
+  [data-slot="aui_thread-viewport"] {
+    padding-top: 0.25rem;
+  }
+}
+
 .animate-element { animation: fade-slide-in 0.6s ease-out forwards; }
 .animate-slide-right { animation: slide-right-in 0.6s ease-out forwards; }
 .animate-testimonial { animation: testimonial-in 0.5s ease-out forwards; }

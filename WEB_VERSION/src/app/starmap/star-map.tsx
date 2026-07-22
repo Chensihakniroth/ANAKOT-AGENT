@@ -152,6 +152,14 @@ export function StarMap({
     sy: number
     vp: Viewport
   }>({ id: null, mode: 'none', moved: false, ring: null, sx: 0, sy: 0, vp: { k: 1, x: 0, y: 0 } })
+    
+  /** Pinch-to-zoom state — tracks initial finger distance and viewport. */
+  const pinchRef = useRef<{
+    d0: number            // initial two-finger distance (px)
+    mx0: number           // midpoint x
+    my0: number           // midpoint y
+    vp0: Viewport         // viewport at pinch start
+  } | null>(null)
 
   const [selectedId, setSelectedId] = useState<null | string>(null)
   const [menuTarget, setMenuTarget] = useState<NodeMenuTarget | null>(null)
@@ -915,6 +923,46 @@ export function StarMap({
     invalidate()
   }
 
+  /** Two-finger pinch-to-zoom for mobile touch screens. */
+  const onTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2) {
+      const t = e.touches
+      const d0 = Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY)
+      const mx0 = (t[0]!.clientX + t[1]!.clientX) / 2
+      const my0 = (t[0]!.clientY + t[1]!.clientY) / 2
+      pinchRef.current = { d0, mx0, my0, vp0: { ...viewportRef.current } }
+    }
+  }
+
+  const onTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const pinch = pinchRef.current
+    if (!pinch || e.touches.length !== 2) return
+
+    setPlaying(false)
+
+    const t = e.touches
+    const d = Math.hypot(t[0]!.clientX - t[1]!.clientX, t[0]!.clientY - t[1]!.clientY)
+    const ratio = d / pinch.d0
+    const k = clamp(pinch.vp0.k * ratio, ZOOM_MIN, ZOOM_MAX)
+
+    // Zoom toward the midpoint of the two fingers.
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const mx = (t[0]!.clientX + t[1]!.clientX) / 2 - rect.left
+    const my = (t[0]!.clientY + t[1]!.clientY) / 2 - rect.top
+    const vp0 = pinch.vp0
+    viewportRef.current = {
+      k,
+      x: mx - ((mx - vp0.x) / vp0.k) * k,
+      y: my - ((my - vp0.y) / vp0.k) * k,
+    }
+    invalidate()
+  }
+
+  const onTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) pinchRef.current = null
+  }
+
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden" ref={wrapRef}>
       <canvas
@@ -925,6 +973,9 @@ export function StarMap({
         onMouseLeave={onMouseLeave}
         onMouseMove={onMouseMove}
         onMouseUp={endDrag}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
+        onTouchStart={onTouchStart}
         onWheel={onWheel}
         ref={canvasRef}
       />
