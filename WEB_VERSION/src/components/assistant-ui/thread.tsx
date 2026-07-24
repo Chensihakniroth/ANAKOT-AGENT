@@ -50,6 +50,7 @@ import { ComposerTriggerPopover } from '@/app/chat/composer/trigger-popover'
 import { extractDroppedFiles, ANAKOT_PATHS_MIME } from '@/app/chat/hooks/use-composer-actions'
 import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { DirectiveContent, anakotDirectiveFormatter } from '@/components/assistant-ui/directive-text'
+import { MobileContextMenu } from '@/components/chat/mobile-context-menu'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { VirtualizedThread } from '@/components/assistant-ui/thread-virtualizer'
 import { HoistedTodoPanel, todosFromMessageContent } from '@/components/assistant-ui/todo-tool'
@@ -228,7 +229,12 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
   }
 
   return (
-    <MessagePrimitive.Root
+    <MobileContextMenu
+      actions={[
+        { label: 'Copy', onSelect: () => { void navigator.clipboard.writeText(messageText) } },
+      ]}
+    >
+      <MessagePrimitive.Root
       className="group flex w-full min-w-0 max-w-full flex-col gap-0 self-start overflow-hidden"
       data-role="assistant"
       data-slot="aui_assistant-message-root"
@@ -263,6 +269,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
         <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} />
       )}
     </MessagePrimitive.Root>
+    </MobileContextMenu>
   )
 }
 
@@ -810,7 +817,12 @@ const UserMessage: FC<{
   )
 
   return (
-    <MessagePrimitive.Root asChild>
+    <MobileContextMenu
+      actions={[
+        { label: 'Copy', onSelect: () => { void navigator.clipboard.writeText(messageText) } },
+      ]}
+    >
+      <MessagePrimitive.Root asChild>
       <StickyHumanMessageContainer>
         <ActionBarPrimitive.Root className="relative w-full max-w-full" data-slot="aui_user-bubble-actions">
           <div className="human-message-with-todos-wrapper flex w-full flex-col gap-0">
@@ -883,6 +895,7 @@ const UserMessage: FC<{
         </ActionBarPrimitive.Root>
       </StickyHumanMessageContainer>
     </MessagePrimitive.Root>
+    </MobileContextMenu>
   )
 }
 

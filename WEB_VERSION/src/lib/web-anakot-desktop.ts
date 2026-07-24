@@ -913,3 +913,46 @@ export function oauthLogoutConnectionConfig(
 ): Promise<{ ok: boolean; connected: boolean }> {
   return Promise.resolve({ ok: false, connected: false })
 }
+
+// ── File upload (web-only) ─────────────────────────────────────────────────
+
+export interface UploadResult {
+  ok: boolean
+  path: string
+  filename: string
+  preview_url: string
+  size: number
+  mime_type: string
+  is_image: boolean
+}
+
+/**
+ * Upload a browser File object to the backend's /api/attach/upload endpoint.
+ * Used by drag-and-drop and file picker to attach files in web mode where
+ * there is no local filesystem path.
+ */
+export async function uploadFile(file: File): Promise<UploadResult> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const headers: Record<string, string> = {}
+  const token = getSessionToken()
+  if (token) {
+    headers[SESSION_HEADER] = token
+  }
+
+  const basePath = getBasePath()
+  const response = await fetch(`${basePath}/api/attach/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Upload failed (${response.status}): ${text}`)
+  }
+
+  return response.json() as Promise<UploadResult>
+}

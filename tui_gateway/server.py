@@ -1200,7 +1200,7 @@ def _resolve_model() -> str:
         return str(m.get("default", "") or "").strip()
     if isinstance(m, str) and m:
         return m.strip()
-    return "anthropic/claude-sonnet-4"
+    return ""
 
 
 def _resolve_startup_runtime() -> tuple[str, str | None]:
@@ -3198,10 +3198,12 @@ def _(rid, params: dict) -> dict:
     # workspace (see _ensure_session_db_row); otherwise it lands in "No
     # workspace" instead of whatever folder the desktop launched in.
     raw_cwd = str(params.get("cwd") or "").strip()
-    try:
-        explicit_cwd = bool(raw_cwd) and os.path.isdir(os.path.abspath(os.path.expanduser(raw_cwd)))
-    except Exception:
-        explicit_cwd = False
+    # Any explicitly-passed workspace path is trusted — no os.path.isdir()
+    # guard. The session's cwd is persisted to the DB row so the sidebar can
+    # group by workspace, even if the directory doesn't happen to exist on
+    # this machine at creation time (e.g. network drive, WSL path, or
+    # race condition with a removable volume).
+    explicit_cwd = bool(raw_cwd)
     resolved_cwd = _completion_cwd(params)
     _enable_gateway_prompts()
 
@@ -4993,12 +4995,16 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 try:
                     from agent.title_generator import maybe_auto_title
 
+                    def _title_failure(task: str, exc: BaseException) -> None:
+                        logger.warning("Auto-title failed for session %s: %s: %s", sid, task, exc)
+
                     maybe_auto_title(
                         _get_db(),
                         session.get("session_key") or sid,
                         text,
                         raw,
                         session.get("history", []),
+                        failure_callback=_title_failure,
                     )
                 except Exception:
                     pass

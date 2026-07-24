@@ -14,7 +14,6 @@ const BACKEND = process.env.ANAKOT_WEB_BACKEND ?? 'http://127.0.0.1:9119'
  */
 function anakotDevToken(): Plugin {
   const TOKEN_RE = /window\.__ANAKOT_SESSION_TOKEN__\s*=\s*"([^"]+)"/
-
   return {
     name: 'anakot:dev-session-token',
     apply: 'serve',
@@ -26,7 +25,7 @@ function anakotDevToken(): Plugin {
         if (!match) {
           console.warn(
             `[anakot-web] Could not find session token in ${BACKEND} — ` +
-              `is \`anakot dashboard\` running? /api calls will 401.`,
+              `is \`anakot dashboard\` running? /api calls will 401.`
           )
           return
         }
@@ -40,7 +39,7 @@ function anakotDevToken(): Plugin {
       } catch (err) {
         console.warn(
           `[anakot-web] Backend at ${BACKEND} unreachable — ` +
-            `start it with \`anakot dashboard\`. (${(err as Error).message})`,
+            `start it with \`anakot dashboard\`. (${(err as Error).message})`
         )
       }
     },
@@ -60,7 +59,41 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            // Core React — small but change-frequently; cache separately
+            if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('/react/jsx-runtime')) {
+              return 'vendor-react'
+            }
+            // Shiki (syntax highlighting) — ALL shiki copies (v3 from @streamdown/code + v4 from react-shiki)
+            // Also catch @shikijs/langs which bundles 8MB of TextMate grammar definitions
+            if (id.includes('/shiki/') || id.includes('/react-shiki') || id.includes('@shikijs/langs') || id.includes('@shikijs/themes')) {
+              return 'vendor-shiki'
+            }
+            // Monaco editor — very heavy, lazy-loaded
+            if (id.includes('/@monaco-editor/') || id.includes('/monaco-editor/')) {
+              return 'vendor-monaco'
+            }
+            // xterm — terminal, lazy-loaded
+            if (id.includes('/@xterm/') || id.includes('/xterm/')) {
+              return 'vendor-xterm'
+            }
+            // Mermaid — heavy diagram renderer bundled by streamdown
+            if (id.includes('/mermaid')) {
+              return 'vendor-mermaid'
+            }
+            // Streamdown markdown renderer + its rehype/remark chain
+            if (id.includes('/streamdown') || id.includes('/@streamdown/') || id.includes('/remark-') || id.includes('/rehype-') || id.includes('/unified') || id.includes('/mdast') || id.includes('/hast-util') || id.includes('/unist-util') || id.includes('/micromark')) {
+              return 'vendor-markdown'
+            }
+            // Tailwind CSS utilities (often large)
+            if (id.includes('/tailwindcss') || id.includes('@tailwindcss')) {
+              return 'vendor-tailwind'
+            }
+            // Everything else in node_modules
+            return 'vendor'
+          }
+        },
       },
     },
   },

@@ -259,6 +259,7 @@ export const en: Translations = {
       mcp: 'MCP',
       toolsets: 'Tool Backends',
       pets: 'Pets',
+      discord: 'Discord Presence',
       archivedChats: 'Archived Chats',
       about: 'About'
     },
@@ -342,6 +343,27 @@ export const en: Translations = {
         anchorTitle: 'Pet position',
         anchorDesc: 'Snap the pet to a corner or keep it free-draggable.'
       }
+    },
+    discordRpc: {
+      title: 'Discord Presence',
+      desktopOnly: 'Discord Rich Presence is only available in the desktop app.',
+      loading: 'Loading…',
+      intro: 'Show what you\'re doing in Anakot on your Discord profile. Requires a Discord Application Client ID.',
+      toggleLabel: 'Enable Discord Presence',
+      toggleDesc: 'Share your Anakot activity on Discord as Rich Presence.',
+      clientIdLabel: 'Client ID',
+      clientIdPlaceholder: 'Paste your Discord Application ID',
+      clientIdDesc: 'The client ID from your Discord Developer Portal application.',
+      saving: 'Saving…',
+      save: 'Save',
+      howToTitle: 'How to set up',
+      step1: 'Go to the Discord Developer Portal and create a new application.',
+      step2: 'Copy the Application ID (numeric) from the OAuth2 / General section.',
+      step3: 'Paste the ID above and click Save.',
+      step4: 'Restart Anakot Desktop for the changes to take effect.',
+      devPortalLink: 'Open Discord Developer Portal',
+      savedMessage: 'Config saved. Changes will apply after restart.',
+      errorMessage: 'Failed to save config.',
     },
     fieldLabels: FIELD_LABELS,
     fieldDescriptions: FIELD_DESCRIPTIONS,
@@ -708,7 +730,8 @@ export const en: Translations = {
       skills: { title: 'Skills & Tools', detail: 'Enable skills, toolsets, and providers' },
       messaging: { title: 'Messaging', detail: 'Set up Telegram, Slack, Discord, and more' },
       artifacts: { title: 'Artifacts', detail: 'Browse generated outputs' },
-      pets: { title: 'Pets', detail: 'Manage your desktop pet' }
+      pets: { title: 'Pets', detail: 'Manage your desktop pet' },
+      discord: { title: 'Discord Presence', detail: 'Show your activity on Discord' }
     },
     sectionEntries: {
       sessions: { title: 'Sessions panel', detail: 'Search, pin, and manage sessions' },
@@ -1297,7 +1320,7 @@ export const en: Translations = {
       codeReview: {
         label: 'Code review',
         description: 'Audit the current change for regressions, dropped edge cases, and missing tests.',
-        text: 'Please review this for bugs, regressions, and missing tests.'
+        text: 'Please review this for bugs, regressions, and missing tests.\n\nAfter your review, include a CODE_REVIEW_JSON block at the end of your response with this exact format (no extra text around it):\n```CODE_REVIEW_JSON\n{\n  "file": "<filename>",\n  "language": "<lang>",\n  "items": [\n    { "severity": "error|warning|info", "category": "bug|style|security|performance|suggestion", "line": <number>, "message": "<description>", "suggestion": "<optional fix>" }\n  ]\n}\n```'
       },
       implementationPlan: {
         label: 'Implementation plan',

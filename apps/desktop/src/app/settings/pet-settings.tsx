@@ -51,7 +51,7 @@ import {
 import { $petOverlayActive, popInPet, popOutPetFromSettings } from '@/store/pet-overlay'
 import { $gatewayState } from '@/store/session'
 
-import { ListRow, SectionHeading } from './primitives'
+import { ListRow, SectionHeading, SettingsContent } from './primitives'
 
 /**
  * Appearance opt-in for the floating petdex mascot. A thin view over the shared
@@ -131,275 +131,273 @@ export function PetSettings() {
   const shown = sorted.slice(0, RENDER_CAP)
 
   return (
-    <div>
-      <SectionHeading icon={PawPrint} title={copy.title} />
-      <p className="max-w-2xl text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
-        {copy.intro}
-      </p>
-
-      {staleBackend && (
-        <p className="mt-2 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
-          {copy.restartHint}
+    <SettingsContent>
+      <div>
+        <SectionHeading icon={PawPrint} title={copy.title} />
+        <p className="max-w-2xl text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+          {copy.intro}
         </p>
-      )}
 
-      <div className="mt-2">
-        <ListRow
-          below={
-            <>
-              <input
-                className="mt-3 w-full rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-1.5 text-[length:var(--conversation-caption-font-size)] outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-stroke-secondary)"
-                onChange={event => setQuery(event.target.value)}
-                placeholder={copy.searchPlaceholder}
-                spellCheck={false}
-                value={query}
-              />
-              {/* Fixed-height scroll area so filtering never grows/shrinks the
-                  page (no layout thrash); the grid scrolls inside it. */}
-              <div className="mt-3 h-72 overflow-y-auto pr-1">
-                {pets.length === 0 ? (
-                  <p className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                    {copy.unreachable}
-                  </p>
-                ) : shown.length === 0 ? (
-                  <p className="wrap-anywhere text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                    {copy.noMatch(query)}
-                  </p>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {shown.map(pet => {
-                      const isActive = enabled && active === pet.slug
-                      const isBusy = busySlug === pet.slug
+        {staleBackend && (
+          <p className="mt-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ui-text-tertiary)">
+            {copy.restartHint}
+          </p>
+        )}
 
-                      return (
-                        <div className="group relative" key={pet.slug}>
-                          <button
-                            className={cn(
-                              'flex w-full items-center gap-2.5 px-2.5 py-2 text-left disabled:opacity-50',
-                              selectableCardClass({ active: isActive, prominent: pet.installed })
-                            )}
-                            disabled={isBusy}
-                            onClick={() => void selectPet(pet.slug)}
-                            type="button"
-                          >
-                            <PetThumb
-                              alt={pet.displayName}
-                              load={(slug, url) => loadPetThumb(requestGateway, slug, url)}
-                              slug={pet.slug}
-                              url={pet.spritesheetUrl}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5">
-                                <span className="truncate text-[length:var(--conversation-text-font-size)] font-medium">
-                                  {pet.displayName}
-                                </span>
-                                {pet.generated && (
-                                  <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[0.625rem] font-medium text-primary">
-                                    {copy.generatedTag}
+        {/* ── Pet Gallery ───────────────────────────────────── */}
+        <div className="mt-4 divide-y divide-(--ui-stroke-tertiary)">
+          <ListRow
+            below={
+              <>
+                <input
+                  className="mt-3 w-full rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-1.5 text-[length:var(--conversation-caption-font-size)] outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-stroke-secondary)"
+                  onChange={event => setQuery(event.target.value)}
+                  placeholder={copy.searchPlaceholder}
+                  spellCheck={false}
+                  value={query}
+                />
+                {/* Fixed-height scroll area so filtering never grows/shrinks the
+                    page (no layout thrash); the grid scrolls inside it. */}
+                <div className="mt-3 h-72 overflow-y-auto pr-1">
+                  {pets.length === 0 ? (
+                    <p className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                      {copy.unreachable}
+                    </p>
+                  ) : shown.length === 0 ? (
+                    <p className="wrap-anywhere text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                      {copy.noMatch(query)}
+                    </p>
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {shown.map(pet => {
+                        const isActive = enabled && active === pet.slug
+                        const isBusy = busySlug === pet.slug
+
+                        return (
+                          <div className="group relative" key={pet.slug}>
+                            <button
+                              className={cn(
+                                'flex w-full items-center gap-2.5 px-2.5 py-2 text-left disabled:opacity-50',
+                                selectableCardClass({ active: isActive, prominent: pet.installed })
+                              )}
+                              disabled={isBusy}
+                              onClick={() => void selectPet(pet.slug)}
+                              type="button"
+                            >
+                              <PetThumb
+                                alt={pet.displayName}
+                                load={(slug, url) => loadPetThumb(requestGateway, slug, url)}
+                                slug={pet.slug}
+                                url={pet.spritesheetUrl}
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="truncate text-[length:var(--conversation-text-font-size)] font-medium">
+                                    {pet.displayName}
                                   </span>
+                                  {pet.generated && (
+                                    <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[0.625rem] font-medium text-primary">
+                                      {copy.generatedTag}
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="block truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                                  {pet.slug}
+                                  {pet.installed ? ` · ${copy.installedTag}` : ''}
+                                </span>
+                              </span>
+                              {isBusy && <Loader2 className="size-4 shrink-0 animate-spin text-(--ui-text-tertiary)" />}
+                            </button>
+                            {!isBusy && (pet.installed || pet.generated) && (
+                              <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                                {pet.generated && (
+                                  <PetAction
+                                    icon={<Pencil className="size-3.5" />}
+                                    label={copy.rename(pet.displayName)}
+                                    onClick={() => {
+                                      setRenameValue(pet.displayName)
+                                      setRenameTarget(pet)
+                                    }}
+                                  />
                                 )}
-                              </span>
-                              <span className="block truncate text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                                {pet.slug}
-                                {pet.installed ? ` · ${copy.installedTag}` : ''}
-                              </span>
-                            </span>
-                            {isBusy && <Loader2 className="size-4 shrink-0 animate-spin text-(--ui-text-tertiary)" />}
-                          </button>
-                          {!isBusy && (pet.installed || pet.generated) && (
-                            <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                              {pet.generated && (
-                                <PetAction
-                                  icon={<Pencil className="size-3.5" />}
-                                  label={copy.rename(pet.displayName)}
-                                  onClick={() => {
-                                    setRenameValue(pet.displayName)
-                                    setRenameTarget(pet)
-                                  }}
-                                />
-                              )}
-                              {pet.generated && (
-                                <PetAction
-                                  icon={<Download className="size-3.5" />}
-                                  label={copy.exportPet(pet.displayName)}
-                                  onClick={() => exportPet(pet.slug)}
-                                />
-                              )}
-                              {pet.installed && (
-                                // Generated pets have no remote source — deletion is
-                                // permanent, so confirm; petdex pets just uninstall.
-                                <PetAction
-                                  danger
-                                  icon={<Trash2 className="size-3.5" />}
-                                  label={pet.generated ? copy.delete(pet.displayName) : copy.uninstall(pet.displayName)}
-                                  onClick={() => (pet.generated ? setConfirmDelete(pet) : removePet(pet.slug))}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-              {/* Always-present status line so its appearance never shifts layout. */}
-              <p className="mt-2 min-h-4 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                {error ? (
-                  <span className="text-(--ui-red)">{error}</span>
-                ) : sorted.length > RENDER_CAP ? (
-                  copy.countCapped(RENDER_CAP, sorted.length)
-                ) : (
-                  copy.count(sorted.length)
-                )}
-              </p>
-            </>
-          }
-          description={copy.chooseDesc}
-          title={
-            <div className="flex items-center justify-between gap-3">
-              <span>{copy.chooseTitle}</span>
-              <SegmentedControl
-                onChange={id => void toggle(id === 'on')}
-                options={[
-                  { id: 'off', label: copy.off },
-                  { id: 'on', label: copy.on }
-                ]}
-                value={enabled ? 'on' : 'off'}
-              />
-            </div>
-          }
-          wide
-        />
-
-        {enabled && (
-          <ListRow
-            action={
-              <div className="flex items-center gap-3">
-                <input
-                  aria-label={copy.scaleTitle}
-                  className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
-                  max={PET_SCALE_MAX}
-                  min={PET_SCALE_MIN}
-                  onChange={event => {
-                    triggerHaptic('selection')
-                    setPetScale(requestGateway, Number(event.target.value))
-                  }}
-                  step={0.05}
-                  style={{ accentColor: 'var(--dt-primary)' }}
-                  type="range"
-                  value={scale}
+                                {pet.generated && (
+                                  <PetAction
+                                    icon={<Download className="size-3.5" />}
+                                    label={copy.exportPet(pet.displayName)}
+                                    onClick={() => exportPet(pet.slug)}
+                                  />
+                                )}
+                                {pet.installed && (
+                                  // Generated pets have no remote source — deletion is
+                                  // permanent, so confirm; petdex pets just uninstall.
+                                  <PetAction
+                                    danger
+                                    icon={<Trash2 className="size-3.5" />}
+                                    label={pet.generated ? copy.delete(pet.displayName) : copy.uninstall(pet.displayName)}
+                                    onClick={() => (pet.generated ? setConfirmDelete(pet) : removePet(pet.slug))}
+                                  />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                {/* Always-present status line so its appearance never shifts layout. */}
+                <p className="mt-2 min-h-4 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                  {error ? (
+                    <span className="text-(--ui-red)">{error}</span>
+                  ) : sorted.length > RENDER_CAP ? (
+                    copy.countCapped(RENDER_CAP, sorted.length)
+                  ) : (
+                    copy.count(sorted.length)
+                  )}
+                </p>
+              </>
+            }
+            description={copy.chooseDesc}
+            title={
+              <div className="flex items-center justify-between gap-3">
+                <span>{copy.chooseTitle}</span>
+                <SegmentedControl
+                  onChange={id => void toggle(id === 'on')}
+                  options={[
+                    { id: 'off', label: copy.off },
+                    { id: 'on', label: copy.on }
+                  ]}
+                  value={enabled ? 'on' : 'off'}
                 />
-                <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
-                  {`${Math.round(scale * 100)}%`}
-                </span>
               </div>
             }
-            description={copy.scaleDesc}
-            title={copy.scaleTitle}
+            wide
           />
-        )}
+        </div>
 
+        {/* ── Display Settings (only when pet is enabled) ─── */}
         {enabled && (
-          <ListRow
-            action={
-              <SegmentedControl
-                onChange={id => {
-                  setPetRoam(id === 'on')
-                  triggerHaptic('crisp')
-                }}
-                options={[
-                  { id: 'off', label: copy.off },
-                  { id: 'on', label: copy.on }
-                ]}
-                value={roam ? 'on' : 'off'}
-              />
-            }
-            description={copy.roamDesc}
-            title={copy.roamTitle}
-          />
-        )}
-
-        {enabled && (
-          <ListRow
-            action={
-              <SegmentedControl
-                onChange={id => {
-                  if (id === 'on') {
-                    popOutPetFromSettings()
-                  } else {
-                    popInPet()
-                  }
-                  triggerHaptic('crisp')
-                }}
-                options={[
-                  { id: 'off', label: copy.off },
-                  { id: 'on', label: copy.on }
-                ]}
-                value={overlayActive ? 'on' : 'off'}
-              />
-            }
-            description={copy.popOutDesc}
-            title={copy.popOutTitle}
-          />
-        )}
-
-        {enabled && (
-          <ListRow
-            action={
-              <div className="flex items-center gap-3">
-                <input
-                  aria-label={copy.opacityTitle}
-                  className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
-                  max={1}
-                  min={0.1}
-                  onChange={event => {
-                    triggerHaptic('selection')
-                    setPetOpacity(Number(event.target.value))
-                  }}
-                  step={0.05}
-                  style={{ accentColor: 'var(--dt-primary)' }}
-                  type="range"
-                  value={opacity}
-                />
-                <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
-                  {`${Math.round(opacity * 100)}%`}
-                </span>
-              </div>
-            }
-            description={copy.opacityDesc}
-            title={copy.opacityTitle}
-          />
-        )}
-
-        {enabled && (
-          <ListRow
-            action={
-              <div className="flex gap-1">
-                {(['free', 'bottom-left', 'bottom-right', 'top-left', 'top-right'] as PetAnchor[]).map(a => (
-                  <button
-                    aria-label={a}
-                    className={cn(
-                      'flex size-7 items-center justify-center rounded-md text-xs font-medium transition',
-                      anchor === a
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-(--ui-bg-quinary) text-(--ui-text-tertiary) hover:bg-(--ui-bg-elevated)'
-                    )}
-                    key={a}
-                    onClick={() => {
-                      setPetAnchor(a)
-                      triggerHaptic('crisp')
+          <div className="mt-6 divide-y divide-(--ui-stroke-tertiary)">
+            <ListRow
+              action={
+                <div className="flex items-center gap-3">
+                  <input
+                    aria-label={copy.scaleTitle}
+                    className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
+                    max={PET_SCALE_MAX}
+                    min={PET_SCALE_MIN}
+                    onChange={event => {
+                      triggerHaptic('selection')
+                      setPetScale(requestGateway, Number(event.target.value))
                     }}
-                    type="button"
-                  >
-                    {a === 'free' ? '↔' : a === 'bottom-left' ? '◢' : a === 'bottom-right' ? '◣' : a === 'top-left' ? '◤' : '◥'}
-                  </button>
-                ))}
-              </div>
-            }
-            description={copy.anchorDesc}
-            title={copy.anchorTitle}
-          />
+                    step={0.05}
+                    style={{ accentColor: 'var(--dt-primary)' }}
+                    type="range"
+                    value={scale}
+                  />
+                  <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
+                    {`${Math.round(scale * 100)}%`}
+                  </span>
+                </div>
+              }
+              description={copy.scaleDesc}
+              title={copy.scaleTitle}
+            />
+
+            <ListRow
+              action={
+                <SegmentedControl
+                  onChange={id => {
+                    setPetRoam(id === 'on')
+                    triggerHaptic('crisp')
+                  }}
+                  options={[
+                    { id: 'off', label: copy.off },
+                    { id: 'on', label: copy.on }
+                  ]}
+                  value={roam ? 'on' : 'off'}
+                />
+              }
+              description={copy.roamDesc}
+              title={copy.roamTitle}
+            />
+
+            <ListRow
+              action={
+                <SegmentedControl
+                  onChange={id => {
+                    if (id === 'on') {
+                      popOutPetFromSettings()
+                    } else {
+                      popInPet()
+                    }
+                    triggerHaptic('crisp')
+                  }}
+                  options={[
+                    { id: 'off', label: copy.off },
+                    { id: 'on', label: copy.on }
+                  ]}
+                  value={overlayActive ? 'on' : 'off'}
+                />
+              }
+              description={copy.popOutDesc}
+              title={copy.popOutTitle}
+            />
+
+            <ListRow
+              action={
+                <div className="flex items-center gap-3">
+                  <input
+                    aria-label={copy.opacityTitle}
+                    className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
+                    max={1}
+                    min={0.1}
+                    onChange={event => {
+                      triggerHaptic('selection')
+                      setPetOpacity(Number(event.target.value))
+                    }}
+                    step={0.05}
+                    style={{ accentColor: 'var(--dt-primary)' }}
+                    type="range"
+                    value={opacity}
+                  />
+                  <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
+                    {`${Math.round(opacity * 100)}%`}
+                  </span>
+                </div>
+              }
+              description={copy.opacityDesc}
+              title={copy.opacityTitle}
+            />
+
+            <ListRow
+              action={
+                <div className="flex gap-1">
+                  {(['free', 'bottom-left', 'bottom-right', 'top-left', 'top-right'] as PetAnchor[]).map(a => (
+                    <button
+                      aria-label={a}
+                      className={cn(
+                        'flex size-7 items-center justify-center rounded-md text-xs font-medium transition',
+                        anchor === a
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-(--ui-bg-quinary) text-(--ui-text-tertiary) hover:bg-(--ui-bg-elevated)'
+                      )}
+                      key={a}
+                      onClick={() => {
+                        setPetAnchor(a)
+                        triggerHaptic('crisp')
+                      }}
+                      type="button"
+                    >
+                      {a === 'free' ? '↔' : a === 'bottom-left' ? '◢' : a === 'bottom-right' ? '◣' : a === 'top-left' ? '◤' : '◥'}
+                    </button>
+                  ))}
+                </div>
+              }
+              description={copy.anchorDesc}
+              title={copy.anchorTitle}
+            />
+          </div>
         )}
       </div>
 
@@ -454,7 +452,7 @@ export function PetSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SettingsContent>
   )
 }
 

@@ -546,6 +546,15 @@ export function useMessageStream({
       })
 
       void refreshSessions().catch(() => undefined)
+      // Re-fetch after a delay to pick up the auto-generated title —
+      // the backend fires title generation in a background thread that
+      // may not have finished by the time the first refresh lands.
+      // Poll a few times with increasing delays to catch slow title generation.
+      const _titlePollTimers = [3000, 6000, 10000].map(delay =>
+        setTimeout(() => {
+          void refreshSessions().catch(() => undefined)
+        }, delay)
+      )
 
       if (shouldHydrate) {
         void hydrateFromStoredSession(3, completedState.storedSessionId, sessionId)

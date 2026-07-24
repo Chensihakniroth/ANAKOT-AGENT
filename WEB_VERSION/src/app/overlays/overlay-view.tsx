@@ -1,10 +1,11 @@
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useCallback, useEffect } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { translateNow } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
+import { usePullDownClose } from '@/hooks/use-pull-down-close'
 
 interface OverlayViewProps {
   children: ReactNode
@@ -23,10 +24,13 @@ export function OverlayView({
   headerContent,
   rootClassName
 }: OverlayViewProps) {
-  const closeOverlay = () => {
+  const closeOverlay = useCallback(() => {
     triggerHaptic('close')
     onClose()
-  }
+  }, [onClose])
+
+  // Pull-down gesture on mobile dismisses the overlay.
+  const pullDownRef = usePullDownClose(closeOverlay)
 
   // Esc dismisses every OverlayView-based overlay. Nested Radix dialogs
   // stop propagation themselves, so opening (e.g.) the model picker inside
@@ -43,7 +47,6 @@ export function OverlayView({
     }
 
     window.addEventListener('keydown', onKeyDown)
-
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
@@ -84,7 +87,7 @@ export function OverlayView({
         {/* No top padding here: the split-layout columns own their own
             titlebar clearance so their backgrounds run flush to the card top
             (otherwise the card surface shows as a gap above the sidebar). */}
-        <div className={cn('min-h-0 flex flex-1 flex-col', contentClassName)}>{children}</div>
+        <div ref={pullDownRef} className={cn('min-h-0 flex flex-1 flex-col', contentClassName)}>{children}</div>
       </div>
     </div>
   )

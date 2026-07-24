@@ -1153,6 +1153,20 @@ canvas {
   margin: 0 !important;
 }
 
+/* Horizontal scroll shadows on code blocks — subtle gradients on both
+   edges that reveal themselves when the scroll position isn't at the
+   boundary.  The technique pairs local (scrolls-with-content) and
+   scroll (viewport-fixed) background layers so the fade naturally
+   shows only when content extends past the visible area. */
+[data-slot='aui_assistant-message-content'] .aui-md .aui-shiki {
+  background:
+    linear-gradient(to right, var(--ui-chat-surface-background) 8px, transparent 28px) left / 36px 100% local,
+    linear-gradient(to left,  var(--ui-chat-surface-background) 8px, transparent 28px) right / 36px 100% local,
+    radial-gradient(farthest-side at 0 50%, rgba(0,0,0,0.12) 0%, transparent 28px) left / 36px 100% scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.12) 0%, transparent 28px) right / 36px 100% scroll,
+    var(--ui-chat-surface-background);
+}
+
 [data-slot='aui_assistant-message-content'] .aui-md .aui-md-table {
   border-spacing: 0;
 }
@@ -1394,6 +1408,17 @@ canvas {
  * --------------------------------------------------------------------------- */
 
 @media (max-width: 767.98px) {
+  /* — Notch/dynamic island safe area: push content down so it's not
+       obscured by the top sensor housing on modern phones */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* — Bump the floating sidebar toggle down to clear the notch */
+  .mobile-sidebar-toggle {
+    top: calc(0.625rem + env(safe-area-inset-top, 0px)) !important;
+  }
+
   /* — PaneShell collapses to a single column (hide sidebar + preview panes) */
   [data-pane-shell] {
     grid-template-columns: 1fr !important;
@@ -1415,6 +1440,16 @@ canvas {
   /* — Status bar: hidden (20px vertical strip wasted on mobile) */
   .appshell-statusbar {
     display: none !important;
+  }
+
+  /* — Bottom tab bar: visible, add bottom padding so content doesn't hide behind it */
+  .mobile-bottom-tab-bar {
+    display: flex !important;
+  }
+
+  /* Push main content up above the fixed bottom bar */
+  .appshell-main-content {
+    padding-bottom: 3.5rem !important;
   }
 
   /* — Overlay split layout: sidebar becomes a horizontal scrollable tab strip */
@@ -1474,10 +1509,10 @@ canvas {
     display: none !important;
   }
 
-  /* — Composer: full-width, with safe-area bottom padding */
+  /* — Composer: full-width, with safe-area bottom padding + tab bar clearance */
   :root {
     --composer-width: 100%;
-    --composer-shell-pad-block-end: calc(0.625rem + env(safe-area-inset-bottom, 0px));
+    --composer-shell-pad-block-end: calc(0.625rem + env(safe-area-inset-bottom, 0px) + 3.5rem);
   }
 }
 
@@ -1485,28 +1520,34 @@ canvas {
 .mobile-sidebar-toggle {
   display: none;
   position: fixed;
-  left: 0.75rem;
-  /* Top-left corner — standard mobile hamburger menu position. On the
-     landing page the top area is empty; when a chat is open the toggle
-     sits above the session title header (z-index keeps it visible). */
-  top: 0.75rem;
+  left: 0.625rem;
+  top: 0.625rem;
   z-index: 50;
-  height: 2.75rem;
-  width: 2.75rem;
+  height: 2rem;
+  width: 2rem;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
-  background: var(--dt-primary);
-  color: var(--dt-primary-foreground);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--dt-primary) 12%, transparent);
+  color: var(--dt-primary);
   cursor: pointer;
   border: none;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, transform 0.15s;
+}
+
+/* Hidden variant — used when an overlay is open on mobile. !important beats
+   the media-query `display: flex !important` above. */
+.mobile-sidebar-toggle--hidden {
+  display: none !important;
+}
+
+.mobile-sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--dt-primary) 20%, transparent);
 }
 
 .mobile-sidebar-toggle:active {
-  transform: scale(0.95);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transform: scale(0.92);
+  background: color-mix(in srgb, var(--dt-primary) 28%, transparent);
 }
 
 /* ── Sheet (shadcn/Radix UI) slide animations ────────────────────────────
@@ -1638,6 +1679,56 @@ canvas {
   to { opacity: 1; filter: blur(0px); transform: translateY(0px) scale(1); }
 }
 
+/* — Landscape mobile: reduce chrome, maximize content area — */
+@media (orientation: landscape) and (max-height: 500px) {
+  .mobile-bottom-tab-bar {
+    height: 2.5rem;
+  }
+
+  .mobile-bottom-tab__label {
+    display: none;
+  }
+
+  .mobile-bottom-tab__icon {
+    height: 1.25rem;
+  }
+
+  .appshell-main-content {
+    padding-bottom: 2.75rem !important;
+  }
+
+  .mobile-sidebar-toggle {
+    top: 0.375rem;
+    left: 0.375rem;
+    width: 1.625rem;
+    height: 1.625rem;
+  }
+
+  [data-slot="composer-root"] [data-slot="rich-input"] {
+    min-height: 36px !important;
+  }
+
+  [data-slot="aui_thread-viewport"] {
+    padding-top: 0.25rem;
+  }
+}
+
+/* — Mobile keyboard: keep the thread scrollable and the composer above the keyboard — */
+@media (max-width: 767.98px) {
+  [data-slot="aui_thread-viewport"] {
+    /* scroll-padding lets the last message scroll above the keyboard. */
+    scroll-padding-bottom: var(--mobile-keyboard-height, 0px);
+  }
+
+  /* On iOS the layout viewport doesn't shrink when the keyboard opens —
+     only the visual viewport does. Constrain the chat container height
+     so the composer stays above the keyboard. */
+  .chat-view-root {
+    height: calc(100dvh - var(--mobile-keyboard-height, 0px));
+    max-height: calc(100dvh - var(--mobile-keyboard-height, 0px));
+  }
+}
+
 .animate-element { animation: fade-slide-in 0.6s ease-out forwards; }
 .animate-slide-right { animation: slide-right-in 0.6s ease-out forwards; }
 .animate-testimonial { animation: testimonial-in 0.5s ease-out forwards; }
@@ -1655,3 +1746,78 @@ canvas {
 .animate-delay-1000 { animation-delay: 1.0s;  }
 .animate-delay-1200 { animation-delay: 1.2s;  }
 .animate-delay-1400 { animation-delay: 1.4s;  }
+
+/* ── Mobile Bottom Tab Bar ─────────────────────────────────────────────────
+   Fixed bar at the bottom edge with safe-area inset. Hidden on desktop,
+   shown only at the mobile breakpoint via `display: flex !important`. */
+.mobile-bottom-tab-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 3.5rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-around;
+  background: var(--ui-activity-bar-background, #1a1a2e);
+  border-top: 1px solid var(--ui-stroke-tertiary, #2a2a3e);
+}
+
+.mobile-bottom-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 0.25rem 0;
+  border: none;
+  background: transparent;
+  color: var(--ui-text-tertiary, #8b8ba7);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: color 0.15s;
+}
+
+.mobile-bottom-tab:active {
+  opacity: 0.7;
+}
+
+.mobile-bottom-tab--active {
+  color: var(--dt-primary, #e879f9);
+  position: relative;
+}
+
+.mobile-bottom-tab--active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.5rem;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--dt-primary, #e879f9);
+}
+
+.mobile-bottom-tab__icon {
+  display: flex;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+}
+
+.mobile-bottom-tab__label {
+  font-size: 0.625rem;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}

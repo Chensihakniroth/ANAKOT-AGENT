@@ -271,6 +271,11 @@ export function usePromptActions({
         setAwaitingResponse(false)
       }
 
+      // Detect code review snippet — flag it so message.complete can parse
+      // the structured CODE_REVIEW_JSON block from the AI response.
+      const isCodeReview =
+        /review\s+this\s+for\s+bugs[\s,]+regressions/i.test(visibleText)
+
       // Idempotent optimistic insert — re-running with the resolved sessionId
       // after createBackendSessionForSend just overwrites with the same id.
       const seedOptimistic = (sid: string) =>
@@ -285,6 +290,7 @@ export function usePromptActions({
             awaitingResponse: true,
             pendingBranchGroup: null,
             sawAssistantPayload: false,
+            pendingCodeReview: isCodeReview || undefined,
             // Fresh submit = new turn — clear any leftover interrupt flag, else
             // mutateStream/completeAssistantMessage drop every delta of this turn
             // (what made drained-after-interrupt sends go silent).

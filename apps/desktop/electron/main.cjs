@@ -69,6 +69,7 @@ const {
   getAvailableLanguageServers,
   listLanguageServers
 } = require('./lsp-manager.cjs')
+const discordRpc = require('./discord-rpc.cjs')
 
 let nodePty = null
 
@@ -6706,6 +6707,34 @@ ipcMain.handle('anakot:obsidian:scanVault', (_event, rootPath) => {
 })
 
 // ===========================================================================
+// Discord Rich Presence — activity, config, lifecycle
+// ===========================================================================
+
+ipcMain.handle('anakot:discord-rpc:set-activity', async (_event, activity) => {
+  return discordRpc.setActivity(activity)
+})
+
+ipcMain.handle('anakot:discord-rpc:clear-activity', async () => {
+  return discordRpc.clearActivity()
+})
+
+ipcMain.handle('anakot:discord-rpc:get-config', async () => {
+  return discordRpc.getConfig(app.getPath('userData'))
+})
+
+ipcMain.handle('anakot:discord-rpc:update-config', async (_event, patch) => {
+  return discordRpc.updateConfig(patch, app.getPath('userData'))
+})
+
+ipcMain.handle('anakot:discord-rpc:build-default-activity', async (_event, opts) => {
+  return discordRpc.buildDefaultActivity(opts)
+})
+
+ipcMain.handle('anakot:discord-rpc:get-connection-status', async () => {
+  return discordRpc.getConnectionStatus()
+})
+
+// ===========================================================================
 // Uninstall — remove the Chat GUI (and optionally the agent / user data).
 // ===========================================================================
 //
@@ -7036,6 +7065,12 @@ app.whenReady().then(() => {
   registerPowerResumeListeners()
   createWindow()
 
+  // Init Discord RPC — safe to call before config is ready; it gracefully
+  // returns { ok: false } if no clientId is configured yet.
+  discordRpc.initRpc(app.getPath('userData')).catch(e => {
+    console.warn('[discord-rpc] deferred init failed:', e.message)
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -7081,6 +7116,7 @@ app.on('before-quit', () => {
   flushDesktopLogBufferSync()
   closePreviewWatchers()
   closePetOverlay()
+  discordRpc.destroyRpc()
   stopAllLsp()
 
   // Dispose live PTY sessions before the environment tears down.

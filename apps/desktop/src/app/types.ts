@@ -91,4 +91,7 @@ export interface ClientSessionState {
   /** A blocking clarify prompt is waiting on the user for this session. Drives
    *  the sidebar "needs input" indicator; cleared when the turn resumes/ends. */
   needsInput: boolean
+  /** True when the last user message was a code review snippet — signals
+   *  message.complete to parse a structured CODE_REVIEW_JSON block. */
+  pendingCodeReview?: boolean
 }

@@ -648,6 +648,7 @@ export function DesktopController() {
         <SessionList
           onSelectSession={(sessionId) => { navigate(sessionRoute(sessionId)) }}
           onNewSession={() => startFreshSessionDraft()}
+          onNewSessionInWorkspace={startSessionInWorkspace}
         />
       </div>
     </div>

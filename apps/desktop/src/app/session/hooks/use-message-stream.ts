@@ -438,8 +438,14 @@ export function useMessageStream({
   const completeAssistantMessage = useCallback(
     (sessionId: string, text: string) => {
       let shouldHydrate = false
+      let wasCodeReview = false
 
       const completedState = updateSessionState(sessionId, state => {
+        // Capture before clearing so we can act on it after the update.
+        if (state.pendingCodeReview) {
+          wasCodeReview = true
+        }
+
         // Late completion from an already-cancelled turn: cancelRun has
         // already finalized the bubble (kept the partial text, dropped it if
         // empty). Re-running the dedupe below would replace the partial with
@@ -451,6 +457,7 @@ export function useMessageStream({
             busy: false,
             needsInput: false,
             pendingBranchGroup: null,
+            pendingCodeReview: false,
             streamId: null
           }
         }
@@ -541,9 +548,24 @@ export function useMessageStream({
           pendingBranchGroup: null,
           awaitingResponse: false,
           busy: false,
-          needsInput: false
+          needsInput: false,
+          pendingCodeReview: false
         }
       })
+
+      // If this was a code review prompt, parse the structured JSON block
+      // from the AI response and populate the review panel.
+      if (wasCodeReview) {
+        void (async () => {
+          const { parseReviewJson, setReviewResult } = await import('@/store/code-review')
+          const { selectRightRailTab, RIGHT_RAIL_CODE_REVIEW_TAB_ID } = await import('@/store/layout')
+          const reviewResult = parseReviewJson(text)
+          if (reviewResult) {
+            setReviewResult(reviewResult)
+            selectRightRailTab(RIGHT_RAIL_CODE_REVIEW_TAB_ID)
+          }
+        })()
+      }
 
       void refreshSessions().catch(() => undefined)
 

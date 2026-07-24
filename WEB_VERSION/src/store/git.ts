@@ -481,104 +481,57 @@ export async function gitGetStagedDiff(cwd: string): Promise<{ ok: boolean; diff
  * Returns the generated message, or null on failure.
  */
 export async function gitGenerateCommitMessage(cwd: string): Promise<string | null> {
-  console.log('[GitGen] 🎯 gitGenerateCommitMessage called — cwd:', JSON.stringify(cwd))
   try {
     const staged = await gitGetStagedDiff(cwd)
-    console.log('[GitGen] 📋 Staged diff result:', JSON.stringify({ ok: staged.ok, hasDiff: !!staged.diff, diffLen: staged.diff?.length }))
     let diffText = staged.ok && typeof staged.diff === 'string' ? staged.diff : ''
     
     // Fall back to unstaged diff if nothing staged
     if (!diffText.trim() && cwd.trim()) {
-      console.log('[GitGen] 🔄 No staged diff, trying unstaged diff...')
       try {
         const safePath = toIpcSafePath(cwd.trim())
         const allDiff = await window.anakotDesktop?.gitDiff?.(safePath, '')
-        console.log('[GitGen] 📋 Unstaged diff result:', JSON.stringify({ ok: allDiff?.ok, hasDiff: !!allDiff?.diff, diffLen: allDiff?.diff?.length }))
         if (allDiff?.ok && typeof allDiff.diff === 'string') {
           diffText = allDiff.diff
         }
       } catch (err) {
-        console.warn('[GitGen] ⚠️ Unstaged diff fallback threw:', err)
+        // Error fetching unstaged diff — silently continue
       }
     }
 
     if (!diffText.trim()) {
-      console.warn('[GitGen] ❌ No diff text at all — nothing to generate message from. Stage some changes first.')
       return null
     }
 
-    // Truncate very large diffs to avoid token limits
-    if (diffText.length > 8000) {
-      diffText = diffText.slice(0, 8000) + '\n... (diff truncated)'
-      console.log('[GitGen] 📏 Diff truncated from >8000 chars')
-    }
-
-    console.log('[GitGen] 📤 Sending API request to /api/v1/chat/completions...')
-    const response = await window.anakotDesktop.api<{
+    // AI commit message generation
+    const response = await window.anakotDesktop?.api<{
       choices?: Array<{ message?: { content?: string } }>
     }>({
       method: 'POST',
       path: '/api/v1/chat/completions',
       body: {
         messages: [
-          {
-            role: 'system',
-            content: 'You are a git commit message generator. Generate a concise, conventional commit message (format: type(scope): description) based on the provided git diff. Keep the subject line under 72 characters. Use types: feat, fix, refactor, chore, docs, style, perf, test, ci. If multiple changes exist, use a single descriptive message or a short scope list. Output ONLY the commit message, no explanation.'
-          },
-          {
-            role: 'user',
-            content: `Generate a conventional commit message for this diff:\n\n\`\`\`diff\n${diffText}\n\`\`\``
-          }
+          { role: 'system', content: 'You are a git commit message generator. Generate a concise conventional commit message (format: type(scope): description) based on the provided git diff. Return ONLY the commit message text, no JSON.' },
+          { role: 'user', content: `Generate a commit message for this diff:\n\n${diffText.slice(0, 6000)}` },
         ],
-        max_tokens: 4096,
+        max_tokens: 512,
         temperature: 0.3,
-        reasoning_effort: 'low'
       },
-      timeoutMs: 60_000
+      timeoutMs: 30000,
     })
 
-    const content = response?.choices?.[0]?.message?.content?.trim()
+    const content = response?.choices?.[0]?.message?.content
     if (content) {
-      console.log('[GitGen] ✅ Success — got commit message:', content.slice(0, 100))
-      return content
+      return content.trim()
     }
-    console.warn('[GitGen] API returned no content:', JSON.stringify(response).slice(0, 500))
     return null
-  } catch (err) {
-    console.error('[GitGen] unexpected error:', err)
+  } catch (e) {
+    console.error('[git] Failed to generate commit message:', e)
     return null
-  }
-}
-
-export async function gitLoadCommits(cwd: string, limit = 20) {
-  if (!cwd.trim()) return
-  const safePath = toIpcSafePath(cwd)
-  try {
-    const result = await window.anakotDesktop?.gitLog?.(safePath, limit)
-    if (result?.ok && result.commits) {
-      $gitCommits.set(result.commits)
-    }
-    // Log the log operation (non-critical, only on error)
-    if (result && !result.ok) {
-      addGitLogEntry({
-        command: 'log',
-        fullCommand: `git log --max-count=${limit}`,
-        cwd,
-        stdout: '',
-        stderr: result.error || '',
-        exitCode: 1,
-        level: 'error',
-        summary: result.error || 'git log failed',
-      })
-    }
-  } catch {
-    // ignore
   }
 }
 
 /**
- * Push commits to the remote tracking branch.
- * Returns { ok, output, error }.
+ * Push current branch to origin.
  */
 export async function gitPush(cwd: string): Promise<{ ok: boolean; output?: string; error?: string }> {
   const safePath = toIpcSafePath(cwd)
@@ -600,40 +553,17 @@ export async function gitPush(cwd: string): Promise<{ ok: boolean; output?: stri
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git push failed'
     $gitError.set(msg)
-    addGitLogEntry({
-      command: 'push',
-      fullCommand: 'git push -u origin <branch>',
-      cwd,
-      stdout: '',
-      stderr: msg,
-      exitCode: 1,
-      level: 'error',
-      summary: msg,
-    })
     return { ok: false, error: msg }
   }
 }
 
 /**
  * Amend the last commit with a new message.
- * Leaves staged files intact (--amend with -m).
  */
 export async function gitCommitAmend(cwd: string, message: string): Promise<{ ok: boolean; output?: string; error?: string }> {
   const safePath = toIpcSafePath(cwd)
   try {
     const result = await window.anakotDesktop?.gitCommitAmend?.(safePath, message)
-    if (result) {
-      addGitLogEntry({
-        command: 'commit --amend',
-        fullCommand: `git commit --amend -m "${message}"`,
-        cwd,
-        stdout: result.output || (result.ok ? 'Amend successful' : ''),
-        stderr: result.error || '',
-        exitCode: result.ok ? 0 : 1,
-        level: determineLevel(result.ok ? 0 : 1, result.error || ''),
-        summary: result.ok ? `Amended: ${message}` : result.error || 'Amend failed',
-      })
-    }
     if (result?.ok) {
       $gitCommitMessage.set('')
       await refreshGitStatus(cwd)
@@ -644,16 +574,6 @@ export async function gitCommitAmend(cwd: string, message: string): Promise<{ ok
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'git commit --amend failed'
     $gitError.set(msg)
-    addGitLogEntry({
-      command: 'commit --amend',
-      fullCommand: `git commit --amend -m "${message}"`,
-      cwd,
-      stdout: '',
-      stderr: msg,
-      exitCode: 1,
-      level: 'error',
-      summary: msg,
-    })
     return { ok: false, error: msg }
   }
 }
@@ -679,3 +599,4 @@ export async function gitCheckoutNewBranch(cwd: string, branch: string): Promise
     return { ok: false, error: msg }
   }
 }
+

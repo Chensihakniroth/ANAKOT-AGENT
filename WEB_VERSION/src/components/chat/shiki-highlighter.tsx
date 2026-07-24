@@ -2,7 +2,7 @@
 
 import type { SyntaxHighlighterProps } from '@assistant-ui/react-streamdown'
 import type { FC } from 'react'
-import ShikiHighlighter from 'react-shiki'
+import { ShikiHighlighter } from '@/lib/shiki'
 
 import {
   CodeCard,
@@ -137,7 +137,7 @@ export const SyntaxHighlighter: FC<AnakotSyntaxHighlighterProps> = ({
         />
       </CodeCardHeader>
       <CodeCardBody>
-        <Pre className="aui-shiki m-0 overflow-hidden bg-transparent p-0">
+        <Pre className="aui-shiki m-0 overflow-x-auto overscroll-x-contain bg-transparent p-0">
           {defer ? (
             <code className="block whitespace-pre">{trimmed}</code>
           ) : (

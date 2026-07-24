@@ -66,6 +66,7 @@ from utils import env_var_enabled
 try:
     from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.middleware.gzip import GZipMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
@@ -78,6 +79,7 @@ except ImportError:
         _lazy_ensure("tool.dashboard", prompt=False)
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
         from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.middleware.gzip import GZipMiddleware
         from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel
@@ -174,6 +176,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip: compress responses >1KB for browsers that accept deflate/gzip.
+# Saves ~60-70% on JS/CSS payloads on the wire.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ---------------------------------------------------------------------------
 # Endpoints that do NOT require the session token.  Everything else under
@@ -1733,7 +1739,7 @@ async def get_sessions(
             profile_name = get_profile_for_user(sess.user_id)
             if profile_name:
                 db_path = profiles_mod.get_profile_dir(profile_name) / "state.db"
-                db = SessionDB(db_path=db_path) if db_path.exists() else SessionDB()
+                db = SessionDB(db_path=db_path)
             else:
                 db = SessionDB()
         else:
@@ -1920,7 +1926,7 @@ async def search_sessions(request: Request, q: str = "", limit: int = 20):
             if pname:
                 home = profiles_mod.get_profile_dir(pname)
                 pdb = Path(home) / "state.db"
-                db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+                db = SessionDB(db_path=pdb)
             else:
                 db = SessionDB()
         else:
@@ -5528,7 +5534,7 @@ async def bulk_delete_sessions_endpoint(request: Request, body: BulkDeleteSessio
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5561,7 +5567,7 @@ async def count_empty_sessions_endpoint(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB(read_only=True)
     else:
@@ -5606,7 +5612,7 @@ async def delete_empty_sessions_endpoint(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5639,7 +5645,7 @@ async def get_session_stats(request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb, read_only=True) if pdb.exists() else SessionDB(read_only=True)
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB(read_only=True)
     else:
@@ -5695,9 +5701,18 @@ def _open_session_db_for_profile(profile: Optional[str], request: Optional[Reque
             if pname:
                 home = profiles_mod.get_profile_dir(pname)
                 pdb = Path(home) / "state.db"
-                if pdb.exists():
-                    return SessionDB(db_path=pdb)
+                return SessionDB(db_path=pdb)
 
+    # Fallback: in OAuth mode, falling through to root DB would silently
+    # read/write the wrong database. Use an in-memory SQLite DB so callers
+    # get clean 404s instead of cross-profile data leakage.
+    if getattr(request.app.state, "auth_required", False) if request is not None else False:
+        import logging as _logmod
+        _logmod.getLogger("web_server").warning(
+            "_open_session_db_for_profile: auth_required but profile "
+            "resolution failed — returning empty in-memory DB"
+        )
+        return SessionDB(db_path=":memory:")
     return SessionDB()
 
 
@@ -5819,7 +5834,7 @@ async def export_session_endpoint(session_id: str, request: Request):
         if pname:
             home = profiles_mod.get_profile_dir(pname)
             pdb = Path(home) / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
     else:
@@ -5863,7 +5878,7 @@ async def prune_sessions_endpoint(request: Request, body: SessionPrune):
             home = profiles_mod.get_profile_dir(pname)
             home_path = home
             pdb = home / "state.db"
-            db = SessionDB(db_path=pdb) if pdb.exists() else SessionDB()
+            db = SessionDB(db_path=pdb)
         else:
             db = SessionDB()
             home_path = get_anakot_home()
@@ -9433,6 +9448,22 @@ def mount_spa(application: FastAPI):
             headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
         )
 
+    # Serve JS assets with cache headers — Vite-generated filenames include
+    # content hashes so they're safe to cache aggressively (1 year).
+    _JS_HASH_RE = re.compile(r"^[a-z0-9_-]+-[A-Za-z0-9]{8,}\.js$", re.IGNORECASE)
+
+    @application.get("/assets/{filename}.js")
+    async def serve_js(filename: str, request: Request):
+        js_path = WEB_DIST / "assets" / f"{filename}.js"
+        if not js_path.is_file() or not js_path.resolve().is_relative_to(
+            WEB_DIST.resolve()
+        ):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        headers: dict[str, str] = {}
+        if _JS_HASH_RE.match(filename):
+            headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return FileResponse(js_path, headers=headers)
+
     # When served behind a path-prefix proxy, the built CSS contains
     # absolute ``url(/fonts/...)`` and ``url(/ds-assets/...)`` references.
     # Browsers resolve those against the document origin, which means
@@ -9440,6 +9471,8 @@ def mount_spa(application: FastAPI):
     # (the MC Pages app), not the Anakot backend. Intercept CSS asset
     # requests BEFORE the StaticFiles mount and rewrite the absolute paths
     # when a prefix is in play.
+    _CSS_HASH_RE = re.compile(r"^[a-z0-9_-]+-[A-Za-z0-9]{8,}\.css$", re.IGNORECASE)
+
     @application.get("/assets/{filename}.css")
     async def serve_css(filename: str, request: Request):
         css_path = WEB_DIST / "assets" / f"{filename}.css"
@@ -9454,7 +9487,10 @@ def mount_spa(application: FastAPI):
                 css = css.replace(f"url({asset_dir}", f"url({prefix}{asset_dir}")
                 css = css.replace(f"url(\"{asset_dir}", f"url(\"{prefix}{asset_dir}")
                 css = css.replace(f"url('{asset_dir}", f"url('{prefix}{asset_dir}")
-        return Response(content=css, media_type="text/css")
+        headers: dict[str, str] = {}
+        if _CSS_HASH_RE.match(filename):
+            headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return Response(content=css, media_type="text/css", headers=headers)
 
     application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 

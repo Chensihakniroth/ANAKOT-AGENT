@@ -11,7 +11,7 @@
     "ui-tui/packages/*"
   ],
   "scripts": {
-    "postinstall": "echo '✅ Browser tools ready. Run: python run_agent.py --help'",
+    "postinstall": "echo '\u2705 Browser tools ready. Run: python run_agent.py --help' && npm run dedupe-shiki 2>/dev/null || true",
     "install:root": "npm install --workspaces=false",
     "install:web": "npm install --workspace web",
     "install:tui": "npm install --workspace ui-tui",
@@ -21,7 +21,8 @@
     "audit:tui": "npm audit --workspace ui-tui",
     "audit:fix:root": "npm audit fix --workspaces=false",
     "audit:fix:web": "npm audit fix --workspace web",
-    "audit:fix:tui": "npm audit fix --workspace ui-tui"
+    "audit:fix:tui": "npm audit fix --workspace ui-tui",
+    "dedupe-shiki": "node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/shiki',{recursive:true,force:true})}catch(e){}\" && node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/@shikijs',{recursive:true,force:true})}catch(e){}\""
   },
   "repository": {
     "type": "git",
@@ -42,7 +43,13 @@
   },
   "overrides": {
     "lodash": "4.18.1",
-    "anakot-parser": "npm:hermes-parser@0.25.1"
+    "anakot-parser": "npm:hermes-parser@0.25.1",
+    "shiki": "^4.0.0",
+    "@shikijs/langs": "^4.0.0",
+    "@shikijs/themes": "^4.0.0",
+    "@shikijs/engine-javascript": "^4.0.0",
+    "@shikijs/engine-oniguruma": "^4.0.0",
+    "@shikijs/core": "^4.0.0"
   },
   "engines": {
     "node": ">=20.0.0"

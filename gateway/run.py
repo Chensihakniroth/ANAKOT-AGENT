@@ -2065,6 +2065,33 @@ class GatewayRunner:
             except Exception as exc:
                 logger.debug("state.db auto-maintenance skipped: %s", exc)
 
+    def _resolve_session_db(self, source=None):
+        """Return the profile-specific SessionDB for the given source.
+
+        Falls back to the root ``self._session_db`` when the source has no
+        user mapping or the profile DB doesn't exist yet.  This ensures
+        per-user operations (title, tokens, agent persistence) hit the
+        correct database in multi-user (OAuth/web) deployments.
+        """
+        if source is not None:
+            user_id = getattr(source, "user_id", None)
+            if user_id:
+                try:
+                    from anakot_cli.dashboard_auth.user_profiles import (
+                        get_profile_for_user,
+                    )
+                    pname = get_profile_for_user(str(user_id))
+                    if pname:
+                        from anakot_cli import profiles as profiles_mod
+                        from anakot_state import SessionDB as _SDB
+                        home = profiles_mod.get_profile_dir(pname)
+                        pdb = Path(home) / "state.db"
+                        if pdb.exists():
+                            return _SDB(db_path=pdb)
+                except Exception:
+                    pass
+        return self._session_db
+
         # Opportunistic shadow-repo cleanup — deletes orphan/stale
         # checkpoint repos under ~/.anakot/checkpoints/.  Opt-in via
         # checkpoints.auto_prune, idempotent via .last_prune marker.
@@ -10181,7 +10208,8 @@ class GatewayRunner:
         # Set session title if provided with /new <title>
         _title_arg = event.get_command_args().strip()
         _title_note = ""
-        if _title_arg and self._session_db and new_entry:
+        _sdb_for_title = self._resolve_session_db(source)
+        if _title_arg and _sdb_for_title and new_entry:
             from anakot_state import SessionDB
             try:
                 sanitized = SessionDB.sanitize_title(_title_arg)
@@ -10190,7 +10218,7 @@ class GatewayRunner:
                 _title_note = t("gateway.reset.title_rejected", error=str(e))
             if sanitized:
                 try:
-                    self._session_db.set_session_title(new_entry.session_id, sanitized)
+                    _sdb_for_title.set_session_title(new_entry.session_id, sanitized)
                     header = t("gateway.reset.header_titled", title=sanitized)
                 except ValueError as e:
                     _title_note = t("gateway.reset.title_error_untitled", error=str(e))
@@ -10470,13 +10498,14 @@ class GatewayRunner:
         # single source of truth; reading it here keeps /status accurate
         # without duplicating token writes into two stores.
         db_total_tokens = 0
-        if self._session_db:
+        _sdb_for_status = self._resolve_session_db(source)
+        if _sdb_for_status:
             try:
-                title = self._session_db.get_session_title(session_entry.session_id)
+                title = _sdb_for_status.get_session_title(session_entry.session_id)
             except Exception:
                 title = None
             try:
-                row = self._session_db.get_session(session_entry.session_id)
+                row = _sdb_for_status.get_session(session_entry.session_id)
                 if row:
                     db_total_tokens = (
                         (row.get("input_tokens") or 0)
@@ -12706,7 +12735,7 @@ class GatewayRunner:
                     chat_name=source.chat_name,
                     chat_type=source.chat_type,
                     thread_id=source.thread_id,
-                    session_db=self._session_db,
+                    session_db=self._resolve_session_db(source),
                     fallback_model=self._fallback_model,
                 )
                 try:
@@ -13843,7 +13872,7 @@ class GatewayRunner:
         if existing_title is None:
             # Session doesn't exist in DB yet — create it
             try:
-                self._session_db.create_session(
+                _sdb_branch.create_session(
                     session_id=session_id,
                     source=source.platform.value if source.platform else "unknown",
                     user_id=source.user_id,
@@ -13878,11 +13907,11 @@ class GatewayRunner:
 
     async def _handle_resume_command(self, event: MessageEvent) -> str:
         """Handle /resume command — list or switch to a previous session."""
-        if not self._session_db:
+        source = event.source
+        _sdb_resume = self._resolve_session_db(source)
+        if not _sdb_resume:
             from anakot_state import format_session_db_unavailable
             return format_session_db_unavailable(prefix=t("gateway.shared.session_db_unavailable_prefix"))
-
-        source = event.source
         session_key = self._session_key_for_source(source)
         name = event.get_command_args().strip()
 
@@ -13898,7 +13927,7 @@ class GatewayRunner:
 
         def _list_titled_sessions() -> list[dict]:
             user_source = source.platform.value if source.platform else None
-            sessions = self._session_db.list_sessions_rich(source=user_source, limit=10)
+            sessions = _sdb_resume.list_sessions_rich(source=user_source, limit=10)
             return [s for s in sessions if s.get("title")][:10]
 
         if not name:
@@ -13935,17 +13964,17 @@ class GatewayRunner:
         else:
             # Try direct session ID lookup first (so `/resume <session_id>`
             # works in the gateway, not just `/resume <title>`).
-            session = self._session_db.get_session(name)
+            session = _sdb_resume.get_session(name)
             if session:
                 target_id = session["id"]
             else:
-                target_id = self._session_db.resolve_session_by_title(name)
+                target_id = _sdb_resume.resolve_session_by_title(name)
         if not target_id:
             return t("gateway.resume.not_found", name=name)
         # Compression creates child continuations that hold the live transcript.
         # Follow that chain so gateway /resume matches CLI behavior (#15000).
         try:
-            target_id = self._session_db.resolve_resume_session_id(target_id)
+            target_id = _sdb_resume.resolve_resume_session_id(target_id)
         except Exception as e:
             logger.debug("Failed to resolve resume continuation for %s: %s", target_id, e)
 
@@ -13971,7 +14000,7 @@ class GatewayRunner:
         self._evict_cached_agent(session_key)
 
         # Get the title for confirmation
-        title = self._session_db.get_session_title(target_id) or name
+        title = _sdb_resume.get_session_title(target_id) or name
 
         # Count messages for context
         history = self.session_store.load_transcript(target_id)
@@ -13991,11 +14020,11 @@ class GatewayRunner:
         """
         import uuid as _uuid
 
-        if not self._session_db:
+        source = event.source
+        _sdb_branch = self._resolve_session_db(source)
+        if not _sdb_branch:
             from anakot_state import format_session_db_unavailable
             return format_session_db_unavailable(prefix=t("gateway.shared.session_db_unavailable_prefix"))
-
-        source = event.source
         session_key = self._session_key_for_source(source)
 
         # Load the current session and its transcript
@@ -14017,9 +14046,9 @@ class GatewayRunner:
         if branch_name:
             branch_title = branch_name
         else:
-            current_title = self._session_db.get_session_title(current_entry.session_id)
+            current_title = _sdb_branch.get_session_title(current_entry.session_id)
             base = current_title or "branch"
-            branch_title = self._session_db.get_next_title_in_lineage(base)
+            branch_title = _sdb_branch.get_next_title_in_lineage(base)
 
         parent_session_id = current_entry.session_id
 
@@ -14029,7 +14058,7 @@ class GatewayRunner:
         # /sessions even after the parent is reopened and re-ended with a
         # different end_reason (e.g. tui_shutdown overwriting 'branched').
         try:
-            self._session_db.create_session(
+            _sdb_branch.create_session(
                 session_id=new_session_id,
                 source=source.platform.value if source.platform else "gateway",
                 model=(self.config.get("model", {}) or {}).get("default") if isinstance(self.config, dict) else None,
@@ -14043,7 +14072,7 @@ class GatewayRunner:
         # Copy conversation history to the new session
         for msg in history:
             try:
-                self._session_db.append_message(
+                _sdb_branch.append_message(
                     session_id=new_session_id,
                     role=msg.get("role", "user"),
                     content=msg.get("content"),
@@ -14062,7 +14091,7 @@ class GatewayRunner:
 
         # Set title
         try:
-            self._session_db.set_session_title(new_session_id, branch_title)
+            _sdb_branch.set_session_title(new_session_id, branch_title)
         except Exception:
             pass
 
@@ -14109,8 +14138,9 @@ class GatewayRunner:
         api_key = getattr(agent, "api_key", None) if agent and agent is not _AGENT_PENDING_SENTINEL else None
         if not provider and getattr(self, "_session_db", None) is not None:
             try:
+                _sdb_billing = self._resolve_session_db(source)
                 _entry_for_billing = self.session_store.get_or_create_session(source)
-                persisted = self._session_db.get_session(_entry_for_billing.session_id) or {}
+                persisted = _sdb_billing.get_session(_entry_for_billing.session_id) or {}
             except Exception:
                 persisted = {}
             provider = provider or persisted.get("billing_provider")
@@ -17962,7 +17992,7 @@ class GatewayRunner:
                     chat_type=source.chat_type,
                     thread_id=source.thread_id,
                     gateway_session_key=session_key,
-                    session_db=self._session_db,
+                    session_db=self._resolve_session_db(source),
                     fallback_model=self._fallback_model,
                 )
                 if _cache_lock and _cache is not None:
@@ -18593,8 +18623,9 @@ class GatewayRunner:
                             effective_session_id,
                             title,
                         )
+                    _agent_session_db = getattr(agent, '_session_db', None) or self._session_db
                     maybe_auto_title(
-                        self._session_db,
+                        _agent_session_db,
                         effective_session_id,
                         message,
                         final_response,

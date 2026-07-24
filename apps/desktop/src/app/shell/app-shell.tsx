@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, type ReactNode, useSyncExternalStore } from 'react'
+import { type CSSProperties, type ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react'
 
 import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
@@ -13,13 +13,15 @@ import {
   setSidebarOpen
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
-import { $connection } from '@/store/session'
+import { $selectedStoredSessionId, $connection, $sessions } from '@/store/session'
 
 import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
 import { FloatingPet } from '@/components/pet/floating-pet'
+import { useDiscordRpc } from '@/lib/discord-rpc'
+import { sessionTitle } from '@/lib/chat-runtime'
 
 interface AppShellProps {
   activityBar?: ReactNode
@@ -61,6 +63,52 @@ export function AppShell({
   const connection = useStore($connection)
   const viewportFullscreen = useSyncExternalStore(subscribeWindowSize, viewportIsFullscreen, () => false)
   const isFullscreen = Boolean(connection?.isFullscreen) || viewportFullscreen
+
+  const selectedStoredSessionId = useStore($selectedStoredSessionId)
+  const sessions = useStore($sessions)
+  const activeSession = selectedStoredSessionId
+    ? sessions.find(s => s.id === selectedStoredSessionId)
+    : null
+  const sessionLabel = activeSession ? sessionTitle(activeSession) : null
+
+  const KAOMOJIS = [
+    '૮ • ﻌ - ა',
+    '∪･ω･∪',
+    '∪￣-￣∪',
+    '꒰ᐢ. ̫ .ᐢ꒱',
+    '∪･ｪ･∪',
+    '(=`ω´=)',
+  ]
+
+  const MAX_STATE_CHARS = 128
+
+  const pickKaomoji = useCallback((seed: string): string => {
+    let hash = 0
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i)
+      hash |= 0
+    }
+    return KAOMOJIS[Math.abs(hash) % KAOMOJIS.length]
+  }, [])
+
+  const kaomoji = useMemo(
+    () => pickKaomoji(sessionLabel ?? 'idle'),
+    [sessionLabel, pickKaomoji],
+  )
+
+  const stateText = useMemo(() => {
+    if (!sessionLabel) return kaomoji
+    const raw = `${kaomoji} ${sessionLabel}`
+    if (raw.length <= MAX_STATE_CHARS) return raw
+    // Truncate the title, leaving room for the kaomoji + space + …
+    const maxTitleLen = MAX_STATE_CHARS - kaomoji.length - 1 - 1 // kaomoji + space + ellipsis
+    return `${kaomoji} ${sessionLabel.slice(0, maxTitleLen)}…`
+  }, [sessionLabel, kaomoji])
+
+  useDiscordRpc({
+    details: sessionLabel ? stateText : 'Chatting with Anakot',
+    state: sessionLabel ? 'Chatting with Anakot' : undefined,
+  })
 
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
   const nativeOverlayWidth = connection?.nativeOverlayWidth ?? 0

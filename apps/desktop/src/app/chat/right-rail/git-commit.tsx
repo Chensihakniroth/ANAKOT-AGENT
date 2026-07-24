@@ -1,6 +1,14 @@
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { Codicon } from '@/components/ui/codicon'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,12 +16,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Tip } from '@/components/ui/tooltip'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { PromptDialog } from '@/components/ui/prompt-dialog'
 
 import {
-  $gitCommitData,
   $gitCommitState,
   clearGitCommitData,
-  type CommitSuggestion,
   setGitCommitResult,
   setGitCommitting,
   setGitDiff,
@@ -24,9 +33,24 @@ import {
   setGitRepoPath,
   setGitStatus,
   setGitSuggestions,
+  type GitStatusEntry,
 } from '@/store/git-commit'
+import {
+  $reviewSelectedPath,
+  $reviewDiffLines,
+  $reviewViewMode,
+  $reviewLoadingDiff,
+  $reviewDiffError,
+  $reviewCollapsedDirs,
+  selectReviewFile,
+  clearReviewSelection,
+  toggleReviewDir,
+  setReviewViewMode,
+  type ReviewViewMode,
+} from '@/store/review'
+import { buildReviewTree, buildReviewFlatList, type ReviewTreeNode } from './tree-data'
 
-type AuxTaskEntry = { task: string; provider: string | null; model: string | null }
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<string, string> = {
   M: 'Modified', A: 'Added', D: 'Deleted', R: 'Renamed', C: 'Copied',
@@ -34,11 +58,17 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 function statusBadge(status: string): string {
-  if (status === 'M') return 'bg-yellow-500/20 text-yellow-400'
-  if (status === 'A') return 'bg-green-500/20 text-green-400'
-  if (status === 'D') return 'bg-red-500/20 text-red-400'
-  if (status === '??') return 'bg-blue-500/20 text-blue-400'
+  // Handle both raw git porcelain ('??') and normalized ('untracked')
+  const s = status === '??' ? 'untracked' : status === '!!' ? 'ignored' : status
+  if (s === 'modified') return 'bg-yellow-500/20 text-yellow-400'
+  if (s === 'added') return 'bg-green-500/20 text-green-400'
+  if (s === 'deleted') return 'bg-red-500/20 text-red-400'
+  if (s === 'untracked') return 'bg-blue-500/20 text-blue-400'
   return 'bg-gray-500/20 text-gray-400'
+}
+
+function isUntracked(status: string): boolean {
+  return status === '??' || status === 'untracked'
 }
 
 function typeColor(type: string): string {
@@ -54,15 +84,297 @@ function typeColor(type: string): string {
   return colors[type] ?? 'bg-gray-500/20 text-gray-400'
 }
 
+function formatCommit(s: { type: string; scope?: string; message: string }): string {
+  const scope = s.scope ? `(${s.scope})` : ''
+  return `${s.type}${scope}: ${s.message}`
+}
+
+// ── Churn Bar ────────────────────────────────────────────────────────────────
+
+function ChurnBar({ added, removed, max }: { added: number; removed: number; max: number }) {
+  if (max === 0) return null
+  const addPct = Math.round((added / max) * 100)
+  const remPct = Math.round((removed / max) * 100)
+  return (
+    <div className="flex h-1 w-full gap-px" title={`+${added} / -${removed}`}>
+      <div className="rounded-sm bg-green-500/50" style={{ width: `${addPct}%` }} />
+      <div className="rounded-sm bg-red-500/50" style={{ width: `${remPct}%` }} />
+    </div>
+  )
+}
+
+// ── Diff Viewer ──────────────────────────────────────────────────────────────
+
+function DiffViewer() {
+  const selectedPath = useStore($reviewSelectedPath)
+  const diffLines = useStore($reviewDiffLines)
+  const loading = useStore($reviewLoadingDiff)
+  const error = useStore($reviewDiffError)
+
+  const handleDismiss = useCallback(() => clearReviewSelection(), [])
+
+  if (!selectedPath) return null
+
+  const fileName = selectedPath.split(/[/\\]/).pop() ?? selectedPath
+
+  return (
+    <div className="border-t border-border/40">
+      {/* Diff header */}
+      <div className="flex items-center gap-2 border-b border-border/30 px-3 py-1.5">
+        <Codicon name="diff" size={12} className="text-muted-foreground/60" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-mono text-foreground/70">{fileName}</span>
+        <button
+          onClick={handleDismiss}
+          className="shrink-0 rounded p-0.5 text-muted-foreground/60 hover:text-foreground hover:bg-border/50 transition-colors"
+        >
+          <Codicon name="close" size={12} />
+        </button>
+      </div>
+
+      {/* Diff content */}
+      <div className="max-h-48 overflow-y-auto bg-background/50">
+        {loading && (
+          <div className="flex items-center justify-center py-4">
+            <Codicon name="loading" size={14} spinning className="text-muted-foreground" />
+          </div>
+        )}
+        {error && (
+          <div className="px-3 py-2 text-[11px] text-red-400">{error}</div>
+        )}
+        {!loading && !error && diffLines.length === 0 && (
+          <div className="px-3 py-2 text-[11px] text-muted-foreground/50 italic">No changes</div>
+        )}
+        {diffLines.map((line, i) => (
+          <div
+            key={i}
+            className={`flex font-mono text-[11px] leading-5 ${
+              line.type === 'added'
+                ? 'bg-green-500/10 text-green-400'
+                : line.type === 'removed'
+                ? 'bg-red-500/10 text-red-400'
+                : 'text-foreground/50'
+            }`}
+          >
+            <span className="w-10 shrink-0 select-none text-right pr-2 text-foreground/25">
+              {line.oldNum ?? ''}
+            </span>
+            <span className="w-10 shrink-0 select-none text-right pr-2 text-foreground/25">
+              {line.newNum ?? ''}
+            </span>
+            <span className="w-4 shrink-0 select-none text-center text-foreground/30">
+              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+            </span>
+            <span className="min-w-0 flex-1 whitespace-pre overflow-hidden text-ellipsis">
+              {line.content}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── File Tree Node ───────────────────────────────────────────────────────────
+
+function FileTreeNode({
+  node,
+  depth,
+  cwd,
+  selectedPath,
+  onFileClick,
+  onStage,
+  onUnstage,
+  onDiscard,
+  onRevertConfirm,
+}: {
+  node: ReviewTreeNode
+  depth: number
+  cwd: string
+  selectedPath: string | null
+  onFileClick: (path: string) => void
+  onStage: (path: string) => void
+  onUnstage: (path: string) => void
+  onDiscard: (path: string) => void
+  onRevertConfirm: (path: string) => void
+}) {
+  const collapsedDirs = useStore($reviewCollapsedDirs)
+  const [hovering, setHovering] = useState(false)
+
+  // Directory node
+  if (node.isDir) {
+    const collapsed = collapsedDirs.has(node.id)
+    return (
+      <div>
+        <div
+          className="flex items-center gap-1 px-2 py-0.5 cursor-pointer hover:bg-accent/10 transition-colors"
+          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          onClick={() => toggleReviewDir(node.id)}
+        >
+          <Codicon
+            name={collapsed ? 'chevron-right' : 'chevron-down'}
+            size={12}
+            className="shrink-0 text-muted-foreground/60"
+          />
+          <Codicon
+            name={collapsed ? 'folder' : 'folder-opened'}
+            size={12}
+            className="shrink-0 text-yellow-500/60"
+          />
+          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/70">{node.name}</span>
+          {node.children && (
+            <span className="text-[9px] text-muted-foreground/40">
+              {node.children.length}
+            </span>
+          )}
+        </div>
+        {!collapsed && node.children?.map(child => (
+          <FileTreeNode
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            cwd={cwd}
+            selectedPath={selectedPath}
+            onFileClick={onFileClick}
+            onStage={onStage}
+            onUnstage={onUnstage}
+            onDiscard={onDiscard}
+            onRevertConfirm={onRevertConfirm}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  // File node
+  const file = node.file!
+  const isSelected = selectedPath === file.path
+  const fileName = node.name
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={`group flex items-center gap-1.5 py-0.5 cursor-pointer transition-colors ${
+            isSelected ? 'bg-accent/20' : 'hover:bg-accent/10'
+          }`}
+          style={{ paddingLeft: `${depth * 12 + 8}px`, paddingRight: '8px' }}
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
+          onClick={() => onFileClick(file.path)}
+          draggable
+          onDragStart={e => {
+            e.dataTransfer.setData('text/plain', file.path)
+            e.dataTransfer.effectAllowed = 'copy'
+          }}
+        >
+          {/* Status badge */}
+          <span className={`shrink-0 rounded px-1 py-0.5 text-[8px] font-semibold ${statusBadge(file.status)}`}>
+            {file.status}
+          </span>
+
+          {/* File name */}
+          <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/80">{fileName}</span>
+
+          {/* Hover actions */}
+          {hovering && (
+            <div className="shrink-0 flex items-center gap-0.5">
+              {!file.staged ? (
+                <Tip label="Stage">
+                  <button
+                    onClick={e => { e.stopPropagation(); onStage(file.path) }}
+                    className="rounded p-0.5 text-green-400/70 hover:text-green-400 hover:bg-green-500/10 transition-colors"
+                  >
+                    <Codicon name="add" size={11} />
+                  </button>
+                </Tip>
+              ) : (
+                <Tip label="Unstage">
+                  <button
+                    onClick={e => { e.stopPropagation(); onUnstage(file.path) }}
+                    className="rounded p-0.5 text-yellow-400/70 hover:text-yellow-400 hover:bg-yellow-500/10 transition-colors"
+                  >
+                    <Codicon name="discard" size={11} />
+                  </button>
+                </Tip>
+              )}
+              {!isUntracked(file.status) && (
+                <Tip label="Revert changes">
+                  <button
+                    onClick={e => { e.stopPropagation(); onRevertConfirm(file.path) }}
+                    className="rounded p-0.5 text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Codicon name="history" size={11} />
+                  </button>
+                </Tip>
+              )}
+            </div>
+          )}
+        </div>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => onFileClick(file.path)}>
+          <Codicon name="diff" size={13} /> Open Changes
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => openFileInEditor(file.path)}>
+          <Codicon name="file" size={13} /> Open File
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => openInExplorer(file.path)}>
+          <Codicon name="folder-opened" size={13} /> Reveal in Explorer
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => copyPath(file.path)}>
+          <Codicon name="copy" size={13} /> Copy Path
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        {!file.staged ? (
+          <ContextMenuItem onClick={() => onStage(file.path)}>
+            <Codicon name="add" size={13} /> Stage File
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem onClick={() => onUnstage(file.path)}>
+            <Codicon name="discard" size={13} /> Unstage File
+          </ContextMenuItem>
+        )}
+        {!isUntracked(file.status) && (
+          <ContextMenuItem variant="destructive" onClick={() => onRevertConfirm(file.path)}>
+            <Codicon name="history" size={13} /> Discard Changes
+          </ContextMenuItem>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  )
+}
+
+// ── IPC Helpers ──────────────────────────────────────────────────────────────
+
+function openFileInEditor(filePath: string) {
+  window.anakotDesktop?.openExternal?.(`file://${filePath.replace(/\\/g, '/')}`)
+}
+
+function openInExplorer(filePath: string) {
+  const dir = filePath.replace(/[/\\][^/\\]+$/, '').replace(/\\/g, '/')
+  window.anakotDesktop?.openExternal?.(`file://${dir}`)
+}
+
+function copyPath(filePath: string) {
+  window.anakotDesktop?.writeClipboard?.(filePath)
+}
+
+// ── Main Panel ───────────────────────────────────────────────────────────────
+
 export function GitCommitPanel() {
   const state = useStore($gitCommitState)
-  const repoPath = state.repoPath
+  const viewMode = useStore($reviewViewMode)
+  const selectedPath = useStore($reviewSelectedPath)
+  const { repoPath, branch, files, message, suggestions, loading, generating, committing, error, commitResult } = state
+
   const commitModelRef = useRef<string | null>(null)
   const [showBranchDialog, setShowBranchDialog] = useState(false)
   const [branchName, setBranchName] = useState('')
-  const branchInputRef = useRef<HTMLInputElement>(null)
+  const [revertTarget, setRevertTarget] = useState<string | null>(null)
 
-  // Load auxiliary model assignment for commit_gen
+  // Load auxiliary model for commit generation
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -70,7 +382,7 @@ export function GitCommitPanel() {
         const { getAuxiliaryModels } = await import('@/anakot')
         const aux = await getAuxiliaryModels()
         if (!cancelled && aux?.tasks) {
-          const task = aux.tasks.find((t: AuxTaskEntry) => t.task === 'commit_gen')
+          const task = aux.tasks.find((t: { task: string; provider: string | null; model: string | null }) => t.task === 'commit_gen')
           if (task && task.provider && task.provider !== 'auto') {
             commitModelRef.current = task.model
           } else {
@@ -111,52 +423,70 @@ export function GitCommitPanel() {
     return () => { cancelled = true }
   }, [repoPath])
 
-  // Focus branch input when dialog opens
-  useEffect(() => {
-    if (showBranchDialog && branchInputRef.current) {
-      branchInputRef.current.focus()
+  // ── File operations ──────────────────────────────────────────────────────
+
+  const handleFileClick = useCallback((path: string) => {
+    selectReviewFile(path, repoPath)
+  }, [repoPath])
+
+  const handleStage = useCallback(async (path: string) => {
+    const result = await window.anakotDesktop.gitAdd?.(repoPath, [path])
+    if (result?.ok) {
+      const status = await window.anakotDesktop.gitStatus?.(repoPath)
+      if (status) setGitStatus(status)
     }
-  }, [showBranchDialog])
+  }, [repoPath])
+
+  const handleUnstage = useCallback(async (path: string) => {
+    const result = await window.anakotDesktop.gitUnstage?.(repoPath, [path])
+    if (result?.ok) {
+      const status = await window.anakotDesktop.gitStatus?.(repoPath)
+      if (status) setGitStatus(status)
+    }
+  }, [repoPath])
+
+  const handleDiscard = useCallback(async (path: string) => {
+    const result = await window.anakotDesktop.gitDiscard?.(repoPath, [path])
+    if (result?.ok) {
+      if (selectedPath === path) clearReviewSelection()
+      const status = await window.anakotDesktop.gitStatus?.(repoPath)
+      if (status) setGitStatus(status)
+    }
+  }, [repoPath, selectedPath])
+
+  const handleRevertConfirm = useCallback((path: string) => {
+    setRevertTarget(path)
+  }, [])
+
+  const handleRevertExecute = useCallback(async () => {
+    if (!revertTarget) return
+    await handleDiscard(revertTarget)
+    setRevertTarget(null)
+  }, [revertTarget, handleDiscard])
+
+  // ── Commit operations ───────────────────────────────────────────────────
 
   const handleGenerate = useCallback(async () => {
-    console.log('[GitCommit] Generate clicked — reading state')
-    let { diff, files, repoPath: path } = $gitCommitState.get()
-    console.log('[GitCommit] State:', { hasDiff: !!diff, fileCount: files.length, stagedCount: files.filter(f => f.staged).length, path })
-    // If diff is not loaded yet (e.g., initial render), try to fetch it now
+    let { diff, files: statusFiles, repoPath: path } = $gitCommitState.get()
     if (!diff && path) {
-      console.log('[GitCommit] No diff in store — re-fetching staged diff')
       const diffResult = await window.anakotDesktop.gitStagedDiff?.(path)
-      console.log('[GitCommit] Staged diff result:', JSON.stringify({ ok: diffResult?.ok, hasDiff: !!diffResult?.diff, len: diffResult?.diff?.length }))
       if (diffResult?.ok && diffResult.diff) {
         diff = diffResult.diff
         setGitDiff(diff)
-        console.log('[GitCommit] Diff fetched on-demand, length:', diff.length)
-        // Refresh status too so files list is current
         const status = await window.anakotDesktop.gitStatus?.(path)
         if (status) {
-          files = status.files ?? []
-          setGitStatus({
-            root: status.root,
-            branch: status.branch,
-            files,
-            error: status.error,
-          })
-          console.log('[GitCommit] Status refreshed:', { branch: status.branch, fileCount: files.length })
+          statusFiles = status.files ?? []
+          setGitStatus(status)
         }
-      } else {
-        console.log('[GitCommit] Staged diff fetch failed or empty:', diffResult?.error)
       }
     }
     if (!diff) {
-      console.log('[GitCommit] Aborting — no diff available')
       setGitError('No staged diff available. Stage some changes first.')
       return
     }
     setGitGenerating(true)
-    console.log('[GitCommit] Generating commit messages — model:', commitModelRef.current, 'diff length:', diff.length)
     try {
       const model = commitModelRef.current
-      console.log('[GitCommit] Sending API request — model:', model || '(default)', 'timeout: 30000ms')
       const response = await window.anakotDesktop.api<{
         choices?: Array<{ message?: { content?: string } }>
       }>({
@@ -167,79 +497,60 @@ export function GitCommitPanel() {
           messages: [
             {
               role: 'system',
-              content: 'You are a git commit message generator. Generate 3-5 concise conventional commit messages (format: type(scope): description) based on the provided git diff. Return them as a JSON array. Each object: {"type":"feat|fix|chore|refactor|docs|test|style","scope":"optional","message":"subject","body":"optional description"}. Return ONLY valid JSON.'
+              content: 'You are a git commit message generator. Generate 3-5 concise conventional commit messages (format: type(scope): description) based on the provided git diff. Return them as a JSON array. Each object: {"type":"feat|fix|chore|refactor|docs|test|style","scope":"optional","message":"subject","body":"optional description"}. Return ONLY valid JSON.',
             },
             {
               role: 'user',
-              content: `Generate 3-5 conventional commit messages for this diff.
-
-Files changed:
-${files.map(f => `[${f.status}] ${f.path}`).join('\n')}
-
-Diff:
-\`\`\`diff
-${diff.slice(0, 6000)}
-\`\`\``
-            }
+              content: `Generate 3-5 conventional commit messages for this diff.\n\nFiles changed:\n${statusFiles.map(f => `[${f.status}] ${f.path}`).join('\n')}\n\nDiff:\n\`\`\`diff\n${diff.slice(0, 6000)}\n\`\`\``,
+            },
           ],
           max_tokens: 2048,
           temperature: 0.3,
-          reasoning_effort: 'low'
+          reasoning_effort: 'low',
         },
         timeoutMs: 30000,
       })
-      console.log('[GitCommit] API response received:', JSON.stringify({
-        type: typeof response,
-        hasChoices: !!response?.choices?.length,
-        firstChoiceHasContent: !!response?.choices?.[0]?.message?.content,
-        contentPreview: response?.choices?.[0]?.message?.content?.slice(0, 100),
-      }))
 
       const content = response?.choices?.[0]?.message?.content
-      console.log('[GitCommit] Parsing response content:', { hasContent: !!content, rawLength: content?.length })
       if (content) {
         const jsonMatch = content.match(/\[[\s\S]*\]/)
-        console.log('[GitCommit] JSON array match:', { found: !!jsonMatch, matchedLength: jsonMatch?.[0]?.length })
         if (jsonMatch) {
           try {
-            const parsed = JSON.parse(jsonMatch[0]) as CommitSuggestion[]
-            console.log('[GitCommit] Parsed suggestions:', { count: parsed?.length, isValidArray: Array.isArray(parsed) })
+            const parsed = JSON.parse(jsonMatch[0]) as Array<{ type: string; scope?: string; message: string; body?: string }>
             if (Array.isArray(parsed) && parsed.length) {
-              setGitSuggestions(parsed)
+              setGitSuggestions(parsed.map(s => ({
+                type: s.type as 'feat' | 'fix' | 'chore' | 'refactor' | 'docs' | 'test' | 'style',
+                scope: s.scope,
+                message: s.message,
+                body: s.body,
+              })))
               setGitMessage(formatCommit(parsed[0]))
-              console.log('[GitCommit] ✅ Success — first suggestion:', formatCommit(parsed[0]))
               return
             }
-          } catch (parseErr) {
-            console.log('[GitCommit] JSON parse error:', String(parseErr))
-          }
-        } else {
-          console.log('[GitCommit] No JSON array pattern found in response')
+          } catch { /* parse error */ }
         }
       }
-      console.log('[GitCommit] Falling through to error path')
       setGitError('Could not parse AI response. Try again.')
     } catch (e) {
-      console.log('[GitCommit] API call error:', String(e))
       setGitError(String(e))
     }
   }, [])
 
-  const handleSuggestionClick = useCallback((s: CommitSuggestion) => {
+  const handleSuggestionClick = useCallback((s: { type: string; scope?: string; message: string }) => {
     setGitMessage(formatCommit(s))
   }, [])
 
   const handleCommit = useCallback(async () => {
-    const { message, repoPath: path } = $gitCommitState.get()
-    if (!message.trim() || !path) return
+    const { message: msg, repoPath: path } = $gitCommitState.get()
+    if (!msg.trim() || !path) return
     setGitCommitting(true)
     try {
-      const result = await window.anakotDesktop.gitCommit?.(path, message.trim())
+      const result = await window.anakotDesktop.gitCommit?.(path, msg.trim())
       if (result?.ok) {
-        setGitCommitResult(`✓ Committed: ${message.split('\n')[0].slice(0, 60)}`)
+        setGitCommitResult(`✓ Committed: ${msg.split('\n')[0].slice(0, 60)}`)
         setGitSuggestions([])
         setGitDiff('')
-        // Reload status
+        clearReviewSelection()
         const status = await window.anakotDesktop.gitStatus?.(path)
         if (status) setGitStatus(status)
       } else {
@@ -251,26 +562,24 @@ ${diff.slice(0, 6000)}
   }, [])
 
   const handleCommitSync = useCallback(async () => {
-    const { message, repoPath: path } = $gitCommitState.get()
-    if (!message.trim() || !path) return
+    const { message: msg, repoPath: path } = $gitCommitState.get()
+    if (!msg.trim() || !path) return
     setGitCommitting(true)
     try {
-      await setGitMessage(message)
-      // Commit first
-      const commitResult = await window.anakotDesktop.gitCommit?.(path, message.trim())
+      const commitResult = await window.anakotDesktop.gitCommit?.(path, msg.trim())
       if (!commitResult?.ok) {
         setGitError(commitResult?.error || 'Commit failed')
         return
       }
-      // Then push
       const pushResult = await window.anakotDesktop.gitPush?.(path)
       if (pushResult?.ok) {
-        setGitCommitResult(`✓ Synced: ${message.split('\n')[0].slice(0, 60)}`)
+        setGitCommitResult(`✓ Synced: ${msg.split('\n')[0].slice(0, 60)}`)
       } else {
         setGitCommitResult(`✓ Committed (push: ${pushResult?.error || 'failed'})`)
       }
       setGitSuggestions([])
       setGitDiff('')
+      clearReviewSelection()
       const status = await window.anakotDesktop.gitStatus?.(path)
       if (status) setGitStatus(status)
     } catch (e) {
@@ -279,15 +588,16 @@ ${diff.slice(0, 6000)}
   }, [])
 
   const handleCommitAmend = useCallback(async () => {
-    const { message, repoPath: path } = $gitCommitState.get()
+    const { message: msg, repoPath: path } = $gitCommitState.get()
     if (!path) return
     setGitCommitting(true)
     try {
-      const result = await window.anakotDesktop.gitCommitAmend?.(path, message.trim())
+      const result = await window.anakotDesktop.gitCommitAmend?.(path, msg.trim())
       if (result?.ok) {
-        setGitCommitResult(`✓ Amended: ${(message || '(no message change)').split('\n')[0].slice(0, 60)}`)
+        setGitCommitResult(`✓ Amended: ${(msg || '(no message change)').split('\n')[0].slice(0, 60)}`)
         setGitSuggestions([])
         setGitDiff('')
+        clearReviewSelection()
         const status = await window.anakotDesktop.gitStatus?.(path)
         if (status) setGitStatus(status)
       } else {
@@ -298,27 +608,20 @@ ${diff.slice(0, 6000)}
     }
   }, [])
 
-  const handleOpenBranchDialog = useCallback(() => {
-    setBranchName('')
-    setShowBranchDialog(true)
-  }, [])
-
   const handleCreateBranchAndCommit = useCallback(async () => {
     const name = branchName.trim()
     if (!name) return
-    const { message, repoPath: path } = $gitCommitState.get()
-    if (!message.trim() || !path) return
+    const { message: msg, repoPath: path } = $gitCommitState.get()
+    if (!msg.trim() || !path) return
     setShowBranchDialog(false)
     setGitCommitting(true)
     try {
-      // Create and switch to new branch
       const checkoutResult = await window.anakotDesktop.gitCheckoutNewBranch?.(path, name)
       if (!checkoutResult?.ok) {
         setGitError(checkoutResult?.error || 'Branch creation failed')
         return
       }
-      // Then commit
-      const commitResult = await window.anakotDesktop.gitCommit?.(path, message.trim())
+      const commitResult = await window.anakotDesktop.gitCommit?.(path, msg.trim())
       if (commitResult?.ok) {
         setGitCommitResult(`✓ Created branch "${name}" and committed`)
       } else {
@@ -327,6 +630,7 @@ ${diff.slice(0, 6000)}
       setGitSuggestions([])
       setGitDiff('')
       setBranchName('')
+      clearReviewSelection()
       const status = await window.anakotDesktop.gitStatus?.(path)
       if (status) setGitStatus(status)
     } catch (e) {
@@ -339,24 +643,37 @@ ${diff.slice(0, 6000)}
     if (input?.value) {
       setGitRepoPath(input.value.trim())
       clearGitCommitData()
+      clearReviewSelection()
     }
   }, [])
 
-  const stagedCount = state.files.filter(f => f.staged).length
-  const canCommit = !state.committing && state.message.trim().length > 0 && stagedCount > 0
+  const handleViewModeToggle = useCallback(() => {
+    setReviewViewMode(viewMode === 'tree' ? 'flat' : 'tree')
+  }, [viewMode])
+
+  // ── Build file tree ─────────────────────────────────────────────────────
+
+  const treeData = viewMode === 'tree'
+    ? buildReviewTree(files)
+    : buildReviewFlatList(files)
+  const stagedCount = files.filter(f => f.staged).length
+  const unstagedCount = files.filter(f => !f.staged).length
+  const canCommit = !committing && message.trim().length > 0 && stagedCount > 0
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-3 py-2">
         <span className="text-[10px] font-bold font-mono tracking-[0.15em] text-foreground/60">COMMIT</span>
-        {state.branch && (
+        {branch && (
           <span className="rounded border border-border/50 px-1.5 py-0.5 text-[10px] font-mono text-foreground/60">
-            {state.branch}
+            {branch}
           </span>
         )}
         <button
-          onClick={clearGitCommitData}
+          onClick={() => { clearGitCommitData(); clearReviewSelection() }}
           className="ml-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
         >
           Clear
@@ -385,79 +702,96 @@ ${diff.slice(0, 6000)}
           </div>
         )}
 
-        {/* Status section */}
-        {repoPath && state.loading && (
+        {/* Loading */}
+        {repoPath && loading && (
           <div className="flex items-center justify-center p-6">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent text-muted-foreground" />
           </div>
         )}
 
-        {repoPath && !state.loading && !state.error && (
+        {/* Error */}
+        {error && (
+          <div className="mx-3 mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {error}
+          </div>
+        )}
+
+        {/* Success */}
+        {commitResult && (
+          <div className="mx-3 mt-2 rounded border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+            {commitResult}
+          </div>
+        )}
+
+        {repoPath && !loading && (
           <>
-            {/* Files */}
-            <div className="px-3 py-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground/70 mb-1">Staged changes ({stagedCount})</p>
-              {stagedCount === 0 ? (
-                <p className="text-[11px] text-muted-foreground/40 italic">No staged changes</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {state.files.filter(f => f.staged).map(f => (
-                    <div key={f.path} className="flex items-center gap-2 text-xs">
-                      <span className={`rounded px-1 py-0.5 text-[9px] font-semibold ${statusBadge(f.status)}`}>{f.status}</span>
-                      <span className="truncate text-foreground/80">{f.path}</span>
-                    </div>
-                  ))}
+            {/* Toolbar */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30">
+              <Tip label={viewMode === 'tree' ? 'Switch to flat list' : 'Switch to tree view'}>
+                <button
+                  onClick={handleViewModeToggle}
+                  className="rounded p-1 text-muted-foreground/60 hover:text-foreground hover:bg-accent/20 transition-colors"
+                >
+                  <Codicon name={viewMode === 'tree' ? 'list-flat' : 'list-tree'} size={12} />
+                </button>
+              </Tip>
+              <span className="text-[10px] text-muted-foreground/50">
+                {stagedCount} staged · {unstagedCount} unstaged
+              </span>
+            </div>
+
+            {/* File tree */}
+            <div className="px-1 py-1">
+              {files.length === 0 ? (
+                <div className="px-3 py-4 text-center text-[11px] text-muted-foreground/40 italic">
+                  No changes
                 </div>
+              ) : (
+                treeData.map(node => (
+                  <FileTreeNode
+                    key={node.id}
+                    node={node}
+                    depth={0}
+                    cwd={repoPath}
+                    selectedPath={selectedPath}
+                    onFileClick={handleFileClick}
+                    onStage={handleStage}
+                    onUnstage={handleUnstage}
+                    onDiscard={handleDiscard}
+                    onRevertConfirm={handleRevertConfirm}
+                  />
+                ))
               )}
             </div>
 
-            <div className="border-t border-border/30" />
-
-            {/* Unstaged files */}
-            <div className="px-3 py-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground/70 mb-1">Unstaged ({state.files.filter(f => f.unstaged).length})</p>
-              {state.files.filter(f => f.unstaged).length === 0 ? (
-                <p className="text-[11px] text-muted-foreground/40 italic">No unstaged changes</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {state.files.filter(f => f.unstaged).map(f => (
-                    <div key={f.path} className="flex items-center gap-2 text-xs opacity-60">
-                      <span className={`rounded px-1 py-0.5 text-[9px] font-semibold ${statusBadge(f.status)}`}>{f.status}</span>
-                      <span className="truncate">{f.path}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Diff preview */}
+            <DiffViewer />
 
             <div className="border-t border-border/30" />
 
             {/* Generate button + suggestions */}
             <div className="px-3 py-2 space-y-2">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleGenerate}
-                  disabled={state.generating || stagedCount === 0}
-                  className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {state.generating ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Generating...
-                    </span>
-                  ) : 'Generate Message'}
-                </button>
-              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || stagedCount === 0}
+                className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {generating ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Generating...
+                  </span>
+                ) : 'Generate Message'}
+              </button>
 
-              {/* Suggestions */}
-              {state.suggestions.length > 0 && (
+              {suggestions.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-[11px] font-medium text-muted-foreground/70">Suggestions</p>
-                  {state.suggestions.map((s, i) => (
+                  {suggestions.map((s, i) => (
                     <button
                       key={i}
                       onClick={() => handleSuggestionClick(s)}
-                      className="w-full text-left rounded border border-border/30 px-2.5 py-1.5 text-xs hover:bg-accent/10 transition-colors group"
+                      className="w-full text-left rounded border border-border/30 px-2.5 py-1.5 text-xs hover:bg-accent/10 transition-colors"
                     >
                       <span className={`inline-block rounded px-1 py-0.5 text-[9px] font-semibold mr-1.5 ${typeColor(s.type)}`}>
                         {s.type}{s.scope ? `(${s.scope})` : ''}
@@ -471,33 +805,31 @@ ${diff.slice(0, 6000)}
 
             <div className="border-t border-border/30" />
 
-            {/* Commit message editor */}
+            {/* Commit message + buttons */}
             <div className="px-3 py-2 space-y-2">
               <textarea
-                value={state.message}
+                value={message}
                 onChange={e => setGitMessage(e.target.value)}
                 placeholder="Commit message..."
                 rows={4}
                 className="w-full rounded border border-border/60 bg-background px-2.5 py-1.5 text-xs text-foreground outline-none resize-none focus:border-accent font-mono"
               />
 
-              {/* Split-button with dropdown — VS Code style */}
+              {/* Split button — VS Code style */}
               <div className="flex items-stretch">
                 <button
                   onClick={handleCommit}
                   disabled={!canCommit}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-l bg-foreground/90 px-3 py-1.5 text-xs font-medium text-background hover:bg-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {state.committing ? (
+                  {committing ? (
                     <span className="flex items-center justify-center gap-1.5">
                       <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      {state.committing && 'Working...'}
+                      Working...
                     </span>
                   ) : (
                     <>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                        <path d="M6.5 10.5L3 7l1-1 2.5 2.5L12 3l1 1z" />
-                      </svg>
+                      <Codicon name="check" size={12} />
                       Commit
                     </>
                   )}
@@ -509,38 +841,23 @@ ${diff.slice(0, 6000)}
                       className="flex items-center justify-center rounded-r border-l border-background/20 bg-foreground/90 px-2 py-1.5 text-background hover:bg-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       aria-label="Commit options"
                     >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M4 6l4 4 4-4H4z" />
-                      </svg>
+                      <Codicon name="chevron-down" size={10} />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
-                    <DropdownMenuItem onClick={handleCommit} className="flex items-center gap-2 text-xs">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                        <path d="M6.5 10.5L3 7l1-1 2.5 2.5L12 3l1 1z" />
-                      </svg>
-                      <span>Commit</span>
+                    <DropdownMenuItem onClick={handleCommit}>
+                      <Codicon name="check" size={13} /> Commit
                       <span className="ml-auto text-[10px] text-muted-foreground/50">Ctrl+Enter</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleCommitSync} className="flex items-center gap-2 text-xs">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                        <path d="M3 8c0-2.2 1.8-4 4-4h2V2l4 3-4 3V6H7c-1.1 0-2 .9-2 2s.9 2 2 2h4v2H7c-2.2 0-4-1.8-4-4z" />
-                        <path d="M11 10h2v4h-2z" />
-                      </svg>
-                      <span>Commit & Sync</span>
+                    <DropdownMenuItem onClick={handleCommitSync}>
+                      <Codicon name="repo-push" size={13} /> Commit + Push
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCommitAmend}>
+                      <Codicon name="edit" size={13} /> Amend Commit
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleCommitAmend} className="flex items-center gap-2 text-xs">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                        <path d="M10.5 1c.3 0 .5.2.5.5V3h2c.6 0 1 .4 1 1v9c0 .6-.4 1-1 1H3c-.6 0-1-.4-1-1V4c0-.6.4-1 1-1h2V1.5c0-.3.2-.5.5-.5s.5.2.5.5V3h4V1.5c0-.3.2-.5.5-.5zM3 4v9h10V4H3zm4 3h2v1H7V7zm0 2h2v1H7V9zm0 2h2v1H7v-1z" />
-                      </svg>
-                      <span>Commit (Amend)</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleOpenBranchDialog} className="flex items-center gap-2 text-xs">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                        <path d="M14 4c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zM4 2C2.9 2 2 2.9 2 4s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 2.5c-.3 0-.5-.2-.5-.5s.2-.5.5-.5.5.2.5.5-.2.5-.5.5zM12 4c0 .3-.2.5-.5.5s-.5-.2-.5-.5.2-.5.5-.5.5.2.5.5zM4 4c0 .3-.2.5-.5.5S3 4.3 3 4s.2-.5.5-.5S4 3.7 4 4zm.3 6.3l6-6 .7.7-6 6-.7-.7z" />
-                      </svg>
-                      <span>Commit & Create Branch</span>
+                    <DropdownMenuItem onClick={() => setShowBranchDialog(true)}>
+                      <Codicon name="git-branch" size={13} /> New Branch + Commit
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -548,70 +865,37 @@ ${diff.slice(0, 6000)}
             </div>
           </>
         )}
-
-        {/* Error */}
-        {state.error && (
-          <div className="mx-3 my-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-2">
-            <p className="text-xs text-red-400">{state.error}</p>
-          </div>
-        )}
-
-        {/* Result */}
-        {state.commitResult && (
-          <div className="mx-3 my-2 rounded border border-green-500/30 bg-green-500/10 px-3 py-2">
-            <p className="text-xs text-green-400">{state.commitResult}</p>
-          </div>
-        )}
       </div>
 
-      {/* Branch name dialog overlay */}
-      {showBranchDialog && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setShowBranchDialog(false)}
-        >
-          <div
-            className="mx-3 w-full max-w-xs rounded-lg border border-border/60 bg-background p-4 shadow-xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="mb-3 text-xs font-medium text-foreground">New Branch Name</p>
-            <input
-              ref={branchInputRef}
-              value={branchName}
-              onChange={e => setBranchName(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleCreateBranchAndCommit()
-                if (e.key === 'Escape') setShowBranchDialog(false)
-              }}
-              className="w-full rounded border border-border/60 bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-accent mb-3"
-              placeholder="feature/my-new-feature"
-            />
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => setShowBranchDialog(false)}
-                className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateBranchAndCommit}
-                disabled={!branchName.trim() || !state.message.trim()}
-                className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-40 transition-colors"
-              >
-                Create & Commit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Branch dialog — PromptDialog owns the input + submit */}
+      <PromptDialog
+        open={showBranchDialog}
+        onClose={() => setShowBranchDialog(false)}
+        onConfirm={name => {
+          setBranchName(name)
+          // Let React flush the branchName before the handler reads it
+          setTimeout(() => handleCreateBranchAndCommit(), 0)
+        }}
+        title="Create branch and commit"
+        description="Enter a name for the new branch."
+        placeholder="feature/my-branch"
+        confirmLabel="Create & Commit"
+        busyLabel="Creating..."
+        cancelLabel="Cancel"
+      />
+
+      {/* Revert confirm dialog */}
+      <ConfirmDialog
+        open={revertTarget !== null}
+        onClose={() => setRevertTarget(null)}
+        onConfirm={handleRevertExecute}
+        title="Discard changes?"
+        description={`This will permanently discard all uncommitted changes in:\n${revertTarget ?? ''}`}
+        confirmLabel="Discard"
+        busyLabel="Discarding..."
+        doneLabel="Discarded"
+        destructive
+      />
     </div>
   )
-}
-
-function formatCommit(s: CommitSuggestion): string {
-  let msg = `${s.type}`
-  if (s.scope) msg += `(${s.scope})`
-  msg += `: ${s.message}`
-  if (s.body) msg += `\n\n${s.body}`
-  return msg
 }

@@ -5,7 +5,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { getAnakotConfigDefaults, getAnakotConfigRecord, saveAnakotConfig } from '@/anakot'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Globe, Info, KeyRound, PawPrint, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
+import { Archive, Discord, Globe, Info, KeyRound, PawPrint, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -17,6 +17,7 @@ import { AboutSettings } from './about-settings'
 import { AppearanceSettings } from './appearance-settings'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
+import { DiscordRpcSettings } from './discord-rpc-settings'
 import { GatewaySettings } from './gateway-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { McpSettings } from './mcp-settings'
@@ -35,6 +36,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'mcp',
   'toolsets',
   'pets',
+  'discord',
   'sessions',
   'about'
 ]
@@ -180,6 +182,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('pets')}
           />
           <OverlayNavItem
+            active={activeView === 'discord'}
+            icon={Discord}
+            label={t.settings.nav.discord}
+            onClick={() => setActiveView('discord')}
+          />
+          <OverlayNavItem
             active={activeView === 'sessions'}
             icon={Archive}
             label={t.settings.nav.archivedChats}
@@ -249,6 +257,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <McpSettings gateway={gateway} onConfigSaved={onConfigSaved} />
           ) : activeView === 'pets' ? (
             <PetSettings />
+          ) : activeView === 'discord' ? (
+            <DiscordRpcSettings />
           ) : (
             <SessionsSettings />
           )}

@@ -72,6 +72,33 @@ export function useRouteResume({
     if (!hasSettledRef.current) {
       if (gatewayOpen) {
         hasSettledRef.current = true
+        if (
+          !routedSessionId &&
+          isNewChatRoute(locationPathname) &&
+          !creatingSessionRef.current &&
+          (selectedStoredSessionId || activeSessionId || !freshDraftReady) &&
+          !rawHashLooksLikeSession()
+        ) {
+          startFreshSessionDraft(true)
+        } else if (routedSessionId && !creatingSessionRef.current) {
+          // Covers the refresh-on-existing-session case: the gateway opens to
+          // find a routed session in the URL.  Without this the resume-vs-new
+          // decision is deferred to the next effect run, but by then
+          // `gatewayBecameOpen` is already false so `shouldResume` is never
+          // true → resumeSession is never called → stuck on spinner forever.
+          //
+          // Don't resume if it's already the active session — prevents
+          // re-resume during /:sid -> /new transitions where the route
+          // hasn't updated yet but the session was already cleared.
+          const cachedRuntime = runtimeIdByStoredSessionIdRef.current.get(routedSessionId)
+          const alreadyActive =
+            routedSessionId === selectedStoredSessionIdRef.current &&
+            Boolean(cachedRuntime) &&
+            cachedRuntime === activeSessionIdRef.current
+          if (!alreadyActive) {
+            void resumeSession(routedSessionId, true)
+          }
+        }
       }
       return
     }

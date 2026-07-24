@@ -11,6 +11,7 @@ import { HapticsProvider } from './components/haptics-provider'
 import { I18nProvider } from './i18n'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
+import { registerServiceWorker } from './lib/register-sw'
 import { ThemeProvider } from './themes/context'
 import { exposePluginSDK } from './app/plugins/registry'
 
@@ -23,13 +24,14 @@ installWebAnakotDesktop()
 
 installClipboardShim()
 exposePluginSDK()
+registerServiceWorker()
 
 // Dev-only: install __PERF_DRIVE__ + __PERF_PROBE__ on window so the
 // scripts/ harnesses can drive a synthetic stream + record render cost.
 // Tree-shaken out of production builds.
-if (import.meta.env.MODE !== 'production') {
-  import('./app/chat/perf-probe')
-}
+// if (import.meta.env.MODE !== 'production') {
+//   import('./app/chat/perf-probe')
+// }
 
 // Web version: always render the app (no pet overlay window).
 createRoot(document.getElementById('root')!).render(

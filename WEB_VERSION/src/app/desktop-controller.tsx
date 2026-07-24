@@ -31,19 +31,23 @@ import {
   FILE_BROWSER_MIN_WIDTH,
   FILE_BROWSER_PANE_ID,
   pinSession,
+  RIGHT_RAIL_CODE_REVIEW_TAB_ID,
+  selectRightRailTab,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_SESSIONS_PAGE_SIZE,
   unpinSession
 } from '../store/layout'
 import { $filePreviewTarget, $previewTarget, closeActiveRightRailTab } from '../store/preview'
-import { $codeReviewData } from '../store/code-review'
+import { $codeReviewData, scanForCodeReview, resetScanner } from '../store/code-review'
 import { $activeGatewayProfile, $freshSessionRequest, $newChatProfile, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
 import {
   $activeSessionId,
+  $connection,
   $currentCwd,
   $freshDraftReady,
   $gatewayState,
+  $messages,
   $selectedStoredSessionId,
   $sessions,
   $workingSessionIds,
@@ -67,6 +71,7 @@ import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store
 import { SearchPanel } from '@/components/workbench/SearchPanel'
 import { SessionList } from '@/components/workbench/SessionList'
 import { ActivityBar } from '@/components/workbench/ActivityBar'
+import { SplashScreen } from '@/components/splash-screen'
 import { SidebarHost } from '@/components/workbench/SidebarHost'
 import { SessionTab } from '@/components/workbench/SessionTab'
 import { WelcomeView } from '@/components/workbench/WelcomeView'
@@ -78,7 +83,8 @@ import {
   ChatPreviewRail,
   PREVIEW_RAIL_MAX_WIDTH,
   PREVIEW_RAIL_MIN_WIDTH,
-  PREVIEW_RAIL_PANE_WIDTH
+  PREVIEW_RAIL_PANE_WIDTH,
+  PreviewMobileSheet,
 } from './chat/right-rail'
 import { CommandPalette } from './command-palette'
 import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
@@ -152,9 +158,11 @@ export function DesktopController() {
   const busyRef = useRef(false)
   const creatingSessionRef = useRef(false)
   const refreshSessionsRequestRef = useRef(0)
+  const firstConnectionEstablished = useRef(false)
 
   const gatewayState = useStore($gatewayState)
   const activeSessionId = useStore($activeSessionId)
+  const connection = useStore($connection)
   const currentCwd = useStore($currentCwd)
   const freshDraftReady = useStore($freshDraftReady)
   const filePreviewTarget = useStore($filePreviewTarget)
@@ -163,6 +171,32 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
+  const messages = useStore($messages)
+
+  // Track first connection — splash only shows on initial boot, not when
+  // the connection blinks during reconnects.
+  useEffect(() => {
+    if (connection && !firstConnectionEstablished.current) {
+      firstConnectionEstablished.current = true
+    }
+  }, [connection])
+
+  // Scan assistant messages for code-review JSON blocks.
+  // When found, populate the review store and auto-select the review tab.
+  useEffect(() => {
+    if (!messages || messages.length === 0) return
+    const found = scanForCodeReview(messages)
+    if (found) {
+      selectRightRailTab(RIGHT_RAIL_CODE_REVIEW_TAB_ID)
+    }
+  }, [messages])
+
+  // Reset the scanner's pointer when the active session changes so
+  // the new session's messages are scanned fresh.
+  useEffect(() => {
+    resetScanner()
+  }, [activeSessionId])
+  const showSplash = !firstConnectionEstablished.current
 
   // Auth gate: when the server requires auth (e.g. Railway deploy),
   // check session and show login page if not authenticated.
@@ -249,6 +283,7 @@ export function DesktopController() {
     messagingOpen,
     openAgents,
     openCommandCenterSection,
+    overlayOpen,
     profilesOpen,
     settingsOpen,
     skillsOpen,
@@ -823,6 +858,7 @@ export function DesktopController() {
       onPickFolders={() => void composer.pickContextPaths('folder')}
       onPickImages={() => void composer.pickImages()}
       onReload={reloadFromMessage}
+      onRefresh={() => { void resumeSession(selectedStoredSessionId!) }}
       onRemoveAttachment={(id: string) => void composer.removeAttachment(id)}
       onSteer={steerPrompt}
       onSubmit={submitText}
@@ -913,10 +949,13 @@ export function DesktopController() {
   if (!authRequired || (isAuthenticated && !onboardingLoading && !needsOnboarding)) {
     return (
       <>
+        <SplashScreen loading={showSplash} />
         <AppShell
           activityBar={<ActivityBar />}
+          isOverlay={overlayOpen}
           leftStatusbarItems={leftStatusbarItems}
           onOpenSettings={openSettings}
+          onSwipeBack={closeOverlayToPreviousRoute}
           overlays={overlays}
           sidebarContent={chatPanel}
           statusbarItems={statusbarItems}
@@ -970,6 +1009,7 @@ export function DesktopController() {
       {previewPane}
     </AppShell>
       <GatewayOfflineDialog />
+      <PreviewMobileSheet onRestartServer={restartPreviewServer} />
     </>
   )
   }
