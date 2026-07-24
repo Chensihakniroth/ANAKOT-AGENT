@@ -494,3 +494,109 @@ export async function gitGenerateCommitMessage(cwd: string): Promise<string | nu
           diffText = allDiff.diff
         }
       } catch (err) {
+        // Error fetching unstaged diff — silently continue
+      }
+    }
+
+    if (!diffText.trim()) {
+      return null
+    }
+
+    // AI commit message generation
+    const response = await window.anakotDesktop?.api<{
+      choices?: Array<{ message?: { content?: string } }>
+    }>({
+      method: 'POST',
+      path: '/api/v1/chat/completions',
+      body: {
+        messages: [
+          { role: 'system', content: 'You are a git commit message generator. Generate a concise conventional commit message (format: type(scope): description) based on the provided git diff. Return ONLY the commit message text, no JSON.' },
+          { role: 'user', content: `Generate a commit message for this diff:\n\n${diffText.slice(0, 6000)}` },
+        ],
+        max_tokens: 512,
+        temperature: 0.3,
+      },
+      timeoutMs: 30000,
+    })
+
+    const content = response?.choices?.[0]?.message?.content
+    if (content) {
+      return content.trim()
+    }
+    return null
+  } catch (e) {
+    console.error('[git] Failed to generate commit message:', e)
+    return null
+  }
+}
+
+/**
+ * Push current branch to origin.
+ */
+export async function gitPush(cwd: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitPush?.(safePath)
+    if (result) {
+      addGitLogEntry({
+        command: 'push',
+        fullCommand: 'git push -u origin <branch>',
+        cwd,
+        stdout: result.output || (result.ok ? 'Push successful' : ''),
+        stderr: result.error || '',
+        exitCode: result.ok ? 0 : 1,
+        level: determineLevel(result.ok ? 0 : 1, result.error || ''),
+        summary: result.ok ? 'Pushed successfully' : result.error || 'Push failed',
+      })
+    }
+    return result || { ok: false, error: 'gitPush not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git push failed'
+    $gitError.set(msg)
+    return { ok: false, error: msg }
+  }
+}
+
+/**
+ * Amend the last commit with a new message.
+ */
+export async function gitCommitAmend(cwd: string, message: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitCommitAmend?.(safePath, message)
+    if (result?.ok) {
+      $gitCommitMessage.set('')
+      await refreshGitStatus(cwd)
+    } else if (result?.error) {
+      $gitError.set(result.error)
+    }
+    return result || { ok: false, error: 'gitCommitAmend not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git commit --amend failed'
+    $gitError.set(msg)
+    return { ok: false, error: msg }
+  }
+}
+
+/**
+ * Create and switch to a new branch (git checkout -b).
+ */
+export async function gitCheckoutNewBranch(cwd: string, branch: string): Promise<{ ok: boolean; error?: string }> {
+  if (!branch.trim()) return { ok: false, error: 'branch name is empty' }
+  const safePath = toIpcSafePath(cwd)
+  try {
+    const result = await window.anakotDesktop?.gitCheckoutNewBranch?.(safePath, branch.trim())
+    if (result?.ok) {
+      await refreshGitStatus(cwd)
+      await gitLoadBranches(cwd)
+    } else if (result?.error) {
+      $gitError.set(result.error)
+    }
+    return result || { ok: false, error: 'gitCheckoutNewBranch not available' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'git checkout -b failed'
+    $gitError.set(msg)
+    return { ok: false, error: msg }
+  }
+}
+

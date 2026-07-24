@@ -340,6 +340,7 @@ export function GitSourceControl() {
   }
 
   return (
+    <>
     <div tabIndex={-1} className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-2 outline-none" onFocus={handleFocus}>
       <style>{`.commit-textarea::placeholder { white-space: nowrap; text-overflow: ellipsis; }`}</style>
       {/* Header */}
@@ -488,3 +489,140 @@ export function GitSourceControl() {
               View details in Output panel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Staged changes */}
+      {stagedFiles.length > 0 && !loading && (
+        <div>
+          <div className="px-1 py-1">
+            <span className="text-[0.6rem] uppercase tracking-wider text-muted-foreground/60 font-medium">
+              Staged Changes ({stagedFiles.length})
+            </span>
+          </div>
+          {stagedFiles.map(f => renderFileItem(f, 'staged'))}
+        </div>
+      )}
+
+      {/* Changes (unstaged) */}
+      {unstagedFiles.length > 0 && !loading && (
+        <div>
+          <div className="px-1 py-1">
+            <span className="text-[0.6rem] uppercase tracking-wider text-muted-foreground/60 font-medium">
+              Changes ({unstagedFiles.length})
+            </span>
+          </div>
+          {unstagedFiles.map(f => renderFileItem(f, 'changes'))}
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {loading && (
+        <div className="flex items-center justify-center p-4">
+          <Codicon name="sync" size="1rem" className="animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && stagedFiles.length === 0 && unstagedFiles.length === 0 && !error && (
+        <div className="flex flex-col items-center justify-center p-6 text-center">
+          <Codicon name="check" size="1.5rem" className="text-muted-foreground/40 mb-1" />
+          <span className="text-[0.6rem] text-muted-foreground/50">No changes</span>
+        </div>
+      )}
+    </div>
+
+    {/* Context menu */}
+    {contextMenu && (
+      <div
+        className="fixed z-50 min-w-[150px] rounded-md border border-border bg-background shadow-lg"
+        style={{ left: contextMenu.x, top: contextMenu.y }}
+      >
+        <button
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--ui-control-hover-background)"
+          onClick={() => void handleOpenFile(contextMenu.file.path)}
+        >
+          Open File
+        </button>
+        {contextMenu.type === 'changes' && (
+          <button
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--ui-control-hover-background)"
+            onClick={() => void handleStage(contextMenu.file.path)}
+          >
+            Stage File
+          </button>
+        )}
+        {contextMenu.type === 'staged' && (
+          <button
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--ui-control-hover-background)"
+            onClick={() => void handleUnstage(contextMenu.file.path)}
+          >
+            Unstage File
+          </button>
+        )}
+        {contextMenu.type === 'changes' && (
+          <button
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-(--ui-control-hover-background)"
+            onClick={() => void handleDiscard(contextMenu.file.path)}
+          >
+            Discard Changes
+          </button>
+        )}
+        <div className="h-px bg-border" />
+        <button
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--ui-control-hover-background)"
+          onClick={() => handleCopyPath(contextMenu.file.path)}
+        >
+          Copy Path
+        </button>
+        <button
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-(--ui-control-hover-background)"
+          onClick={() => handleRevealInExplorer(contextMenu.file.path)}
+        >
+          Reveal in Explorer
+        </button>
+      </div>
+    )}
+
+    {/* New branch dialog */}
+    {newBranchDialog && (
+      <Dialog open onOpenChange={() => setNewBranchDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Branch</DialogTitle>
+            <DialogDescription>Enter a name for the new branch.</DialogDescription>
+          </DialogHeader>
+          <input
+            className="w-full rounded border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+            value={newBranchName}
+            onChange={e => setNewBranchName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') void handleCreateNewBranch() }}
+            placeholder="branch-name"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNewBranchDialog(null)}>Cancel</Button>
+            <Button onClick={() => void handleCreateNewBranch()}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+
+    {/* Checkout conflict dialog */}
+    {checkoutConflict && (
+      <Dialog open onOpenChange={() => setCheckoutConflict(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Checkout Conflict</DialogTitle>
+            <DialogDescription>Cannot switch to branch &quot;{checkoutConflict.branch}&quot;</DialogDescription>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground whitespace-pre-wrap">{checkoutConflict.message}</p>
+          <DialogFooter>
+            <Button onClick={() => setCheckoutConflict(null)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
+  )
+}

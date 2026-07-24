@@ -54,6 +54,11 @@ function typeColor(type: string): string {
   return colors[type] ?? 'bg-gray-500/20 text-gray-400'
 }
 
+function formatCommit(s: { type: string; scope?: string; message: string }): string {
+  const scope = s.scope ? `(${s.scope})` : ''
+  return `${s.type}${scope}: ${s.message}`
+}
+
 export function GitCommitPanel() {
   const state = useStore($gitCommitState)
   const repoPath = state.repoPath
@@ -474,3 +479,71 @@ ${diff.slice(0, 6000)}
                       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
                         <path d="M6.5 10.5L3 7l1-1 2.5 2.5L12 3l1 1z" />
                       </svg>
+                    </>
+                  )}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      disabled={!canCommit}
+                      className="flex items-center justify-center rounded-r bg-foreground/90 px-1.5 py-1.5 text-xs font-medium text-background hover:bg-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors border-l border-background/20"
+                    >
+                      ▾
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleCommit}>
+                      Commit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCommitSync}>
+                      Commit &amp; Sync
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCommitAmend}>
+                      Amend Commit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleOpenBranchDialog}>
+                      New Branch...
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Branch creation dialog */}
+      {showBranchDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-lg border border-border bg-background p-4 shadow-lg w-80">
+            <p className="text-xs font-medium text-foreground mb-2">Create new branch:</p>
+            <input
+              ref={branchInputRef}
+              value={branchName}
+              onChange={e => setBranchName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateBranchAndCommit() }}
+              className="w-full rounded border border-border/60 bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-accent"
+              placeholder="branch-name"
+            />
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                onClick={() => setShowBranchDialog(false)}
+                className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateBranchAndCommit}
+                disabled={!branchName.trim()}
+                className="rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/80 disabled:opacity-40"
+              >
+                Create &amp; Commit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
