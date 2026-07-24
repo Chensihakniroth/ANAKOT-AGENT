@@ -5007,8 +5007,19 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     def _title_failure(task: str, exc: BaseException) -> None:
                         logger.warning("Auto-title failed for session %s: %s: %s", sid, task, exc)
 
+                    # Use the session's profile DB, not the root DB —
+                    # the session lives in the profile's state.db.
+                    _title_db = _get_db()
+                    _ph = session.get("profile_home")
+                    if _ph:
+                        try:
+                            from anakot_state import SessionDB as _SDB
+                            _title_db = _SDB(db_path=Path(_ph) / "state.db")
+                        except Exception:
+                            pass
+
                     maybe_auto_title(
-                        _get_db(),
+                        _title_db,
                         session.get("session_key") or sid,
                         text,
                         raw,
