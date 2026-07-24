@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   CodeReviewPanel,
 } from '@/app/chat/right-rail'
-import { DiffPreview } from '@/app/chat/right-rail/diff-preview'
+import { LazyDiffPreview as DiffPreview } from '@/app/chat/right-rail/lazy-monaco'
 import { GitCommitPanel } from '@/app/chat/right-rail/git-commit'
 import { PreviewPane } from '@/app/chat/right-rail/preview-pane'
 import { Codicon } from '@/components/ui/codicon'

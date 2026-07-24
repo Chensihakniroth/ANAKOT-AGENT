@@ -4,6 +4,11 @@ import { mediaDisplayLabel, mediaMarkdownHref } from '@/lib/media'
 import { parseTodos } from '@/lib/todos'
 import type { SessionMessage, UsageStats } from '@/types/anakot'
 
+// Regex that matches the code-review JSON block (markers + content).
+// Used to strip it from the rendered chat text so users see clean analysis.
+const CODE_REVIEW_DATA_BLOCK_RE =
+  /\n*<!-- CODE_REVIEW_DATA -->\s*```json\s*[\s\S]*?```\s*<!-- \/CODE_REVIEW_DATA -->\n*/
+
 export type ChatMessagePart = Exclude<ThreadMessageLike['content'], string>[number]
 
 export type ChatMessage = {
@@ -100,7 +105,10 @@ export function renderMediaTags(text: string): string {
 }
 
 export function assistantTextPart(text: string): ChatMessagePart {
-  return textPart(renderMediaTags(text))
+  // Strip the structured code-review JSON block — it's consumed by the
+  // scanner and displayed in the right-rail panel, so it shouldn't
+  // also render as raw JSON in the chat bubble.
+  return textPart(renderMediaTags(text.replace(CODE_REVIEW_DATA_BLOCK_RE, '').trim()))
 }
 
 export function chatMessageText(message: ChatMessage): string {

@@ -4995,12 +4995,16 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                 try:
                     from agent.title_generator import maybe_auto_title
 
+                    def _title_failure(task: str, exc: BaseException) -> None:
+                        logger.warning("Auto-title failed for session %s: %s: %s", sid, task, exc)
+
                     maybe_auto_title(
                         _get_db(),
                         session.get("session_key") or sid,
                         text,
                         raw,
                         session.get("history", []),
+                        failure_callback=_title_failure,
                     )
                 except Exception:
                     pass

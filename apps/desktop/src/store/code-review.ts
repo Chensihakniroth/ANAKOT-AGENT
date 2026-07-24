@@ -89,3 +89,57 @@ export function reviewSummary(items: ReviewItem[]) {
     info: items.filter(i => i.severity === 'info').length,
   }
 }
+
+const VALID_SEVERITIES = new Set(['error', 'warning', 'info'])
+const VALID_CATEGORIES = new Set(['bug', 'style', 'security', 'performance', 'suggestion'])
+
+/**
+ * Extract a structured CODE_REVIEW_JSON block from AI response text.
+ * Looks for ```CODE_REVIEW_JSON\n{...}\n``` fence, parses + validates.
+ * Returns null when no block is found or the JSON is malformed.
+ */
+export function parseReviewJson(text: string): CodeReviewResult | null {
+  // Match ```CODE_REVIEW_JSON followed by optional whitespace, then JSON content
+  const match = text.match(/```CODE_REVIEW_JSON\s*\n([\s\S]*?)\n\s*```/)
+  if (!match) {
+    return null
+  }
+
+  try {
+    const raw = JSON.parse(match[1])
+    if (!raw || typeof raw !== 'object') {
+      return null
+    }
+
+    const file = typeof raw.file === 'string' ? raw.file : ''
+    const language = typeof raw.language === 'string' ? raw.language : undefined
+    const items: ReviewItem[] = Array.isArray(raw.items)
+      ? raw.items
+          .filter((item: Record<string, unknown>) => {
+            return (
+              item &&
+              typeof item === 'object' &&
+              typeof item.message === 'string' &&
+              typeof item.line === 'number' &&
+              VALID_SEVERITIES.has(item.severity as string) &&
+              VALID_CATEGORIES.has(item.category as string)
+            )
+          })
+          .map((item: Record<string, unknown>) => ({
+            severity: item.severity as ReviewSeverity,
+            category: item.category as ReviewCategory,
+            line: item.line as number,
+            message: item.message as string,
+            suggestion: typeof item.suggestion === 'string' ? item.suggestion : undefined,
+          }))
+      : []
+
+    if (!items.length) {
+      return null
+    }
+
+    return { file, content: '', language, items }
+  } catch {
+    return null
+  }
+}

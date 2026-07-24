@@ -2,7 +2,7 @@
 
 import type { SyntaxHighlighterProps } from '@assistant-ui/react-streamdown'
 import type { FC } from 'react'
-import ShikiHighlighter from 'react-shiki'
+import { ShikiHighlighter } from '@/lib/shiki'
 
 import {
   CodeCard,

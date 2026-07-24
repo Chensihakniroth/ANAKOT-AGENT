@@ -4,7 +4,7 @@ import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from
 
 import { TERMINAL_BG } from './selection'
 
-import { TerminalTab } from './index'
+import { LazyTerminalTab as TerminalTab } from './lazy-terminal'
 
 /**
  * One xterm Terminal mounted at the layout root and CSS-overlayed onto

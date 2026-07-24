@@ -55,6 +55,43 @@ export interface DroppedFile {
 export const ANAKOT_PATHS_MIME = 'application/x-anakot-paths'
 
 /**
+ * Upload a browser File to the backend's /api/attach/upload endpoint.
+ * Returns the absolute server path on success, or null on failure.
+ * Used when the web version drops files — the browser can't resolve local
+ * filesystem paths, so we upload the file and let the server store it.
+ */
+export async function uploadFileToServer(file: File): Promise<string | null> {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ as string | undefined
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['X-Anakot-Session-Token'] = token
+    }
+    const res = await fetch('/api/attach/upload', {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { ok?: boolean; path?: string }
+    return data.path || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * True when we're running in the web shim (no Electron filesystem access).
+ * Detected by the shim returning an empty string from getPathForFile.
+ */
+export function isWebEnvironment(): boolean {
+  return typeof window !== 'undefined' && !window.anakotDesktop?.readFileText
+}
+
+/**
  * Eagerly resolve files from a drop event into [File?, path, isDirectory?]
  * triples. Internal Anakot sources (e.g. the project tree) ride on a custom
  * MIME and produce path-only entries; OS drops produce File-bearing entries.
@@ -455,7 +492,14 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         const fallbackPath =
           !knownPath && window.anakotDesktop?.getPathForFile ? window.anakotDesktop.getPathForFile(file) : ''
 
-        const filePath = knownPath || fallbackPath || ''
+        let filePath = knownPath || fallbackPath || ''
+
+        // Web version: no local path available — upload the file to the
+        // server so the agent can read it via the returned absolute path.
+        if (!filePath && isWebEnvironment()) {
+          filePath = (await uploadFileToServer(file)) || ''
+        }
+
         const isImage = file.type.startsWith('image/') || isImagePath(file.name) || (filePath && isImagePath(filePath))
 
         if (isImage) {

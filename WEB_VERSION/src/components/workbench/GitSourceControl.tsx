@@ -165,24 +165,18 @@ export function GitSourceControl() {
   const generatingRef = useRef(false)
 
   const handleGenerate = useCallback(async () => {
-    console.log('[Sparkle] 🔥 handleGenerate called — cwd:', JSON.stringify(cwd), 'generatingRef:', generatingRef.current, 'status.root:', status.root)
     if (!cwd.trim()) {
-      console.warn('[Sparkle] ✋ Early return — cwd is empty')
       return
     }
     if (generatingRef.current) {
-      console.warn('[Sparkle] ✋ Early return — generatingRef.current is TRUE (stuck? refresh the panel)')
       return
     }
     setGenerating(true)
     generatingRef.current = true
     try {
       const root = status.root || cwd
-      console.log('[Sparkle] 📥 Dynamic importing git store...')
       const { gitGenerateCommitMessage, $gitCommitMessage } = await import('@/store/git')
-      console.log('[Sparkle] ✅ Dynamic import OK, calling gitGenerateCommitMessage for:', root)
       const message = await gitGenerateCommitMessage(root)
-      console.log('[Sparkle] ✅ Got result back from gitGenerateCommitMessage:', message ? `"${message.slice(0, 80)}..." (${message.length} chars)` : 'null/empty')
       if (message) {
         $gitCommitMessage.set(message)
         const el = textareaRef.current
@@ -190,17 +184,13 @@ export function GitSourceControl() {
           el.value = message
           el.style.height = 'auto'
           el.style.height = `${el.scrollHeight}px`
-          console.log('[Sparkle] ✅ Textarea updated with generated message')
         } else {
-          console.warn('[Sparkle] ⚠️ Textarea ref is null, could not write message to DOM')
         }
       } else {
-        console.warn('[Sparkle] ❌ gitGenerateCommitMessage returned null/empty — check [GitGen] logs above')
       }
     } catch (err) {
       console.error('[Sparkle] 💥 Unhandled error in handleGenerate:', err)
     } finally {
-      console.log('[Sparkle] 🔚 Finally block — resetting generatingRef & state')
       generatingRef.current = false
       setGenerating(false)
     }
@@ -498,228 +488,3 @@ export function GitSourceControl() {
               View details in Output panel
             </button>
           </div>
-          <button
-            className="shrink-0 rounded-sm px-1 text-amber-400 hover:bg-amber-500/20"
-            onClick={() => $gitError.set(null)}
-            type="button"
-            title="Dismiss"
-          >
-            <Codicon name="close" size="0.625rem" />
-          </button>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-          <Codicon name="loading" size="0.75rem" className="animate-spin" />
-          {t.gitLoadingGit || 'Loading git status...'}
-        </div>
-      )}
-
-      {/* No repo */}
-      {!loading && !status.root && cwd.trim() && (
-        <div className="flex flex-col items-center justify-center gap-2 py-4 text-center">
-          <Codicon name="folder-opened" size="1.5rem" className="text-muted-foreground/40" />
-          <span className="text-[0.65rem] text-muted-foreground/50">
-            {status.error === 'network-path' ? 'Network paths not supported for git' : status.error === 'no-git-root' ? 'No git repository found in this folder' : t.gitNotAGitRepo || 'Not a git repository'}
-          </span>
-        </div>
-      )}
-
-      {/* No changes */}
-      {!loading && status.root && status.files.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 py-4 text-center">
-          <Codicon name="check-all" size="1.5rem" className="text-green-400/60" />
-          <span className="text-[0.65rem] text-muted-foreground/50">
-            {t.gitNoChanges || 'No changes'}
-          </span>
-        </div>
-      )}
-
-      {/* File lists */}
-      {status.root && status.files.length > 0 && (
-        <div className="flex flex-col gap-2 overflow-y-auto">
-          {/* Staged Changes */}
-          {stagedFiles.length > 0 && (
-            <div>
-              <div
-                className="flex items-center gap-1 px-1 py-0.5 cursor-pointer hover:bg-(--ui-control-hover-background) rounded-[2px] select-none"
-                onClick={() => setStagedCollapsed(prev => !prev)}
-              >
-                <Codicon name={stagedCollapsed ? 'chevron-right' : 'chevron-down'} size="0.5rem" className="text-muted-foreground shrink-0" />
-                <span className="text-[0.55rem] font-medium uppercase tracking-wider text-muted-foreground">
-                  {t.gitStaged || 'Staged Changes'}
-                </span>
-                <span className="flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-(--ui-bg-quaternary) px-[5px] text-[0.45rem] font-semibold text-muted-foreground/70">
-                  {stagedFiles.length}
-                </span>
-              </div>
-              {!stagedCollapsed && (
-                <div className="flex flex-col gap-px">
-                  {stagedFiles.map(f => renderFileItem(f, 'staged'))}
-                </div>
-              )}
-            </div>
-          )}
-          {/* Changes (unstaged) — always show like VS Code */}
-          <div>
-            <div
-              className="flex items-center gap-1 px-1 py-0.5 cursor-pointer hover:bg-(--ui-control-hover-background) rounded-[2px] select-none"
-              onClick={() => setChangesCollapsed(prev => !prev)}
-            >
-              <Codicon name={changesCollapsed ? 'chevron-right' : 'chevron-down'} size="0.5rem" className="text-muted-foreground shrink-0" />
-              <span className="text-[0.55rem] font-medium uppercase tracking-wider text-muted-foreground">
-                {t.gitChanges || 'Changes'}
-              </span>
-              <span className="flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-(--ui-bg-quaternary) px-[5px] text-[0.45rem] font-semibold text-muted-foreground/70">
-                {unstagedFiles.length}
-              </span>
-              {unstagedFiles.length > 0 && (
-                <button
-                  className="ml-auto rounded-[2px] px-1 text-[0.5rem] text-muted-foreground/60 hover:text-foreground hover:bg-(--ui-control-hover-background)"
-                  onClick={e => { e.stopPropagation(); handleStageAll() }}
-                  type="button"
-                  title="Stage All"
-                >
-                  <Codicon name="add" size="0.5rem" />
-                </button>
-              )}
-            </div>
-            {!changesCollapsed && unstagedFiles.length > 0 && (
-              <div className="flex flex-col gap-px">
-                {unstagedFiles.map(f => renderFileItem(f, 'changes'))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Context menu */}
-      {contextMenu && (
-        <>
-          <div className="fixed inset-0 z-[9998]" onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null) }} />
-          <div
-            className="fixed z-[9999] min-w-[180px] rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) py-1 shadow-xl"
-            style={{ left: Math.min(contextMenu.x, window.innerWidth - 200), top: Math.min(contextMenu.y, window.innerHeight - 280) }}
-            onContextMenu={e => e.preventDefault()}
-          >
-            {/* Stage / Unstage */}
-            {contextMenu.type === 'staged' && (
-              <button
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                onClick={() => handleUnstage(contextMenu.file.path)}
-                type="button"
-              >
-                <Codicon name="remove" size="0.75rem" />
-                Unstage Changes
-              </button>
-            )}
-            {contextMenu.type === 'changes' && (
-              <>
-                <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                  onClick={() => {  handleStage(contextMenu.file.path) }}
-                  type="button"
-                >
-                  <Codicon name="add" size="0.75rem" />
-                  Stage Changes
-                </button>
-                <button
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-(--ui-control-hover-background)"
-                  onClick={() => handleDiscard(contextMenu.file.path)}
-                  type="button"
-                >
-                  <Codicon name="discard" size="0.75rem" />
-                  Discard Changes
-                </button>
-              </>
-            )}
-            <div className="mx-3 my-1 h-px bg-(--ui-stroke-tertiary)" />
-            {/* Open File */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-              onClick={() => handleOpenFile(contextMenu.file.path)}
-              type="button"
-            >
-              <Codicon name="go-to-file" size="0.75rem" />
-              Open File
-            </button>
-            <div className="mx-3 my-1 h-px bg-(--ui-stroke-tertiary)" />
-            {/* Copy Path */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-              onClick={() => handleCopyPath(contextMenu.file.path)}
-              type="button"
-            >
-              <Codicon name="copy" size="0.75rem" />
-              Copy Path
-            </button>
-            {/* Reveal in Explorer */}
-            <button
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-              onClick={() => handleRevealInExplorer(contextMenu.file.path)}
-              type="button"
-            >
-              <Codicon name="folder-opened" size="0.75rem" />
-              Reveal in Explorer
-            </button>
-          </div>
-        </>
-      )}
-            {/* Checkout Conflict Dialog */}
-      <Dialog open={!!checkoutConflict} onOpenChange={(open) => !open && setCheckoutConflict(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Checkout Failed</DialogTitle>
-            <DialogDescription className="space-y-2 pt-2 text-sm text-foreground">
-              <p>
-                Cannot switch to <strong>{checkoutConflict?.branch}</strong> because you have uncommitted changes that would be overwritten.
-              </p>
-              <p>
-                Please stash or commit your changes before switching branches to protect your data.
-              </p>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button onClick={() => setCheckoutConflict(null)}>Got it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* Create New Branch Dialog */}
-      <Dialog open={!!newBranchDialog} onOpenChange={(open) => {
-        if (!open) { setNewBranchDialog(null); setNewBranchName('') }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Branch</DialogTitle>
-            <DialogDescription className="space-y-2 pt-2">
-              <p className="text-sm text-muted-foreground">
-                Enter a name for the new branch. It will be created from the current HEAD.
-              </p>
-              <input
-                autoFocus
-                className="w-full rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2.5 py-1.5 text-[0.8rem] text-foreground placeholder:text-muted-foreground/45 focus:border-primary focus:outline-none"
-                placeholder="branch-name"
-                value={newBranchName}
-                onChange={e => setNewBranchName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') { e.preventDefault(); void handleCreateNewBranch() }
-                  if (e.key === 'Escape') { setNewBranchDialog(null); setNewBranchName('') }
-                }}
-              />
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setNewBranchDialog(null); setNewBranchName('') }}>
-              Cancel
-            </Button>
-            <Button disabled={!newBranchName.trim()} onClick={handleCreateNewBranch}>
-              Create Branch
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}

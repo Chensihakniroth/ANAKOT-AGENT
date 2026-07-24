@@ -5,7 +5,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-import { TerminalTab, type TerminalTabHandle } from './index'
+import { LazyTerminalTab as TerminalTab, type TerminalTabHandle } from './lazy-terminal'
 import {
   $activeTerminalTabId,
   $terminalTabs,

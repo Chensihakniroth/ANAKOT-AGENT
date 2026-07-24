@@ -1297,7 +1297,7 @@ export const en: Translations = {
       codeReview: {
         label: 'Code review',
         description: 'Audit the current change for regressions, dropped edge cases, and missing tests.',
-        text: 'Please review this for bugs, regressions, and missing tests.'
+        text: 'Please review this for bugs, regressions, and missing tests. After your analysis, you MUST include a structured data block at the very end of your response in this exact format:\n\n<!-- CODE_REVIEW_DATA -->\n```json\n{\n  "file": "<file path being reviewed>",\n  "content": "<the code content that was reviewed, truncated to 200 lines max>",\n  "language": "<detected language, e.g. python, typescript, rust>",\n  "items": [\n    {\n      "severity": "error|warning|info",\n      "category": "bug|style|security|performance|suggestion",\n      "line": <line number in the file>,\n      "message": "<concise description of the issue>",\n      "suggestion": "<optional: how to fix it>"\n    }\n  ]\n}\n```\n<!-- /CODE_REVIEW_DATA -->\n\nImportant: The JSON block MUST start with <!-- CODE_REVIEW_DATA --> and end with <!-- /CODE_REVIEW_DATA -->. Each item must have a valid line number. Only include real issues you found — do not fabricate findings.'
       },
       implementationPlan: {
         label: 'Implementation plan',

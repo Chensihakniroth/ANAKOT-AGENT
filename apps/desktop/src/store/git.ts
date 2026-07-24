@@ -481,39 +481,31 @@ export async function gitGetStagedDiff(cwd: string): Promise<{ ok: boolean; diff
  * Returns the generated message, or null on failure.
  */
 export async function gitGenerateCommitMessage(cwd: string): Promise<string | null> {
-  console.log('[GitGen] 🎯 gitGenerateCommitMessage called — cwd:', JSON.stringify(cwd))
   try {
     const staged = await gitGetStagedDiff(cwd)
-    console.log('[GitGen] 📋 Staged diff result:', JSON.stringify({ ok: staged.ok, hasDiff: !!staged.diff, diffLen: staged.diff?.length }))
     let diffText = staged.ok && typeof staged.diff === 'string' ? staged.diff : ''
     
     // Fall back to unstaged diff if nothing staged
     if (!diffText.trim() && cwd.trim()) {
-      console.log('[GitGen] 🔄 No staged diff, trying unstaged diff...')
       try {
         const safePath = toIpcSafePath(cwd.trim())
         const allDiff = await window.anakotDesktop?.gitDiff?.(safePath, '')
-        console.log('[GitGen] 📋 Unstaged diff result:', JSON.stringify({ ok: allDiff?.ok, hasDiff: !!allDiff?.diff, diffLen: allDiff?.diff?.length }))
         if (allDiff?.ok && typeof allDiff.diff === 'string') {
           diffText = allDiff.diff
         }
       } catch (err) {
-        console.warn('[GitGen] ⚠️ Unstaged diff fallback threw:', err)
       }
     }
 
     if (!diffText.trim()) {
-      console.warn('[GitGen] ❌ No diff text at all — nothing to generate message from. Stage some changes first.')
       return null
     }
 
     // Truncate very large diffs to avoid token limits
     if (diffText.length > 8000) {
       diffText = diffText.slice(0, 8000) + '\n... (diff truncated)'
-      console.log('[GitGen] 📏 Diff truncated from >8000 chars')
     }
 
-    console.log('[GitGen] 📤 Sending API request to /api/v1/chat/completions...')
     const response = await window.anakotDesktop.api<{
       choices?: Array<{ message?: { content?: string } }>
     }>({
@@ -539,10 +531,8 @@ export async function gitGenerateCommitMessage(cwd: string): Promise<string | nu
 
     const content = response?.choices?.[0]?.message?.content?.trim()
     if (content) {
-      console.log('[GitGen] ✅ Success — got commit message:', content.slice(0, 100))
       return content
     }
-    console.warn('[GitGen] API returned no content:', JSON.stringify(response).slice(0, 500))
     return null
   } catch (err) {
     console.error('[GitGen] unexpected error:', err)

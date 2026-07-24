@@ -1320,7 +1320,7 @@ export const en: Translations = {
       codeReview: {
         label: 'Code review',
         description: 'Audit the current change for regressions, dropped edge cases, and missing tests.',
-        text: 'Please review this for bugs, regressions, and missing tests.'
+        text: 'Please review this for bugs, regressions, and missing tests.\n\nAfter your review, include a CODE_REVIEW_JSON block at the end of your response with this exact format (no extra text around it):\n```CODE_REVIEW_JSON\n{\n  "file": "<filename>",\n  "language": "<lang>",\n  "items": [\n    { "severity": "error|warning|info", "category": "bug|style|security|performance|suggestion", "line": <number>, "message": "<description>", "suggestion": "<optional fix>" }\n  ]\n}\n```'
       },
       implementationPlan: {
         label: 'Implementation plan',

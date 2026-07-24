@@ -66,6 +66,7 @@ from utils import env_var_enabled
 try:
     from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.middleware.gzip import GZipMiddleware
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
@@ -78,6 +79,7 @@ except ImportError:
         _lazy_ensure("tool.dashboard", prompt=False)
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
         from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.middleware.gzip import GZipMiddleware
         from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel
@@ -174,6 +176,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip: compress responses >1KB for browsers that accept deflate/gzip.
+# Saves ~60-70% on JS/CSS payloads on the wire.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ---------------------------------------------------------------------------
 # Endpoints that do NOT require the session token.  Everything else under
@@ -9442,6 +9448,22 @@ def mount_spa(application: FastAPI):
             headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
         )
 
+    # Serve JS assets with cache headers — Vite-generated filenames include
+    # content hashes so they're safe to cache aggressively (1 year).
+    _JS_HASH_RE = re.compile(r"^[a-z0-9_-]+-[A-Za-z0-9]{8,}\.js$", re.IGNORECASE)
+
+    @application.get("/assets/{filename}.js")
+    async def serve_js(filename: str, request: Request):
+        js_path = WEB_DIST / "assets" / f"{filename}.js"
+        if not js_path.is_file() or not js_path.resolve().is_relative_to(
+            WEB_DIST.resolve()
+        ):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        headers: dict[str, str] = {}
+        if _JS_HASH_RE.match(filename):
+            headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return FileResponse(js_path, headers=headers)
+
     # When served behind a path-prefix proxy, the built CSS contains
     # absolute ``url(/fonts/...)`` and ``url(/ds-assets/...)`` references.
     # Browsers resolve those against the document origin, which means
@@ -9449,6 +9471,8 @@ def mount_spa(application: FastAPI):
     # (the MC Pages app), not the Anakot backend. Intercept CSS asset
     # requests BEFORE the StaticFiles mount and rewrite the absolute paths
     # when a prefix is in play.
+    _CSS_HASH_RE = re.compile(r"^[a-z0-9_-]+-[A-Za-z0-9]{8,}\.css$", re.IGNORECASE)
+
     @application.get("/assets/{filename}.css")
     async def serve_css(filename: str, request: Request):
         css_path = WEB_DIST / "assets" / f"{filename}.css"
@@ -9463,7 +9487,10 @@ def mount_spa(application: FastAPI):
                 css = css.replace(f"url({asset_dir}", f"url({prefix}{asset_dir}")
                 css = css.replace(f"url(\"{asset_dir}", f"url(\"{prefix}{asset_dir}")
                 css = css.replace(f"url('{asset_dir}", f"url('{prefix}{asset_dir}")
-        return Response(content=css, media_type="text/css")
+        headers: dict[str, str] = {}
+        if _CSS_HASH_RE.match(filename):
+            headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return Response(content=css, media_type="text/css", headers=headers)
 
     application.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")
 

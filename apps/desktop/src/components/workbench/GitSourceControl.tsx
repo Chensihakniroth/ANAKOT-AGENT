@@ -165,24 +165,18 @@ export function GitSourceControl() {
   const generatingRef = useRef(false)
 
   const handleGenerate = useCallback(async () => {
-    console.log('[Sparkle] 🔥 handleGenerate called — cwd:', JSON.stringify(cwd), 'generatingRef:', generatingRef.current, 'status.root:', status.root)
     if (!cwd.trim()) {
-      console.warn('[Sparkle] ✋ Early return — cwd is empty')
       return
     }
     if (generatingRef.current) {
-      console.warn('[Sparkle] ✋ Early return — generatingRef.current is TRUE (stuck? refresh the panel)')
       return
     }
     setGenerating(true)
     generatingRef.current = true
     try {
       const root = status.root || cwd
-      console.log('[Sparkle] 📥 Dynamic importing git store...')
       const { gitGenerateCommitMessage, $gitCommitMessage } = await import('@/store/git')
-      console.log('[Sparkle] ✅ Dynamic import OK, calling gitGenerateCommitMessage for:', root)
       const message = await gitGenerateCommitMessage(root)
-      console.log('[Sparkle] ✅ Got result back from gitGenerateCommitMessage:', message ? `"${message.slice(0, 80)}..." (${message.length} chars)` : 'null/empty')
       if (message) {
         $gitCommitMessage.set(message)
         const el = textareaRef.current
@@ -190,17 +184,13 @@ export function GitSourceControl() {
           el.value = message
           el.style.height = 'auto'
           el.style.height = `${el.scrollHeight}px`
-          console.log('[Sparkle] ✅ Textarea updated with generated message')
         } else {
-          console.warn('[Sparkle] ⚠️ Textarea ref is null, could not write message to DOM')
         }
       } else {
-        console.warn('[Sparkle] ❌ gitGenerateCommitMessage returned null/empty — check [GitGen] logs above')
       }
     } catch (err) {
       console.error('[Sparkle] 💥 Unhandled error in handleGenerate:', err)
     } finally {
-      console.log('[Sparkle] 🔚 Finally block — resetting generatingRef & state')
       generatingRef.current = false
       setGenerating(false)
     }

@@ -37,7 +37,7 @@ import {
 } from '@/store/preview'
 
 import { PreviewPane } from './preview-pane'
-import { DiffPreview } from './diff-preview'
+import { LazyDiffPreview as DiffPreview } from './lazy-monaco'
 import { CodeReviewPanel } from './code-review'
 import { GitCommitPanel } from './git-commit'
 

@@ -56,7 +56,7 @@ import { ChatBar, ChatBarFallback } from './composer'
 import { requestComposerInsert, requestComposerInsertRefs } from './composer/focus'
 import { droppedFileInlineRef, type SessionDragPayload, sessionInlineRef } from './composer/inline-refs'
 import type { ChatBarState } from './composer/types'
-import type { DroppedFile } from './hooks/use-composer-actions'
+import { isWebEnvironment, uploadFileToServer, type DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
@@ -317,8 +317,21 @@ export function ChatView({
   // input — appending the same inline `@file:` ref chips the composer drop
   // produces (vs. attachment cards) so both surfaces behave identically.
   const onDropFiles = useCallback(
-    (candidates: DroppedFile[]) => {
-      const refs = candidates
+    async (candidates: DroppedFile[]) => {
+      const resolvedCandidates = isWebEnvironment()
+        ? await Promise.all(
+            candidates.map(async c => {
+              if (c.path) return c
+              if (c.file) {
+                const path = (await uploadFileToServer(c.file)) || ''
+                return { ...c, path }
+              }
+              return c
+            })
+          )
+        : candidates
+
+      const refs = resolvedCandidates
         .map(candidate => droppedFileInlineRef(candidate, currentCwd))
         .filter((ref): ref is string => Boolean(ref))
 

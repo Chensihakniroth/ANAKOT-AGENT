@@ -5,8 +5,8 @@ import type {
   ReactNode
 } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import ShikiHighlighter from 'react-shiki'
-import { MonacoEditorPane } from './monaco-editor-pane'
+import { ShikiHighlighter } from '@/lib/shiki'
+import { LazyMonacoEditorPane as MonacoEditorPane } from './lazy-monaco'
 import { Streamdown } from 'streamdown'
 
 import { Codicon } from '@/components/ui/codicon'

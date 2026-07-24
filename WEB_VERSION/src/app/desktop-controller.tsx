@@ -31,13 +31,15 @@ import {
   FILE_BROWSER_MIN_WIDTH,
   FILE_BROWSER_PANE_ID,
   pinSession,
+  RIGHT_RAIL_CODE_REVIEW_TAB_ID,
+  selectRightRailTab,
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_SESSIONS_PAGE_SIZE,
   unpinSession
 } from '../store/layout'
 import { $filePreviewTarget, $previewTarget, closeActiveRightRailTab } from '../store/preview'
-import { $codeReviewData } from '../store/code-review'
+import { $codeReviewData, scanForCodeReview, resetScanner } from '../store/code-review'
 import { $activeGatewayProfile, $freshSessionRequest, $newChatProfile, normalizeProfileKey, refreshActiveProfile } from '../store/profile'
 import {
   $activeSessionId,
@@ -45,6 +47,7 @@ import {
   $currentCwd,
   $freshDraftReady,
   $gatewayState,
+  $messages,
   $selectedStoredSessionId,
   $sessions,
   $workingSessionIds,
@@ -168,6 +171,7 @@ export function DesktopController() {
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const terminalTakeover = useStore($terminalTakeover)
   const panesFlipped = useStore($panesFlipped)
+  const messages = useStore($messages)
 
   // Track first connection — splash only shows on initial boot, not when
   // the connection blinks during reconnects.
@@ -176,6 +180,22 @@ export function DesktopController() {
       firstConnectionEstablished.current = true
     }
   }, [connection])
+
+  // Scan assistant messages for code-review JSON blocks.
+  // When found, populate the review store and auto-select the review tab.
+  useEffect(() => {
+    if (!messages || messages.length === 0) return
+    const found = scanForCodeReview(messages)
+    if (found) {
+      selectRightRailTab(RIGHT_RAIL_CODE_REVIEW_TAB_ID)
+    }
+  }, [messages])
+
+  // Reset the scanner's pointer when the active session changes so
+  // the new session's messages are scanned fresh.
+  useEffect(() => {
+    resetScanner()
+  }, [activeSessionId])
   const showSplash = !firstConnectionEstablished.current
 
   // Auth gate: when the server requires auth (e.g. Railway deploy),
