@@ -3415,8 +3415,40 @@ def _(rid, params: dict) -> dict:
         found = db.get_session_by_title(target)
         if found:
             target = found["id"]
-        else:
-            return _err(rid, 4007, "session not found")
+    # Fallback: when no profile was specified and the session isn't in the
+    # launch DB, scan all profile DBs.  This happens on page-reload resume
+    # before the frontend's session list (which carries the profile tag) has
+    # loaded, so the RPC arrives without a profile hint.
+    if not found and profile is None:
+        from anakot_cli import profiles as _profiles_mod
+        from anakot_state import SessionDB as _SessionDB
+
+        _profiles_root = Path(_anakot_home) / "profiles"
+        if _profiles_root.is_dir():
+            for _child in sorted(_profiles_root.iterdir()):
+                _sdb_path = _child / "state.db"
+                if not _sdb_path.exists():
+                    continue
+                try:
+                    _sdb = _SessionDB(db_path=_sdb_path)
+                    found = _sdb.get_session(target)
+                    if found:
+                        profile = _child.name
+                        profile_home = _child
+                        db = _sdb
+                        break
+                    found = _sdb.get_session_by_title(target)
+                    if found:
+                        profile = _child.name
+                        profile_home = _child
+                        db = _sdb
+                        target = found["id"]
+                        break
+                    _sdb.close()
+                except Exception:
+                    pass
+    if not found:
+        return _err(rid, 4007, "session not found")
     # Fast path: if the session is already live, reuse it under the lock.
     with _session_resume_lock:
         live = _find_live_session_by_key(target)
