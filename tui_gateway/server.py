@@ -1046,7 +1046,16 @@ def _load_cfg() -> dict:
             with open(p, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         else:
-            data = {}
+            # Profile has no config.yaml — fall back to root ANAKOT_HOME config
+            # so profiles without their own config inherit the global model/provider.
+            # _anakot_home is the module-level root home captured at import time,
+            # before any per-session profile override.
+            root_p = Path(_anakot_home) / "config.yaml"
+            if root_p.exists() and root_p != p:
+                with open(root_p, encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+            else:
+                data = {}
         with _cfg_lock:
             _cfg_cache = copy.deepcopy(data)
             _cfg_mtime = mtime
