@@ -948,7 +948,17 @@ export function DesktopController() {
   // would sit on top of AppShell and block the entire UI.
   if (!authRequired || (isAuthenticated && !onboardingLoading && !needsOnboarding)) {
     return (
-      <>
+      <div className="animate-fade-in-app" style={{ animation: 'fadeInApp 0.5s ease-out' }}>
+        <style>{`
+          @keyframes fadeInApp {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+          }
+          @keyframes authPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
         <SplashScreen loading={showSplash} />
         <AppShell
           activityBar={<ActivityBar />}
@@ -1010,50 +1020,33 @@ export function DesktopController() {
     </AppShell>
       <GatewayOfflineDialog />
       <PreviewMobileSheet onRestartServer={restartPreviewServer} />
-    </>
+      </div>
   )
   }
 
-  // Auth is required but we're still checking the session → branded loading
-  // screen so the user never sees a flash of the sign-in page.
-  if (authRequired && authLoading) {
+  // Not authenticated yet → show the sign-in page.
+  // While auth is still loading, show a minimal loading overlay instead so
+  // the user never sees a flash of the sign-in form.
+  if (authLoading) {
     return (
       <div
-        className="fixed inset-0 z-[1500] flex flex-col items-center justify-center transition-opacity duration-500"
+        className="fixed inset-0 z-[1500] flex items-center justify-center"
         style={{ backgroundColor: '#011627' }}
       >
-        <div className="relative mb-6 size-14">
-          <svg viewBox="0 0 48 48" fill="none" className="size-full" aria-hidden="true">
-            <rect width="48" height="48" rx="12" fill="var(--dt-primary, #3b82f6)" />
-            <path
-              d="M24 12c-6.627 0-12 4.477-12 10 0 3.126 1.627 5.92 4.167 7.77L14 32l4.8-2.4A13.5 13.5 0 0 0 24 30c6.627 0 12-4.477 12-10s-5.373-10-12-10Z"
-              fill="white"
-              opacity="0.9"
-            />
-            <path
-              d="M22 14l-2 8h3.5L22 28l7-8.5h-3.5L27 14Z"
-              fill="var(--dt-primary, #3b82f6)"
-              stroke="white"
-              strokeWidth="0.5"
-            />
-          </svg>
-        </div>
-        <h1 className="mb-1 text-lg font-semibold text-white">Anakot</h1>
-        <p className="mb-6 text-xs text-white/50">Signing in…</p>
-        <div className="flex items-center gap-1.5">
-          {[0, 1, 2].map((i) => (
+        <div className="flex items-center gap-2">
+          {[0, 1, 2, 3].map((i) => (
             <span
               key={i}
               className="size-1.5 rounded-full bg-white/40"
               style={{
-                animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                animation: `authPulse 1.4s ease-in-out ${i * 0.15}s infinite`,
               }}
             />
           ))}
         </div>
         <style>{`
-          @keyframes pulse {
-            0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+          @keyframes authPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
             40% { opacity: 1; transform: scale(1); }
           }
         `}</style>
@@ -1061,7 +1054,7 @@ export function DesktopController() {
     )
   }
 
-  // Not authenticated yet → show the sign-in page.
+  // Auth failed / session expired → show the sign-in page.
   return (
     <>
       <SignInPage
