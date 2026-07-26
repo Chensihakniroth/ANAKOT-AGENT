@@ -58,8 +58,12 @@ export const $notebookUploading = atom<boolean>(false);
 const API = "/api";
 
 async function fetchJSON<T>(url: string, opts?: RequestInit): Promise<T> {
+  const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ as string | undefined;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["X-Anakot-Session-Token"] = token;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers,
+    credentials: "include",
     ...opts,
   });
   if (!res.ok) {
@@ -140,8 +144,13 @@ export async function uploadSource(
   try {
     const form = new FormData();
     form.append("file", file);
+    const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ as string | undefined;
+    const headers: Record<string, string> = {};
+    if (token) headers["X-Anakot-Session-Token"] = token;
     const res = await fetch(`${API}/notebooks/${notebookId}/sources/upload`, {
       method: "POST",
+      headers,
+      credentials: "include",
       body: form,
     });
     if (!res.ok) {
