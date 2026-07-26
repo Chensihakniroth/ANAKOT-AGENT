@@ -25,10 +25,10 @@ interface NotebookViewProps {
 }
 
 export function NotebookView({ onClose }: NotebookViewProps) {
-  const notebooks = useStore($notebooks);
+  const notebooks = useStore($notebooks) ?? [];
   const currentNotebook = useStore($currentNotebook);
-  const loading = useStore($notebooksLoading);
-  const uploading = useStore($notebookUploading);
+  const loading = useStore($notebooksLoading) ?? false;
+  const uploading = useStore($notebookUploading) ?? false;
 
   const [urlInput, setUrlInput] = useState("");
   const [chatInput, setChatInput] = useState("");
@@ -43,6 +43,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   );
   const [sourceText, setSourceText] = useState<string>("");
   const [overview, setOverview] = useState<string>("");
+
+  const sources = currentNotebook?.sources ?? [];
 
   useEffect(() => {
     loadNotebooks();
@@ -112,7 +114,6 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       if (!currentNotebook) return;
       try {
         const ctx = await getNotebookContext(currentNotebook.id);
-        // Show first 5000 chars of the source's extracted text as preview
         setSourceText(ctx.text.slice(0, 5000));
       } catch {
         setSourceText("(unable to load source text)");
@@ -127,13 +128,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       const ctx = await getNotebookContext(currentNotebook.id);
       setOverview(
         ctx.char_count > 0
-          ? `Combined context: ${ctx.char_count.toLocaleString()} characters from ${currentNotebook.sources.length} source(s).`
+          ? `Combined context: ${ctx.char_count.toLocaleString()} characters from ${sources.length} source(s).`
           : "No sources yet."
       );
     } catch {
       setOverview("(unable to load overview)");
     }
-  }, [currentNotebook]);
+  }, [currentNotebook, sources.length]);
 
   const handleChat = useCallback(async () => {
     if (!chatInput.trim() || !currentNotebook) return;
@@ -143,13 +144,10 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     setChatLoading(true);
     try {
       const ctx = await getNotebookContext(currentNotebook.id);
-      // Build a grounded prompt
-      const systemMsg = `You are a helpful research assistant. Answer questions based ONLY on the provided source documents. If the answer isn't in the sources, say so. Always cite which source(s) you're referencing.\n\n--- SOURCE DOCUMENTS ---\n${ctx.text.slice(0, 50000)}\n--- END SOURCES ---`;
 
-      // Use gateway WebSocket for actual AI response — for now, echo context info
       const response =
         ctx.char_count > 0
-          ? `[Notebook chat — ${ctx.char_count.toLocaleString()} chars of context loaded]\n\nBased on ${currentNotebook.sources.length} source(s), here's what I can tell you about "${question}":\n\n(Deep AI analysis will be connected via gateway WebSocket in the next iteration.)`
+          ? `[Notebook chat — ${ctx.char_count.toLocaleString()} chars of context loaded]\n\nBased on ${sources.length} source(s), here's what I can tell you about "${question}":\n\n(Deep AI analysis will be connected via gateway WebSocket in the next iteration.)`
           : "No sources loaded yet. Please upload some documents first.";
 
       setChatMessages((prev) => [
@@ -167,7 +165,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, currentNotebook]);
+  }, [chatInput, currentNotebook, sources.length]);
 
   // ── Notebook list view (no notebook selected) ──────────────────────────
   if (!currentNotebook) {
@@ -235,7 +233,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                   </button>
                 </div>
                 <p className="text-sm text-(--ui-text-tertiary)">
-                  {nb.source_count} source{nb.source_count !== 1 ? "s" : ""}
+                  {(nb.sources ?? []).length} source{(nb.sources ?? []).length !== 1 ? "s" : ""}
                 </p>
                 <p className="mt-1 text-xs text-(--ui-text-tertiary)">
                   {new Date(nb.created_at).toLocaleDateString()}
@@ -335,12 +333,12 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
         {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">
-          {currentNotebook.sources.length === 0 ? (
+          {sources.length === 0 ? (
             <p className="p-2 text-center text-xs text-(--ui-text-tertiary)">
               No sources yet
             </p>
           ) : (
-            currentNotebook.sources.map((src) => (
+            sources.map((src) => (
               <div
                 key={src.id}
                 className={`group flex items-center justify-between rounded p-2 text-xs cursor-pointer transition-colors ${
@@ -356,7 +354,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                     {src.original_name}
                   </div>
                   <div className="text-[10px] text-(--ui-text-tertiary)">
-                    {src.word_count.toLocaleString()} words
+                    {(src.word_count ?? 0).toLocaleString()} words
                   </div>
                 </div>
                 <button
@@ -383,7 +381,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             <div className="flex h-full flex-col items-center justify-center text-(--ui-text-tertiary)">
               <div className="mb-3 text-3xl">💬</div>
               <p className="text-sm">
-                Ask questions about your {currentNotebook.sources.length} source(s)
+                Ask questions about your {sources.length} source(s)
               </p>
             </div>
           ) : (
@@ -414,7 +412,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleChat()}
-              placeholder={`Ask about your sources...`}
+              placeholder="Ask about your sources..."
               className="flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
               disabled={chatLoading}
             />
@@ -432,7 +430,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
       {/* Right panel: Source preview / Overview */}
       <div className="flex w-72 flex-col border-l border-(--ui-stroke-secondary)">
-        <div className="flex items-center justify-between border-b border(--ui-stroke-secondary) p-3">
+        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
             {selectedSource ? "Source Preview" : "Overview"}
           </span>
@@ -454,9 +452,9 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               </h4>
               <div className="mb-2 space-y-1 text-[10px] text-(--ui-text-tertiary)">
                 <div>Type: {selectedSource.source_type}</div>
-                <div>Words: {selectedSource.word_count.toLocaleString()}</div>
-                <div>Chars: {selectedSource.char_count.toLocaleString()}</div>
-                {selectedSource.page_count > 0 && (
+                <div>Words: {(selectedSource.word_count ?? 0).toLocaleString()}</div>
+                <div>Chars: {(selectedSource.char_count ?? 0).toLocaleString()}</div>
+                {(selectedSource.page_count ?? 0) > 0 && (
                   <div>Pages: {selectedSource.page_count}</div>
                 )}
               </div>
