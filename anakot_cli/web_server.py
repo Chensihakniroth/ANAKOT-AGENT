@@ -240,9 +240,18 @@ def _require_admin(request: Request) -> None:
 
 
 def _require_token(request: Request) -> None:
-    """Validate the ephemeral session token.  Raises 401 on mismatch."""
-    if not _has_valid_session_token(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    """Validate the session — either via OAuth cookie (already set by the
+    gated middleware) or via the legacy ephemeral session token header.
+    Raises 401 if neither is present."""
+    # In OAuth mode the middleware already verified the session cookie and
+    # attached it to request.state.session.  Trust it.
+    if getattr(request.app.state, "auth_required", False):
+        if getattr(request.state, "session", None) is not None:
+            return  # OAuth middleware already authenticated this request
+    # Fallback: legacy loopback / insecure mode via session header
+    if _has_valid_session_token(request):
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _get_session_user_id(request: Request) -> str | None:
