@@ -25,6 +25,7 @@ import {
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
+import { notify, notifyError } from "@/store/notifications";
 
 interface NotebookViewProps {
   onClose: () => void;
@@ -42,6 +43,10 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     Array<{ role: "user" | "assistant"; content: string }>
   >([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState("");
   const [selectedSource, setSelectedSource] = useState<NotebookSource | null>(
@@ -76,9 +81,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   const handleDeleteNotebook = useCallback(
     async (id: string) => {
-      if (confirm("Delete this notebook and all its sources?")) {
-        await deleteNotebook(id);
-      }
+      setConfirmDialog({
+        message: "Delete this notebook and all its sources?",
+        onConfirm: async () => {
+          await deleteNotebook(id);
+          notify({ kind: "success", message: "Notebook deleted" });
+        },
+      });
     },
     []
   );
@@ -119,13 +128,17 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const handleDeleteSource = useCallback(
     async (sourceId: string) => {
       if (!currentNotebook) return;
-      if (confirm("Remove this source?")) {
-        await deleteSource(currentNotebook.id, sourceId);
-        if (selectedSource?.id === sourceId) {
-          setSelectedSource(null);
-          setSourceText("");
-        }
-      }
+      setConfirmDialog({
+        message: "Remove this source?",
+        onConfirm: async () => {
+          await deleteSource(currentNotebook.id, sourceId);
+          if (selectedSource?.id === sourceId) {
+            setSelectedSource(null);
+            setSourceText("");
+          }
+          notify({ kind: "success", message: "Source removed" });
+        },
+      });
     },
     [currentNotebook, selectedSource]
   );
@@ -138,9 +151,9 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       const result = await reExtractSources(currentNotebook.id);
       // Reload notebook to pick up updated word counts
       await loadNotebook(currentNotebook.id);
-      alert(`Re-extracted ${result.re_extracted} source(s)`);
+      notify({ kind: "success", message: `Re-extracted ${result.re_extracted} source(s)` });
     } catch (err) {
-      alert(`Re-extract failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+      notifyError(err, "Re-extract failed");
     } finally {
       setReExtracting(false);
     }
@@ -382,9 +395,12 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                 try {
                   const r = await summarizeNotebook(currentNotebook.id);
                   await loadNotebook(currentNotebook.id);
-                  alert(r.summarized > 0 ? `Summarized ${r.summarized} source(s)` : "All sources already have summaries");
+                  notify({
+                    kind: r.summarized > 0 ? "success" : "info",
+                    message: r.summarized > 0 ? `Summarized ${r.summarized} source(s)` : "All sources already have summaries",
+                  });
                 } catch (err) {
-                  alert(`Summarize failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                  notifyError(err, "Summarize failed");
                 } finally {
                   setSummarizing(false);
                 }
@@ -568,6 +584,37 @@ export function NotebookView({ onClose }: NotebookViewProps) {
           )}
         </div>
       </div>
+
+      {/* Custom confirm dialog */}
+      {confirmDialog && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-5 shadow-lg">
+            <p className="mb-4 text-sm text-(--ui-text-primary)">
+              {confirmDialog.message}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  await action();
+                }}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+                type="button"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
