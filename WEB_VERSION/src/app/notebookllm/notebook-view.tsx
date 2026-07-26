@@ -17,6 +17,7 @@ import {
   addUrlSource,
   deleteSource,
   getNotebookContext,
+  reExtractSources,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 
@@ -107,6 +108,22 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     },
     [currentNotebook, selectedSource]
   );
+
+  const [reExtracting, setReExtracting] = useState(false);
+  const handleReExtract = useCallback(async () => {
+    if (!currentNotebook) return;
+    setReExtracting(true);
+    try {
+      const result = await reExtractSources(currentNotebook.id);
+      // Reload notebook to pick up updated word counts
+      await loadNotebook(currentNotebook.id);
+      alert(`Re-extracted ${result.re_extracted} source(s)`);
+    } catch (err) {
+      alert(`Re-extract failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setReExtracting(false);
+    }
+  }, [currentNotebook]);
 
   const handleSelectSource = useCallback(
     async (src: NotebookSource) => {
@@ -330,6 +347,20 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             </button>
           </div>
         </div>
+
+        {/* Re-extract button (shows when sources have 0 words — failed extraction) */}
+        {sources.length > 0 && sources.some((s) => (s.word_count ?? 0) === 0) && (
+          <div className="border-b border-(--ui-stroke-secondary) p-3">
+            <button
+              onClick={handleReExtract}
+              disabled={reExtracting}
+              className="w-full rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/20 disabled:opacity-50"
+              type="button"
+            >
+              {reExtracting ? "⏳ Re-extracting..." : "⚠️ Re-extract text (sources have 0 words)"}
+            </button>
+          </div>
+        )}
 
         {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">

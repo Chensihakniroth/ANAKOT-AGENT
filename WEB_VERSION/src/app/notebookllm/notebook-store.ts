@@ -229,3 +229,13 @@ export async function getNotebookOverview(
     `${API}/notebooks/${notebookId}/overview`
   );
 }
+
+/** Re-extract text from sources that have empty extracted text (fixes failed PDF extractions) */
+export async function reExtractSources(
+  notebookId: string
+): Promise<{ re_extracted: number }> {
+  return fetchJSON<{ re_extracted: number }>(
+    `${API}/notebooks/${notebookId}/re-extract`,
+    { method: "POST" }
+  );
+}

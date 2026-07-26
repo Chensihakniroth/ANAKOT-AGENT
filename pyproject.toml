@@ -99,6 +99,8 @@ dependencies = [
   # install rather than gating it behind an extra + a mid-session lazy install
   # (which deadlocked the CLI under prompt_toolkit — see #40490).
   "Pillow==12.2.0",
+  # PDF text extraction for NotebookLLM
+  "pymupdf==1.28.0",
 ]
 
 [project.optional-dependencies]

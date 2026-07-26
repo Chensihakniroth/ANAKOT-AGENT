@@ -10733,6 +10733,49 @@ async def notebook_get_context(notebook_id: str):
     return {"text": text, "char_count": len(text)}
 
 
+@app.post("/api/notebooks/{notebook_id}/re-extract")
+async def notebook_re_extract(notebook_id: str):
+    """Re-extract text from all sources that have empty extracted text.
+    Useful after pymupdf is installed to fix previously uploaded PDFs."""
+    import sqlite3 as _sq
+    db_path = _notebooks_root() / notebook_id / "metadata.db"
+    if not db_path.exists():
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    db = _sq.connect(str(db_path))
+    db.row_factory = _sq.Row
+    rows = db.execute(
+        "SELECT id, filename, file_path, source_type FROM source "
+        "WHERE notebook_id = ? AND (extracted_text IS NULL OR extracted_text = '')",
+        (notebook_id,),
+    ).fetchall()
+    re_extracted = 0
+    for row in rows:
+        fp = row["file_path"]
+        if not fp or not os.path.exists(fp):
+            continue
+        if row["source_type"] == "pdf":
+            text, pages = _nb_extract_pdf(fp)
+        else:
+            try:
+                text = open(fp, "r", encoding="utf-8").read()
+            except Exception:
+                try:
+                    text = open(fp, "r", encoding="latin-1").read()
+                except Exception:
+                    continue
+            pages = max(1, len(text.split()) // 300)
+        if text.strip():
+            word_count = len(text.split())
+            char_count = len(text)
+            db.execute(
+                "UPDATE source SET extracted_text=?, word_count=?, char_count=?, page_count=? WHERE id=?",
+                (text, word_count, char_count, pages, row["id"]),
+            )
+            re_extracted += 1
+    db.commit()
+    db.close()
+    return {"re_extracted": re_extracted}
+
 @app.get("/api/notebooks/{notebook_id}/overview")
 async def notebook_get_overview(notebook_id: str):
     """Get notebook overview with all source summaries."""
