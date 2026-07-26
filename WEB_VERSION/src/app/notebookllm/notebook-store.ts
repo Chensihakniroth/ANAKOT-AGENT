@@ -275,3 +275,41 @@ export async function summarizeNotebook(
     }
   );
 }
+
+/** Load chat history for a notebook */
+export async function loadChatHistory(
+  notebookId: string
+): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+  const result = await fetchJSON<{ messages: Array<{ role: string; content: string }> }>(
+    `${API}/notebooks/${notebookId}/chat-history`
+  );
+  return result.messages.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+}
+
+/** Save a single chat message to history */
+export async function saveChatMessage(
+  notebookId: string,
+  role: "user" | "assistant",
+  content: string
+): Promise<void> {
+  await fetchJSON<{ ok: boolean }>(
+    `${API}/notebooks/${notebookId}/chat-history`,
+    {
+      method: "POST",
+      body: JSON.stringify({ role, content }),
+    }
+  );
+}
+
+/** Clear all chat history for a notebook */
+export async function clearChatHistory(
+  notebookId: string
+): Promise<void> {
+  await fetchJSON<{ ok: boolean }>(
+    `${API}/notebooks/${notebookId}/chat-history/clear`,
+    { method: "POST" }
+  );
+}

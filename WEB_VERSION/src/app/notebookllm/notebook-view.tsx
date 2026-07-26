@@ -20,6 +20,8 @@ import {
   reExtractSources,
   chatNotebook,
   summarizeNotebook,
+  loadChatHistory,
+  saveChatMessage,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
@@ -60,10 +62,16 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   const handleSelectNotebook = useCallback(async (nb: Notebook) => {
     await loadNotebook(nb.id);
-    setChatMessages([]);
     setSelectedSource(null);
     setSourceText("");
     setOverview("");
+    // Load persisted chat history
+    try {
+      const history = await loadChatHistory(nb.id);
+      setChatMessages(history);
+    } catch {
+      setChatMessages([]);
+    }
   }, []);
 
   const handleDeleteNotebook = useCallback(
@@ -170,18 +178,23 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     if (!chatInput.trim() || !currentNotebook) return;
     const question = chatInput.trim();
     setChatInput("");
-    setChatMessages((prev) => [...prev, { role: "user", content: question }]);
+    // Build history including the new user message immediately
+    const userMsg = { role: "user" as const, content: question };
+    const updatedMessages = [...chatMessages, userMsg];
+    setChatMessages(updatedMessages);
+    // Persist user message
+    saveChatMessage(currentNotebook.id, "user", question).catch(() => {});
     setChatLoading(true);
     try {
       const result = await chatNotebook(
         currentNotebook.id,
         question,
-        chatMessages
+        updatedMessages
       );
-      setChatMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: result.response },
-      ]);
+      const assistantMsg = { role: "assistant" as const, content: result.response };
+      setChatMessages((prev) => [...prev, assistantMsg]);
+      // Persist assistant message
+      saveChatMessage(currentNotebook.id, "assistant", result.response).catch(() => {});
     } catch (err) {
       setChatMessages((prev) => [
         ...prev,

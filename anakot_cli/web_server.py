@@ -10494,6 +10494,9 @@ from anakot_cli.notebooks import (
     extract_pdf_text as _nb_extract_pdf,
     extract_text_content as _nb_extract_text,
     _notebooks_root as _nb_root,
+    save_chat_message as _nb_save_chat,
+    load_chat_history as _nb_load_chat,
+    clear_chat_history as _nb_clear_chat,
 )
 
 
@@ -10969,6 +10972,51 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
 
 # ---------------------------------------------------------------------------
 # NotebookLLM — Auto-summarize endpoint
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Notebook chat history
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/notebooks/{notebook_id}/chat-history")
+async def notebook_chat_history(notebook_id: str, request: Request):
+    """Load chat history for a notebook."""
+    _require_token(request)
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    messages = _nb_load_chat(notebook_id)
+    return {"messages": messages}
+
+
+@app.post("/api/notebooks/{notebook_id}/chat-history")
+async def notebook_save_chat_message(notebook_id: str, request: Request):
+    """Save a single chat message to history."""
+    _require_token(request)
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    body = await request.json()
+    role = body.get("role", "user")
+    msg_content = body.get("content", "")
+    if not msg_content:
+        raise HTTPException(status_code=400, detail="Content required")
+    _nb_save_chat(notebook_id, role, msg_content)
+    return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/chat-history/clear")
+async def notebook_clear_chat_history(notebook_id: str, request: Request):
+    """Clear all chat history for a notebook."""
+    _require_token(request)
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    _nb_clear_chat(notebook_id)
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 
 class SummarizeRequest(BaseModel):

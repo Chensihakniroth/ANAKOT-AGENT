@@ -84,6 +84,15 @@ def _init_db(db: sqlite3.Connection) -> None:
             FOREIGN KEY (notebook_id) REFERENCES notebook(id)
         );
         CREATE INDEX IF NOT EXISTS idx_source_notebook ON source(notebook_id);
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            notebook_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (notebook_id) REFERENCES notebook(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_notebook ON chat_history(notebook_id);
     """
     )
     db.commit()
@@ -361,6 +370,47 @@ def get_all_extracted_text(
         total += len(header) + len(truncated)
 
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Chat history
+# ---------------------------------------------------------------------------
+
+
+def save_chat_message(notebook_id: str, role: str, content: str) -> None:
+    """Save a chat message to the notebook's history."""
+    db = _get_db(notebook_id)
+    _init_db(db)
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        "INSERT INTO chat_history (notebook_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+        (notebook_id, role, content, now),
+    )
+    db.commit()
+    db.close()
+
+
+def load_chat_history(notebook_id: str, limit: int = 100) -> list:
+    """Load chat history for a notebook, oldest first."""
+    db = _get_db(notebook_id)
+    _init_db(db)
+    rows = db.execute(
+        "SELECT role, content, created_at FROM chat_history WHERE notebook_id = ? ORDER BY id DESC LIMIT ?",
+        (notebook_id, limit),
+    ).fetchall()
+    db.close()
+    messages = [{"role": r["role"], "content": r["content"], "created_at": r["created_at"]} for r in rows]
+    messages.reverse()  # oldest first
+    return messages
+
+
+def clear_chat_history(notebook_id: str) -> None:
+    """Clear all chat history for a notebook."""
+    db = _get_db(notebook_id)
+    _init_db(db)
+    db.execute("DELETE FROM chat_history WHERE notebook_id = ?", (notebook_id,))
+    db.commit()
+    db.close()
 
 
 # ---------------------------------------------------------------------------
