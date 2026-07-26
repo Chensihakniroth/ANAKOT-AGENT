@@ -10466,6 +10466,299 @@ async def upload_attachment(file: UploadFile):
     }
 
 
+# ---------------------------------------------------------------------------
+# NotebookLLM API routes
+# ---------------------------------------------------------------------------
+
+from anakot_cli.notebooks import (
+    create_notebook as _nb_create,
+    list_notebooks as _nb_list,
+    get_notebook as _nb_get,
+    delete_notebook as _nb_delete,
+    rename_notebook as _nb_rename,
+    add_source as _nb_add_source,
+    get_source as _nb_get_source,
+    get_source_text as _nb_get_source_text,
+    update_source_summary as _nb_update_source_summary,
+    delete_source as _nb_delete_source,
+    get_all_extracted_text as _nb_get_all_text,
+    extract_pdf_text as _nb_extract_pdf,
+    extract_text_content as _nb_extract_text,
+)
+
+
+class NotebookCreate(BaseModel):
+    title: str = "Untitled Notebook"
+
+
+class NotebookRename(BaseModel):
+    title: str
+
+
+class SourceUrl(BaseModel):
+    url: str
+
+
+class NotebookChatRequest(BaseModel):
+    notebook_id: str
+    question: str
+
+
+@app.get("/api/notebooks")
+async def notebook_list():
+    """List all notebooks."""
+    return {"notebooks": _nb_list()}
+
+
+@app.post("/api/notebooks")
+async def notebook_create(body: NotebookCreate):
+    """Create a new notebook."""
+    nb = _nb_create(body.title)
+    return nb
+
+
+@app.get("/api/notebooks/{notebook_id}")
+async def notebook_get(notebook_id: str):
+    """Get notebook details with sources."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return nb
+
+
+@app.put("/api/notebooks/{notebook_id}")
+async def notebook_update(notebook_id: str, body: NotebookRename):
+    """Rename a notebook."""
+    ok = _nb_rename(notebook_id, body.title)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return {"ok": True}
+
+
+@app.delete("/api/notebooks/{notebook_id}")
+async def notebook_delete(notebook_id: str):
+    """Delete a notebook and all its sources."""
+    ok = _nb_delete(notebook_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/sources/upload")
+async def notebook_upload_source(notebook_id: str, file: UploadFile):
+    """Upload a file (PDF, TXT, MD, CSV) as a source."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    original_name = (file.filename or "file").strip()
+    ext = Path(original_name).suffix.lower()
+
+    # Read content
+    content_bytes = await file.read()
+
+    # Determine source type and extract text
+    source_type = "text"
+    extracted_text = ""
+    page_count = 0
+
+    if ext == ".pdf":
+        source_type = "pdf"
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content_bytes)
+            tmp_path = tmp.name
+        try:
+            extracted_text, page_count = _nb_extract_pdf(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+    elif ext in (
+        ".txt", ".md", ".csv", ".json", ".log",
+        ".py", ".js", ".ts", ".html", ".css",
+    ):
+        source_type = "text"
+        try:
+            extracted_text = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            extracted_text = content_bytes.decode("latin-1")
+        extracted_text, page_count = _nb_extract_text(extracted_text)
+    else:
+        # Try as text
+        try:
+            extracted_text = content_bytes.decode("utf-8")
+            source_type = "text"
+            extracted_text, page_count = _nb_extract_text(extracted_text)
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Supported: .pdf, .txt, .md, .csv, .json, .py, .js, .ts",
+            )
+
+    # Save to notebook
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_name = f"{stamp}_{_uuid.uuid4().hex[:6]}{ext}"
+    word_count = len(extracted_text.split())
+    char_count = len(extracted_text)
+
+    source = _nb_add_source(
+        notebook_id=notebook_id,
+        filename=safe_name,
+        original_name=original_name,
+        source_type=source_type,
+        content_bytes=content_bytes,
+        extracted_text=extracted_text,
+        page_count=page_count,
+        word_count=word_count,
+        char_count=char_count,
+    )
+    return source
+
+
+@app.post("/api/notebooks/{notebook_id}/sources/url")
+async def notebook_add_url_source(notebook_id: str, body: SourceUrl):
+    """Add a URL as a source - fetches and extracts content."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Fetch URL content using urllib (lightweight, no external deps)
+    try:
+        import urllib.request
+        import urllib.error
+
+        req = urllib.request.Request(
+            body.url, headers={"User-Agent": "Anakot-NotebookLLM/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read()
+            # Try UTF-8 first
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                content = raw.decode("latin-1")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+
+    # Basic HTML to text stripping
+    if "<html" in content.lower()[:500]:
+        import re
+
+        # Remove scripts and styles
+        content = re.sub(
+            r"<script[^>]*>.*?</script>", "", content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        content = re.sub(
+            r"<style[^>]*>.*?</style>", "", content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        # Remove tags
+        content = re.sub(r"<[^>]+>", " ", content)
+        # Collapse whitespace
+        content = re.sub(r"\s+", " ", content).strip()
+
+    extracted_text, page_count = _nb_extract_text(content)
+    word_count = len(extracted_text.split())
+    char_count = len(extracted_text)
+
+    # Derive filename from URL
+    from urllib.parse import urlparse
+
+    parsed = urlparse(body.url)
+    filename_part = (
+        parsed.path.strip("/").split("/")[-1]
+        if parsed.path.strip("/")
+        else parsed.netloc
+    )
+    safe_name = f"url_{filename_part[:50]}_{_uuid.uuid4().hex[:6]}.txt"
+
+    source = _nb_add_source(
+        notebook_id=notebook_id,
+        filename=safe_name,
+        original_name=body.url,
+        source_type="url",
+        content_bytes=content.encode("utf-8"),
+        extracted_text=extracted_text,
+        page_count=page_count,
+        word_count=word_count,
+        char_count=char_count,
+        url=body.url,
+    )
+    return source
+
+
+@app.get("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_get_source(notebook_id: str, source_id: str):
+    """Get source details."""
+    src = _nb_get_source(notebook_id, source_id)
+    if not src:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return src
+
+
+@app.get("/api/notebooks/{notebook_id}/sources/{source_id}/text")
+async def notebook_get_source_text(notebook_id: str, source_id: str):
+    """Get extracted text for a source."""
+    text = _nb_get_source_text(notebook_id, source_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"text": text}
+
+
+@app.put("/api/notebooks/{notebook_id}/sources/{source_id}/summary")
+async def notebook_update_summary(
+    notebook_id: str, source_id: str, body: dict
+):
+    """Update a source's summary (called after AI generates it)."""
+    ok = _nb_update_source_summary(notebook_id, source_id, body.get("summary", ""))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
+
+
+@app.delete("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_delete_source(notebook_id: str, source_id: str):
+    """Delete a source from a notebook."""
+    ok = _nb_delete_source(notebook_id, source_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
+
+
+@app.get("/api/notebooks/{notebook_id}/context")
+async def notebook_get_context(notebook_id: str):
+    """Get combined extracted text from all sources (for grounding chat)."""
+    text = _nb_get_all_text(notebook_id)
+    return {"text": text, "char_count": len(text)}
+
+
+@app.get("/api/notebooks/{notebook_id}/overview")
+async def notebook_get_overview(notebook_id: str):
+    """Get notebook overview with all source summaries."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    # Combine summaries
+    summaries = []
+    for src in nb.get("sources", []):
+        if src.get("summary"):
+            summaries.append(
+                f"**{src['original_name']}**: {src['summary']}"
+            )
+    return {
+        "notebook_id": notebook_id,
+        "title": nb["title"],
+        "source_count": len(nb.get("sources", [])),
+        "summaries": summaries,
+        "combined": (
+            "\n\n".join(summaries)
+            if summaries
+            else "No summaries yet. Upload sources and generate summaries."
+        ),
+    }
+
+
 mount_spa(app)
 
 
