@@ -95,7 +95,7 @@ export function loadPetThumb(request: GatewayRequest, slug: string, url?: string
   let pending = thumbCache.get(slug)
 
   if (!pending) {
-    pending = petRpc<{ ok: boolean; dataUri?: string }>(request, 'pet.thumb', { slug, url: url ?? '' })
+    pending = petRpc<{ ok: boolean; dataUri?: string }>(request, 'pet.thumb', { slug, sourceUrl: url ?? '' })
       .then(result => (result?.ok && result.dataUri ? result.dataUri : null))
       .catch(() => null)
     thumbCache.set(slug, pending)
