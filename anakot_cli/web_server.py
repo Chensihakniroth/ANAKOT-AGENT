@@ -10801,9 +10801,286 @@ async def notebook_get_overview(notebook_id: str):
         "combined": (
             "\n\n".join(summaries)
             if summaries
-            else "No summaries yet. Upload sources and generate summaries."
+            else "No sources yet. Upload sources and generate summaries."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Chat endpoint (context-grounded AI)
+# ---------------------------------------------------------------------------
+
+class NotebookChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict[str, str]]] = None  # [{role, content}, ...]
+
+
+@app.post("/api/notebooks/{notebook_id}/chat")
+async def notebook_chat(notebook_id: str, body: NotebookChatRequest):
+    """Chat with the AI grounded in notebook document context.
+
+    Fetches extracted text from all sources, injects it as system context,
+    and proxies to the configured AI provider.
+    """
+    _require_token(request)
+
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Build context from all sources
+    context_text = _nb_get_all_text(notebook_id)
+    if not context_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No extracted text in this notebook. Upload documents first.",
+        )
+
+    # Truncate to ~80k chars (roughly 20k tokens) to stay within context limits
+    max_context_chars = 80_000
+    if len(context_text) > max_context_chars:
+        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+
+    # Build messages
+    source_names = [s["original_name"] for s in nb.get("sources", [])]
+    sources_list = ", ".join(source_names)
+    system_prompt = (
+        f"You are a helpful research assistant. The user has uploaded "
+        f"{len(source_names)} document(s) to a notebook: [{sources_list}].\n\n"
+        f"Below is the extracted text from these documents. Use this content "
+        f"as your primary source of knowledge when answering the user's "
+        f"question. Cite specific documents when possible.\n\n"
+        f"<document_context>\n{context_text}\n</document_context>"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    # Add conversation history if provided (max 20 turns)
+    if body.history:
+        for h in body.history[-20:]:
+            if h.get("role") in ("user", "assistant"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": body.message})
+
+    # Resolve provider config (same pattern as proxy_chat_completions)
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+
+    # Normalize provider aliases
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "opencode-go": "opencode-go",
+        "google": "gemini", "google-gemini-cli": "gemini", "gemini-cli": "gemini",
+        "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "github": "copilot", "github-copilot": "copilot",
+        "llama.cpp": "custom", "ollama": "custom", "vllm": "custom",
+        "lmstudio": "custom", "lm-studio": "custom",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com",
+        "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai",
+        "copilot": "https://api.githubcopilot.com",
+        "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        env_base_url_var = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(env_base_url_var, "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+
+    # Find API key
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY")
+        or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No API key for provider '{provider_name}'. Check your .env.",
+        )
+
+    # Build request body
+    req_body = {
+        "model": model_name or "gpt-4o",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 4096,
+    }
+
+    # Forward to provider
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    target_url = f"{base_url}/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            resp = await client.post(target_url, json=req_body, headers=headers)
+        if resp.status_code != 200:
+            detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+            raise HTTPException(status_code=502, detail=f"Provider error: {detail}")
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        return {"response": content, "model": req_body["model"]}
+    except httpx.ConnectError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot connect to provider: {exc}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Provider request timed out")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.exception("Notebook chat proxy failed")
+        raise HTTPException(status_code=502, detail=f"Provider request failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Auto-summarize endpoint
+# ---------------------------------------------------------------------------
+
+class SummarizeRequest(BaseModel):
+    source_id: Optional[str] = None  # None = summarize all sources
+
+
+@app.post("/api/notebooks/{notebook_id}/summarize")
+async def notebook_summarize(notebook_id: str, body: SummarizeRequest):
+    """Generate AI summaries for sources that don't have one yet.
+
+    If source_id is provided, summarize just that source.
+    Otherwise, summarize all sources without summaries.
+    """
+    _require_token(request)
+
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Resolve provider (reuse same pattern)
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "google": "gemini", "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "deepseek": "deepseek", "opencode": "opencode",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com", "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai", "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        base_url = os.getenv(f"{provider_name.upper()}_BASE_URL", "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY") or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY") or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        raise HTTPException(status_code=502, detail=f"No API key for '{provider_name}'")
+
+    # Determine which sources to summarize
+    import sqlite3 as _sq
+    db_path = _nb_root() / notebook_id / "metadata.db"
+    db = _sq.connect(str(db_path))
+    db.row_factory = _sq.Row
+    if body.source_id:
+        rows = db.execute(
+            "SELECT id, filename, extracted_text, source_type FROM source "
+            "WHERE id = ? AND notebook_id = ?",
+            (body.source_id, notebook_id),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT id, filename, extracted_text, source_type FROM source "
+            "WHERE notebook_id = ? AND (summary IS NULL OR summary = '') "
+            "AND extracted_text IS NOT NULL AND extracted_text != ''",
+            (notebook_id,),
+        ).fetchall()
+
+    if not rows:
+        db.close()
+        return {"summarized": 0, "message": "No sources need summarization"}
+
+    import httpx
+    summarized = 0
+    target_url = f"{base_url.rstrip('/')}/v1/chat/completions" if not base_url.endswith("/v1") else f"{base_url}/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+
+    for row in rows:
+        text = row["extracted_text"] or ""
+        if not text.strip():
+            continue
+        # Truncate source text for summary generation
+        truncated = text[:30_000]
+        summary_prompt = (
+            f"Generate a concise 2-3 sentence summary of the following document. "
+            f"Focus on the main topic, key points, and any conclusions.\n\n"
+            f"Document: {row['filename']}\n\n{truncated}"
+        )
+        req_body = {
+            "model": model_name or "gpt-4o",
+            "messages": [{"role": "user", "content": summary_prompt}],
+            "temperature": 0.2,
+            "max_tokens": 500,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                resp = await client.post(target_url, json=req_body, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                summary = data["choices"][0]["message"]["content"].strip()
+                db.execute(
+                    "UPDATE source SET summary = ? WHERE id = ?",
+                    (summary, row["id"]),
+                )
+                summarized += 1
+        except Exception as e:
+            _log.warning(f"Summarize failed for {row['filename']}: {e}")
+            continue
+
+    db.commit()
+    db.close()
+    return {"summarized": summarized}
 
 
 mount_spa(app)

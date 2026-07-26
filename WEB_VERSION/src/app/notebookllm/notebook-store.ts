@@ -237,3 +237,32 @@ export async function reExtractSources(
     { method: "POST" }
   );
 }
+
+/** Chat with AI grounded in notebook document context */
+export async function chatNotebook(
+  notebookId: string,
+  message: string,
+  history: Array<{ role: "user" | "assistant"; content: string }> = []
+): Promise<{ response: string; model: string }> {
+  return fetchJSON<{ response: string; model: string }>(
+    `${API}/notebooks/${notebookId}/chat`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message, history }),
+    }
+  );
+}
+
+/** Generate AI summaries for sources without one */
+export async function summarizeNotebook(
+  notebookId: string,
+  sourceId?: string
+): Promise<{ summarized: number; message?: string }> {
+  return fetchJSON<{ summarized: number; message?: string }>(
+    `${API}/notebooks/${notebookId}/summarize`,
+    {
+      method: "POST",
+      body: JSON.stringify({ source_id: sourceId ?? null }),
+    }
+  );
+}

@@ -81,9 +81,9 @@ class TestNotebookCRUD:
 
     def test_delete_notebook_not_found(self):
         from anakot_cli.notebooks import delete_notebook
-        # Implementation returns True for nonexistent (rmtree no-ops)
+        # Returns False for nonexistent notebook (no directory to delete)
         result = delete_notebook("nope")
-        assert result is True
+        assert result is False
 
     def test_delete_cleans_directory(self):
         from anakot_cli.notebooks import delete_notebook, _notebook_dir

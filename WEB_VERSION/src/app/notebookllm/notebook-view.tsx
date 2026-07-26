@@ -18,6 +18,8 @@ import {
   deleteSource,
   getNotebookContext,
   reExtractSources,
+  chatNotebook,
+  summarizeNotebook,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 
@@ -79,12 +81,22 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     }
   }, [currentNotebook, titleInput]);
 
+  const [summarizing, setSummarizing] = useState(false);
+
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !currentNotebook) return;
       await uploadSource(currentNotebook.id, file);
       e.target.value = "";
+      // Auto-summarize sources that don't have summaries
+      setSummarizing(true);
+      summarizeNotebook(currentNotebook.id)
+        .then((r) => {
+          if (r.summarized > 0) loadNotebook(currentNotebook.id);
+        })
+        .catch(() => {})
+        .finally(() => setSummarizing(false));
     },
     [currentNotebook]
   );
@@ -160,16 +172,14 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     setChatMessages((prev) => [...prev, { role: "user", content: question }]);
     setChatLoading(true);
     try {
-      const ctx = await getNotebookContext(currentNotebook.id);
-
-      const response =
-        ctx.char_count > 0
-          ? `[Notebook chat — ${ctx.char_count.toLocaleString()} chars of context loaded]\n\nBased on ${sources.length} source(s), here's what I can tell you about "${question}":\n\n(Deep AI analysis will be connected via gateway WebSocket in the next iteration.)`
-          : "No sources loaded yet. Please upload some documents first.";
-
+      const result = await chatNotebook(
+        currentNotebook.id,
+        question,
+        chatMessages
+      );
       setChatMessages((prev) => [
         ...prev,
-        { role: "assistant", content: response },
+        { role: "assistant", content: result.response },
       ]);
     } catch (err) {
       setChatMessages((prev) => [
@@ -182,7 +192,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, currentNotebook, sources.length]);
+  }, [chatInput, currentNotebook, chatMessages]);
 
   // ── Notebook list view (no notebook selected) ──────────────────────────
   if (!currentNotebook) {
@@ -347,6 +357,32 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             </button>
           </div>
         </div>
+
+        {/* Summarize all button + status */}
+        {sources.length > 0 && (
+          <div className="border-b border-(--ui-stroke-secondary) p-3">
+            <button
+              onClick={async () => {
+                if (!currentNotebook) return;
+                setSummarizing(true);
+                try {
+                  const r = await summarizeNotebook(currentNotebook.id);
+                  await loadNotebook(currentNotebook.id);
+                  alert(r.summarized > 0 ? `Summarized ${r.summarized} source(s)` : "All sources already have summaries");
+                } catch (err) {
+                  alert(`Summarize failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+                } finally {
+                  setSummarizing(false);
+                }
+              }}
+              disabled={summarizing}
+              className="w-full rounded-md border border-(--ui-stroke-secondary) px-3 py-2 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary) disabled:opacity-50"
+              type="button"
+            >
+              {summarizing ? "⏳ Summarizing..." : "✨ Summarize All Sources"}
+            </button>
+          </div>
+        )}
 
         {/* Re-extract button (shows when sources have 0 words — failed extraction) */}
         {sources.length > 0 && sources.some((s) => (s.word_count ?? 0) === 0) && (
