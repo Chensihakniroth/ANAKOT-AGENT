@@ -290,37 +290,37 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
         return
       }
 
-      // Web fallback: use a hidden file input + upload to server
-      if (isWebEnvironment()) {
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.multiple = true
-        if (kind === 'folder') {
-          input.webkitdirectory = true
-        } else {
-          input.accept = '*/*'
-        }
+      // Web fallback: use a hidden file input + upload to server.
+      // On Electron selectPaths() returns real paths above and we never reach
+      // here; on the web shim it returns [] so this fallback fires.
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.multiple = true
+      if (kind === 'folder') {
+        input.webkitdirectory = true
+      } else {
+        input.accept = '*/*'
+      }
 
-        const files = await new Promise<File[]>((resolve) => {
-          input.onchange = () => resolve(Array.from(input.files || []))
-          input.click()
+      const files = await new Promise<File[]>((resolve) => {
+        input.onchange = () => resolve(Array.from(input.files || []))
+        input.click()
+      })
+
+      if (!files.length) return
+
+      for (const file of files) {
+        const serverPath = await uploadFileToServer(file)
+        if (!serverPath) continue
+        const rel = contextPath(serverPath, currentCwd)
+        attachToMain({
+          id: attachmentId(kind, rel),
+          kind,
+          label: file.name,
+          detail: rel,
+          refText: `@${kind}:${formatRefValue(rel)}`,
+          path: serverPath
         })
-
-        if (!files.length) return
-
-        for (const file of files) {
-          const serverPath = await uploadFileToServer(file)
-          if (!serverPath) continue
-          const rel = contextPath(serverPath, currentCwd)
-          attachToMain({
-            id: attachmentId(kind, rel),
-            kind,
-            label: file.name,
-            detail: rel,
-            refText: `@${kind}:${formatRefValue(rel)}`,
-            path: serverPath
-          })
-        }
       }
     },
     [currentCwd]
@@ -526,9 +526,9 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
         let filePath = knownPath || fallbackPath || ''
 
-        // Web version: no local path available — upload the file to the
+        // No local path available (web or shim) — upload the file to the
         // server so the agent can read it via the returned absolute path.
-        if (!filePath && isWebEnvironment()) {
+        if (!filePath) {
           filePath = (await uploadFileToServer(file)) || ''
         }
 
