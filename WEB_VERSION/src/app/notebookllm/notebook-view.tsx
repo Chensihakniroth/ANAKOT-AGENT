@@ -22,6 +22,7 @@ import {
   summarizeNotebook,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
+import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
 
 interface NotebookViewProps {
   onClose: () => void;
@@ -453,16 +454,22 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             </div>
           ) : (
             chatMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={`rounded-lg px-4 py-3 text-sm ${
-                  msg.role === "user"
-                    ? "ml-12 bg-(--ui-accent)/10 text-(--ui-text-primary)"
-                    : "mr-12 bg-(--ui-surface-elevated) text-(--ui-text-secondary)"
-                }`}
-              >
-                {msg.content}
-              </div>
+              msg.role === "user" ? (
+                <div
+                  key={i}
+                  className="ml-12 rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)"
+                >
+                  {msg.content}
+                </div>
+              ) : (
+                <div
+                  key={i}
+                  data-slot="aui_assistant-message-content"
+                  className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
+                >
+                  <MarkdownTextContent text={msg.content} isRunning={false} />
+                </div>
+              )
             ))
           )}
           {chatLoading && (
