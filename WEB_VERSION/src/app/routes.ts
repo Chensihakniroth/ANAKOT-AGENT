@@ -73,7 +73,7 @@ export function registerPluginPaths(paths: string[]) {
 }
 // While one is open the app's titlebar control clusters must hide so they don't
 // bleed over the overlay (they sit at a higher z-index than the overlay card).
-export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set(['agents', 'command-center', 'cron', 'profiles', 'settings'])
+export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set(['agents', 'command-center', 'cron', 'profiles', 'settings', 'notebook'])
 
 export function isOverlayView(view: AppView | 'plugin-page'): boolean {
   return OVERLAY_VIEWS.has(view as AppView)

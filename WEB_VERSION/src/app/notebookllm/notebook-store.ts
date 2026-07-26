@@ -52,8 +52,6 @@ export const $currentNotebook = atom<Notebook | null>(null);
 export const $notebooksLoading = atom<boolean>(false);
 export const $notebookUploading = atom<boolean>(false);
 
-/** Whether the notebook overlay is open */
-export const $notebookOverlayOpen = atom<boolean>(false);
 
 // ── Actions ────────────────────────────────────────────────────────────────
 

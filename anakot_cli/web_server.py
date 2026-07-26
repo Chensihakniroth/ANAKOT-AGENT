@@ -10484,6 +10484,7 @@ from anakot_cli.notebooks import (
     get_all_extracted_text as _nb_get_all_text,
     extract_pdf_text as _nb_extract_pdf,
     extract_text_content as _nb_extract_text,
+    _notebooks_root as _nb_root,
 )
 
 
@@ -10729,6 +10730,9 @@ async def notebook_delete_source(notebook_id: str, source_id: str):
 @app.get("/api/notebooks/{notebook_id}/context")
 async def notebook_get_context(notebook_id: str):
     """Get combined extracted text from all sources (for grounding chat)."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
     text = _nb_get_all_text(notebook_id)
     return {"text": text, "char_count": len(text)}
 
@@ -10738,7 +10742,7 @@ async def notebook_re_extract(notebook_id: str):
     """Re-extract text from all sources that have empty extracted text.
     Useful after pymupdf is installed to fix previously uploaded PDFs."""
     import sqlite3 as _sq
-    db_path = _notebooks_root() / notebook_id / "metadata.db"
+    db_path = _nb_root() / notebook_id / "metadata.db"
     if not db_path.exists():
         raise HTTPException(status_code=404, detail="Notebook not found")
     db = _sq.connect(str(db_path))

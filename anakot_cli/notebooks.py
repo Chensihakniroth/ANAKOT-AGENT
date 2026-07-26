@@ -163,7 +163,7 @@ def get_notebook(notebook_id: str) -> Optional[Dict[str, Any]]:
 
 
 def delete_notebook(notebook_id: str) -> bool:
-    nb_dir = _notebook_dir(notebook_id)
+    nb_dir = _notebooks_root() / notebook_id
     if not nb_dir.exists():
         return False
     import shutil
@@ -176,12 +176,12 @@ def rename_notebook(notebook_id: str, title: str) -> bool:
     db = _get_db(notebook_id)
     _init_db(db)
     now = datetime.now(timezone.utc).isoformat()
-    db.execute(
+    cur = db.execute(
         "UPDATE notebook SET title = ?, updated_at = ? WHERE id = ?",
         (title, now, notebook_id),
     )
     db.commit()
-    changed = db.total_changes > 0
+    changed = cur.rowcount > 0
     db.close()
     return changed
 
@@ -288,12 +288,12 @@ def update_source_summary(
 ) -> bool:
     db = _get_db(notebook_id)
     _init_db(db)
-    db.execute(
+    cur = db.execute(
         "UPDATE source SET summary = ? WHERE id = ? AND notebook_id = ?",
         (summary, source_id, notebook_id),
     )
     db.commit()
-    changed = db.total_changes > 0
+    changed = cur.rowcount > 0
     db.close()
     return changed
 
