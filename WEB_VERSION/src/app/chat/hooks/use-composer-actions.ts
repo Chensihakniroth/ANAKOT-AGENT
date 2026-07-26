@@ -268,27 +268,59 @@ export function useComposerActions({ activeSessionId, currentCwd, requestGateway
 
   const pickContextPaths = useCallback(
     async (kind: 'file' | 'folder') => {
+      // Try native desktop file dialog first
       const paths = await window.anakotDesktop?.selectPaths({
         title: kind === 'file' ? 'Add files as context' : 'Add folders as context',
         defaultPath: currentCwd || undefined,
         directories: kind === 'folder'
       })
 
-      if (!paths?.length) {
+      if (paths?.length) {
+        for (const path of paths) {
+          const rel = contextPath(path, currentCwd)
+          attachToMain({
+            id: attachmentId(kind, rel),
+            kind,
+            label: pathLabel(path),
+            detail: rel,
+            refText: `@${kind}:${formatRefValue(rel)}`,
+            path
+          })
+        }
         return
       }
 
-      for (const path of paths) {
-        const rel = contextPath(path, currentCwd)
+      // Web fallback: use a hidden file input + upload to server
+      if (isWebEnvironment()) {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.multiple = true
+        if (kind === 'folder') {
+          input.webkitdirectory = true
+        } else {
+          input.accept = '*/*'
+        }
 
-        attachToMain({
-          id: attachmentId(kind, rel),
-          kind,
-          label: pathLabel(path),
-          detail: rel,
-          refText: `@${kind}:${formatRefValue(rel)}`,
-          path
+        const files = await new Promise<File[]>((resolve) => {
+          input.onchange = () => resolve(Array.from(input.files || []))
+          input.click()
         })
+
+        if (!files.length) return
+
+        for (const file of files) {
+          const serverPath = await uploadFileToServer(file)
+          if (!serverPath) continue
+          const rel = contextPath(serverPath, currentCwd)
+          attachToMain({
+            id: attachmentId(kind, rel),
+            kind,
+            label: file.name,
+            detail: rel,
+            refText: `@${kind}:${formatRefValue(rel)}`,
+            path: serverPath
+          })
+        }
       }
     },
     [currentCwd]
