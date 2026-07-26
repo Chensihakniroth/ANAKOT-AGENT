@@ -10816,7 +10816,7 @@ class NotebookChatRequest(BaseModel):
 
 
 @app.post("/api/notebooks/{notebook_id}/chat")
-async def notebook_chat(notebook_id: str, body: NotebookChatRequest):
+async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Request):
     """Chat with the AI grounded in notebook document context.
 
     Fetches extracted text from all sources, injects it as system context,
@@ -10967,7 +10967,7 @@ class SummarizeRequest(BaseModel):
 
 
 @app.post("/api/notebooks/{notebook_id}/summarize")
-async def notebook_summarize(notebook_id: str, body: SummarizeRequest):
+async def notebook_summarize(notebook_id: str, body: SummarizeRequest, request: Request):
     """Generate AI summaries for sources that don't have one yet.
 
     If source_id is provided, summarize just that source.
