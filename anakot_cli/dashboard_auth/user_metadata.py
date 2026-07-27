@@ -105,37 +105,65 @@ def get_metadata(user_id: str) -> dict:
 def list_all_users() -> dict[str, dict]:
     """Return all {user_id → metadata} for admin management UI.
 
-    Merges user-metadata.json with auth.users from config.yaml so that
-    users who registered via password auth also appear in the admin panel,
-    even if they never had an explicit metadata entry created.
+    Merges data from THREE persistent sources so every registered user
+    appears in the admin panel:
+      1. user-metadata.json — role, display_name, email, etc.
+      2. config.yaml auth.users — password-registered users
+      3. user-profiles.json — every onboarded user (OAuth + password)
     """
+    import json as _json
+
     result = dict(_load_all())
 
-    # Also scan config.yaml auth.users for password-registered users
+    # Resolve the global ANAKOT_HOME (outside any profile)
     try:
-        import yaml
-        from anakot_constants import get_anakot_home
-        home = get_anakot_home()
-        global_home = home.parent.parent if home.parent.name == "profiles" else home
-        config_path = global_home / "config.yaml"
-        if config_path.exists():
-            raw_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(raw_cfg, dict):
-                auth_users = raw_cfg.get("auth", {}).get("users", {})
-                if isinstance(auth_users, dict):
-                    for uid, info in auth_users.items():
+        from anakot_constants import get_anakot_home as _gah
+        _home = _gah()
+        _global_home = _home.parent.parent if _home.parent.name == "profiles" else _home
+    except Exception:
+        _global_home = None
+
+    # Source 2: config.yaml auth.users (password-registered users)
+    if _global_home is not None:
+        try:
+            import yaml
+            config_path = _global_home / "config.yaml"
+            if config_path.exists():
+                raw_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+                if isinstance(raw_cfg, dict):
+                    auth_users = raw_cfg.get("auth", {}).get("users", {})
+                    if isinstance(auth_users, dict):
+                        for uid, info in auth_users.items():
+                            if uid not in result:
+                                meta = {"role": "user"}
+                                if isinstance(info, dict):
+                                    if info.get("display_name"):
+                                        meta["display_name"] = info["display_name"]
+                                    if info.get("email"):
+                                        meta["email"] = info["email"]
+                                    if info.get("role"):
+                                        meta["role"] = info["role"]
+                                result[uid] = meta
+        except Exception:
+            pass
+
+    # Source 3: user-profiles.json — every user who onboarded (OAuth + password)
+    if _global_home is not None:
+        try:
+            profiles_path = _global_home / "user-profiles.json"
+            if profiles_path.exists():
+                raw_profiles = _json.loads(profiles_path.read_text(encoding="utf-8"))
+                if isinstance(raw_profiles, dict):
+                    for uid, entry in raw_profiles.items():
                         if uid not in result:
                             meta = {"role": "user"}
-                            if isinstance(info, dict):
-                                if info.get("display_name"):
-                                    meta["display_name"] = info["display_name"]
-                                if info.get("email"):
-                                    meta["email"] = info["email"]
-                                if info.get("role"):
-                                    meta["role"] = info["role"]
+                            if isinstance(entry, dict):
+                                meta["profile"] = entry.get("active", "")
+                            elif isinstance(entry, str):
+                                meta["profile"] = entry
                             result[uid] = meta
-    except Exception:
-        pass  # best-effort: don't break the endpoint if config scan fails
+        except Exception:
+            pass
 
     return result
 

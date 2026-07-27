@@ -8370,10 +8370,20 @@ async def admin_list_users(request: Request):
     _require_admin(request)
     from anakot_cli.dashboard_auth.user_metadata import list_all_users
     all_users = list_all_users()
+
+    # Fetch profile mappings so we can show each user's active profile
+    try:
+        from anakot_cli.dashboard_auth.user_profiles import list_all_mappings
+        profile_map = list_all_mappings()
+    except Exception:
+        profile_map = {}
+
     result = []
     for uid, meta in all_users.items():
         entry = dict(meta) if isinstance(meta, dict) else {}
         entry["user_id"] = uid
+        if not entry.get("profile") and uid in profile_map:
+            entry["profile"] = profile_map[uid]
         result.append(entry)
     return {"users": result}
 
