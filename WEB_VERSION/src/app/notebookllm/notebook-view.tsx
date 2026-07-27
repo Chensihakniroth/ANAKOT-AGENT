@@ -44,6 +44,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   >([]);
   const [chatLoading, setChatLoading] = useState(false);
   const chatStreamAbortRef = useRef<AbortController | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const hasStreamedOnceRef = useRef(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
     onConfirm: () => void;
@@ -71,10 +73,12 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     setSelectedSource(null);
     setSourceText("");
     setOverview("");
+    hasStreamedOnceRef.current = false;
     // Load persisted chat history
     try {
       const history = await loadChatHistory(nb.id);
       setChatMessages(history);
+      if (history.length > 0) hasStreamedOnceRef.current = true;
     } catch {
       setChatMessages([]);
     }
@@ -198,6 +202,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     // Persist user message
     saveChatMessage(currentNotebook.id, "user", question).catch(() => {});
     setChatLoading(true);
+    hasStreamedOnceRef.current = true;
 
     // Abort any in-flight stream
     chatStreamAbortRef.current?.abort();
@@ -278,6 +283,14 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       setChatLoading(false);
     }
   }, [chatInput, currentNotebook, chatMessages]);
+
+  // Auto-scroll chat to bottom during streaming
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
+  }, [chatMessages]);
 
   // ── Notebook list view (no notebook selected) ──────────────────────────
   if (!currentNotebook) {
@@ -531,12 +544,12 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       {/* Center panel: Chat */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Chat messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
           {chatMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-(--ui-text-tertiary)">
               <div className="mb-3 text-3xl">💬</div>
               <p className="text-sm">
-                Ask questions about your {sources.length} source(s)
+                Ask questions about your {sources.length} source{sources.length !== 1 ? "s" : ""}
               </p>
             </div>
           ) : (
@@ -559,7 +572,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               )
             ))
           )}
-          {chatLoading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
+          {chatLoading && !hasStreamedOnceRef.current && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
             <div className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-tertiary)">
               <span className="inline-flex gap-1">
                 <span className="animate-pulse">●</span>
@@ -577,18 +590,28 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleChat()}
-              placeholder="Ask about your sources..."
+              placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources... (Shift+Enter for newline)"}
               className="flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
               disabled={chatLoading}
             />
-            <button
-              onClick={handleChat}
-              disabled={!chatInput.trim() || chatLoading}
-              className="rounded-md bg-(--ui-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-              type="button"
-            >
-              Send
-            </button>
+            {chatLoading ? (
+              <button
+                onClick={() => chatStreamAbortRef.current?.abort()}
+                className="rounded-md border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
+                type="button"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={handleChat}
+                disabled={!chatInput.trim()}
+                className="rounded-md bg-(--ui-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                type="button"
+              >
+                Send
+              </button>
+            )}
           </div>
         </div>
       </div>
