@@ -503,7 +503,7 @@ ${src.summary}
     // Shared confirm dialog
   const confirmDialogJSX = confirmDialog && (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-5 shadow-lg">
+      <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-5 shadow-lg">
         <p className="mb-4 text-sm text-(--ui-text-primary)">
           {confirmDialog.message}
         </p>
@@ -518,7 +518,7 @@ ${src.summary}
 // ── Notebook list view (no notebook selected) ──────────────────────────
   if (!currentNotebook) {
     return (
-      <div className="flex h-full flex-col bg-(--ui-surface-background) p-6">
+      <div className="flex h-full flex-col bg-(--ui-chat-surface-background) p-6">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-(--ui-text-primary)">
             📓 Notebooks
@@ -605,7 +605,7 @@ ${src.summary}
 
   // ── Notebook detail view (three-panel) ─────────────────────────────────
   return (
-    <div className="relative flex h-full bg-(--ui-surface-background)">
+    <div className="relative flex h-full bg-(--ui-chat-surface-background)">
       {/* Left panel: Source list */}
       <div
         className={`flex w-64 flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
@@ -787,7 +787,7 @@ ${src.summary}
       </div>
 
       {/* Center panel: Chat */}
-      <div className="flex flex-1 flex-col min-w-0 bg-(--ui-surface-background)">
+      <div className="flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
         {/* Chat messages */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
           {chatMessages.length === 0 ? (
@@ -945,7 +945,7 @@ ${src.summary}
                   </div>
                 </div>
               )}
-              <div className="rounded border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-3">
+              <div className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
                   Extracted Text Preview
                 </div>
