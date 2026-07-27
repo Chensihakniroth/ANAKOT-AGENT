@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -45,6 +45,22 @@ interface GrantsPayload {
   allowed_toolsets: string[] | null
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Normalize API response — backend may return object or array. */
+function normalizeUsers(raw: unknown): UserMeta[] {
+  if (!raw || typeof raw !== 'object') return []
+  const data = raw as Record<string, unknown>
+  if (Array.isArray(data.users)) return data.users as UserMeta[]
+  if (data.users && typeof data.users === 'object' && !Array.isArray(data.users)) {
+    return Object.entries(data.users).map(([id, meta]: [string, unknown]) => ({
+      user_id: id,
+      ...(meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : {}),
+    })) as UserMeta[]
+  }
+  return []
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function GrantsSettings() {
@@ -72,20 +88,20 @@ export function GrantsSettings() {
     setError(null)
     try {
       const [userData, configData] = await Promise.all([
-        api<{ users: UserMeta[] }>({ path: '/api/admin/users' }),
+        api<{ users?: unknown }>({ path: '/api/admin/users' }).catch(() => null),
         api<AnakotConfigRecord>({ path: '/api/config' }).catch(() => null),
       ])
 
-      const usersArray = Array.isArray(userData?.users) ? userData.users : []
-      setUsers(usersArray)
+      setUsers(normalizeUsers(userData))
 
       // Extract MCP servers from full config
-      const mcpServers = (configData as any)?.mcp_servers
+      const cfg = configData as Record<string, unknown> | null
+      const mcpServers = cfg?.mcp_servers
       if (mcpServers && typeof mcpServers === 'object' && !Array.isArray(mcpServers)) {
         setMcpList(
-          Object.entries(mcpServers).map(([name, srv]: [string, any]) => ({
+          Object.entries(mcpServers as Record<string, Record<string, unknown>>).map(([name, srv]) => ({
             name,
-            transport: srv.transport || 'stdio',
+            transport: (srv.transport as string) || 'stdio',
           })),
         )
       } else {
@@ -93,9 +109,14 @@ export function GrantsSettings() {
       }
 
       // Available toolsets — extract from config
-      const toolsets = (configData as any)?.toolsets
+      const toolsets = cfg?.toolsets
       if (Array.isArray(toolsets)) {
-        setToolsetList(toolsets.map((ts: any) => ({ name: typeof ts === 'string' ? ts : ts.name, enabled: true })))
+        setToolsetList(
+          (toolsets as unknown[]).map(ts => ({
+            name: typeof ts === 'string' ? ts : (ts as Record<string, unknown>)?.name as string ?? 'unknown',
+            enabled: true,
+          })),
+        )
       } else {
         setToolsetList([])
       }
@@ -111,9 +132,13 @@ export function GrantsSettings() {
   }, [loadAll])
 
   // When user selection changes, load their grants
+  const selectedUser = useMemo(
+    () => users.find(u => u.user_id === selectedUserId),
+    [users, selectedUserId],
+  )
+
   useEffect(() => {
-    const user = users.find(u => u.user_id === selectedUserId)
-    if (!user) {
+    if (!selectedUser) {
       setAllowedMcp(new Set())
       setAllowedToolsets(new Set())
       setRestrictMcp(false)
@@ -122,15 +147,15 @@ export function GrantsSettings() {
       return
     }
 
-    const mcp = user.metadata?.allowed_mcp
-    const toolsets = user.metadata?.allowed_toolsets
+    const mcp = selectedUser.metadata?.allowed_mcp
+    const toolsets = selectedUser.metadata?.allowed_toolsets
 
     setRestrictMcp(mcp !== undefined && mcp !== null)
     setRestrictToolsets(toolsets !== undefined && toolsets !== null)
     setAllowedMcp(new Set(mcp ?? []))
     setAllowedToolsets(new Set(toolsets ?? []))
     setDirty(false)
-  }, [selectedUserId, users])
+  }, [selectedUser])
 
   const toggleMcp = useCallback(
     (name: string) => {
@@ -185,10 +210,6 @@ export function GrantsSettings() {
     }
   }, [selectedUserId, restrictMcp, restrictToolsets, allowedMcp, allowedToolsets, loadAll])
 
-  // Guard: users must always be an array
-  const usersSafe = Array.isArray(users) ? users : []
-  const selectedUser = usersSafe.find(u => u.user_id === selectedUserId)
-
   if (loading) {
     return <LoadingState label="Loading grants data…" />
   }
@@ -205,7 +226,7 @@ export function GrantsSettings() {
     )
   }
 
-  if (usersSafe.length === 0) {
+  if (users.length === 0) {
     return (
       <SettingsContent>
         <EmptyState title="No users" description="No users have registered yet." />
@@ -215,20 +236,21 @@ export function GrantsSettings() {
 
   return (
     <SettingsContent>
+      {/* User selector */}
       <SettingsSection>
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-4 flex items-center gap-2">
           <ShieldCheck className="size-4 text-muted-foreground" />
           <span className="text-sm font-medium">Per-User Grants</span>
         </div>
 
         <div className="max-w-sm">
-          <label className="mb-1 block text-xs text-muted-foreground">Select user</label>
+          <label className="mb-1.5 block text-xs text-muted-foreground">Select user</label>
           <Select onValueChange={v => setSelectedUserId(v)} value={selectedUserId}>
-            <SelectTrigger className="h-7 text-xs">
+            <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="— Choose a user —" />
             </SelectTrigger>
             <SelectContent>
-              {usersSafe.map(u => (
+              {users.map(u => (
                 <SelectItem key={u.user_id} value={u.user_id}>
                   {u.display_name || u.user_id}
                 </SelectItem>
@@ -241,10 +263,9 @@ export function GrantsSettings() {
       {selectedUser && (
         <>
           {/* ── MCP Grants ───────────────────────────────────────────── */}
-
           <SettingsSection>
-            <div className="mb-2 flex items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <div className="mb-3">
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm">
                 <Checkbox
                   checked={restrictMcp}
                   onCheckedChange={v => {
@@ -254,43 +275,40 @@ export function GrantsSettings() {
                 />
                 <span>Restrict MCP servers</span>
               </label>
+              <p className="mt-1 ml-6 text-[0.7rem] text-muted-foreground/60">
+                {restrictMcp
+                  ? mcpList.length > 0
+                    ? `Select which of the ${mcpList.length} configured servers this user can access`
+                    : 'No MCP servers configured yet'
+                  : 'User has access to all MCP servers'}
+              </p>
             </div>
 
             {restrictMcp && mcpList.length > 0 && (
-              <div className="ml-5 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="ml-6 grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
                 {mcpList.map(mcp => (
                   <label
                     key={mcp.name}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/30"
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-border/30 px-2.5 py-2 transition-colors hover:bg-muted/30"
                   >
                     <Checkbox
                       checked={allowedMcp.has(mcp.name)}
                       onCheckedChange={() => toggleMcp(mcp.name)}
                     />
-                    <span className="text-xs">{mcp.name}</span>
-                    <span className="ml-auto text-[0.6rem] text-muted-foreground">
+                    <span className="min-w-0 flex-1 truncate text-xs">{mcp.name}</span>
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.6rem] text-muted-foreground">
                       {mcp.transport}
                     </span>
                   </label>
                 ))}
               </div>
             )}
-
-            {restrictMcp && mcpList.length === 0 && (
-              <p className="ml-5 text-xs text-muted-foreground">No MCP servers configured.</p>
-            )}
-
-            {!restrictMcp && (
-              <p className="ml-5 text-xs text-muted-foreground">
-                User has access to all MCP servers.
-              </p>
-            )}
           </SettingsSection>
 
           {/* ── Toolset Grants ─────────────────────────────────────────── */}
           <SettingsSection>
-            <div className="mb-2 flex items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <div className="mb-3">
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm">
                 <Checkbox
                   checked={restrictToolsets}
                   onCheckedChange={v => {
@@ -300,39 +318,36 @@ export function GrantsSettings() {
                 />
                 <span>Restrict tool backends</span>
               </label>
+              <p className="mt-1 ml-6 text-[0.7rem] text-muted-foreground/60">
+                {restrictToolsets
+                  ? toolsetList.length > 0
+                    ? `Select which of the ${toolsetList.length} configured backends this user can access`
+                    : 'No tool backends configured yet'
+                  : 'User has access to all tool backends'}
+              </p>
             </div>
 
             {restrictToolsets && toolsetList.length > 0 && (
-              <div className="ml-5 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="ml-6 grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
                 {toolsetList.map(ts => (
                   <label
                     key={ts.name}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/30"
+                    className="flex cursor-pointer items-center gap-2 rounded-md border border-border/30 px-2.5 py-2 transition-colors hover:bg-muted/30"
                   >
                     <Checkbox
                       checked={allowedToolsets.has(ts.name)}
                       onCheckedChange={() => toggleToolset(ts.name)}
                     />
-                    <span className="text-xs">{ts.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs">{ts.name}</span>
                   </label>
                 ))}
               </div>
-            )}
-
-            {restrictToolsets && toolsetList.length === 0 && (
-              <p className="ml-5 text-xs text-muted-foreground">No tool backends configured.</p>
-            )}
-
-            {!restrictToolsets && (
-              <p className="ml-5 text-xs text-muted-foreground">
-                User has access to all tool backends.
-              </p>
             )}
           </SettingsSection>
 
           {/* ── Save ─────────────────────────────────────────────────── */}
           <SettingsSection>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 rounded-lg border border-border/30 bg-muted/15 px-4 py-3">
               <Button
                 disabled={!dirty || saving}
                 onClick={() => void saveGrants()}
@@ -341,7 +356,15 @@ export function GrantsSettings() {
                 {saving ? 'Saving…' : 'Save Grants'}
               </Button>
               {dirty && (
-                <span className="text-xs text-amber-500">Unsaved changes</span>
+                <span className="text-xs text-amber-500 dark:text-amber-400">Unsaved changes</span>
+              )}
+              {!dirty && selectedUser && (
+                <span className="text-xs text-muted-foreground/50">
+                  {(selectedUser.metadata?.allowed_mcp?.length ?? 0) +
+                    (selectedUser.metadata?.allowed_toolsets?.length ?? 0) > 0
+                    ? 'Restricted access configured'
+                    : 'Full access (no restrictions)'}
+                </span>
               )}
             </div>
           </SettingsSection>
