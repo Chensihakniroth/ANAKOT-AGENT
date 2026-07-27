@@ -8382,8 +8382,16 @@ async def admin_list_users(request: Request):
     for uid, meta in all_users.items():
         entry = dict(meta) if isinstance(meta, dict) else {}
         entry["user_id"] = uid
-        if not entry.get("profile") and uid in profile_map:
-            entry["profile"] = profile_map[uid]
+        profile_name = profile_map.get(uid, "")
+        if not entry.get("profile") and profile_name:
+            entry["profile"] = profile_name
+        # Use profile name as display_name fallback for OAuth users
+        # (their user_id is a raw Google numeric ID, not human-readable)
+        if not entry.get("display_name"):
+            if profile_name:
+                entry["display_name"] = profile_name
+            else:
+                entry["display_name"] = uid
         result.append(entry)
     return {"users": result}
 
