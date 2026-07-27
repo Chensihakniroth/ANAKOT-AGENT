@@ -64,6 +64,18 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     loadNotebooks();
   }, []);
 
+  // If overlay reopens with notebook already selected (from previous session), reload chat
+  useEffect(() => {
+    if (currentNotebook) {
+      loadChatHistory(currentNotebook.id)
+        .then((history) => {
+          setChatMessages(history);
+          if (history.length > 0) hasStreamedOnceRef.current = true;
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   const handleCreateNotebook = useCallback(async () => {
     await createNotebook("Untitled Notebook");
   }, []);
@@ -191,6 +203,11 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       setOverview("(unable to load overview)");
     }
   }, [currentNotebook, sources.length]);
+
+  // Auto-refresh overview when notebook loads
+  useEffect(() => {
+    if (currentNotebook) handleLoadOverview();
+  }, [currentNotebook, handleLoadOverview]);
 
   const handleChat = useCallback(async () => {
     if (!chatInput.trim() || !currentNotebook) return;
@@ -376,20 +393,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     <div className="flex h-full bg-(--ui-surface-background)">
       {/* Left panel: Source list */}
       <div className="flex w-64 flex-col border-r border-(--ui-stroke-secondary)">
-        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
+        <div className="border-b border-(--ui-stroke-secondary) p-3">
           <button
             onClick={() => $currentNotebook.set(null)}
             className="text-sm text-(--ui-text-secondary) hover:text-(--ui-text-primary)"
             type="button"
           >
             ← Back
-          </button>
-          <button
-            onClick={onClose}
-            className="text-sm text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
-            type="button"
-          >
-            ✕
           </button>
         </div>
 
@@ -674,7 +684,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               </div>
             </div>
           ) : (
-            <div data-slot="aui_assistant-message-content" className="prose prose-invert prose-sm max-w-none">
+            <div data-slot="aui_assistant-message-content">
               {overview ? (
                 <MarkdownTextContent text={overview} isRunning={false} />
               ) : (
