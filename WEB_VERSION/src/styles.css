@@ -1821,3 +1821,28 @@ canvas {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+/* ── Notebook citation links ───────────────────────────────────────── */
+a[href^="citation://"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  background: var(--ui-accent, #6366f1) / 0.15;
+  color: var(--ui-accent, #6366f1);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+a[href^="citation://"]:hover {
+  background: var(--ui-accent, #6366f1) / 0.25;
+  color: var(--ui-accent, #818cf8);
+}
+a[href^="citation://"]:before {
+  content: "\1F4CE";
+  font-size: 0.7rem;
+}

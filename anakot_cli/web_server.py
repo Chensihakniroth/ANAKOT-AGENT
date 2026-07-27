@@ -10887,10 +10887,17 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     sources_list = ", ".join(source_names)
     system_prompt = (
         f"You are a helpful research assistant. The user has uploaded "
-        f"{len(source_names)} document(s) to a notebook: [{sources_list}].\n\n"
-        f"Below is the extracted text from these documents. Use this content "
-        f"as your primary source of knowledge when answering the user's "
-        f"question. Cite specific documents when possible.\n\n"
+        f"{len(source_names)} document(s) to a notebook.\n\n"
+        f"When citing sources, always use the format [Source N] where N is the "
+        f"source number (1-indexed, in the order sources appear below). "
+        f"For example: [Source 1], [Source 2].\n\n"
+        "Source list: " + ", ".join(
+            f"[Source {i+1}]: {name}" for i, name in enumerate(source_names)
+        ) + "\n\n"
+        f"Below is the extracted text from these documents, each marked with "
+        f"its source number. Use this content as your primary source of "
+        f"knowledge when answering the user's question. Always cite "
+        f"sources using [Source N].\n\n"
         f"<document_context>\n{context_text}\n</document_context>"
     )
 
@@ -11028,10 +11035,17 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
     sources_list = ", ".join(source_names)
     system_prompt = (
         f"You are a helpful research assistant. The user has uploaded "
-        f"{len(source_names)} document(s) to a notebook: [{sources_list}].\n\n"
-        f"Below is the extracted text from these documents. Use this content "
-        f"as your primary source of knowledge when answering the user's "
-        f"question. Cite specific documents when possible.\n\n"
+        f"{len(source_names)} document(s) to a notebook.\n\n"
+        f"When citing sources, always use the format [Source N] where N is the "
+        f"source number (1-indexed, in the order sources appear below). "
+        f"For example: [Source 1], [Source 2].\n\n"
+        "Source list: " + ", ".join(
+            f"[Source {i+1}]: {name}" for i, name in enumerate(source_names)
+        ) + "\n\n"
+        f"Below is the extracted text from these documents, each marked with "
+        f"its source number. Use this content as your primary source of "
+        f"knowledge when answering the user's question. Always cite "
+        f"sources using [Source N].\n\n"
         f"<document_context>\n{context_text}\n</document_context>"
     )
 

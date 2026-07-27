@@ -414,7 +414,7 @@ def get_all_extracted_text(
 
     parts: list[str] = []
     total = 0
-    for row in rows:
+    for idx, row in enumerate(rows):
         text = row["extracted_text"] or ""
         if not text.strip():
             continue

@@ -303,6 +303,34 @@ ${src.summary}
     [currentNotebook]
   );
 
+  // ── Citation click handler ──────────────────────────────────
+  const handleCitationClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") || "";
+      if (!href.startsWith("citation://")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = parseInt(href.replace("citation://", ""), 10) - 1;
+      if (sources[idx]) {
+        handleSelectSource(sources[idx]);
+      }
+    },
+    [sources, handleSelectSource]
+  );
+
+  // ── Preprocess text: [Source N] → clickable markdown link ──────────
+  const preprocessCitations = useCallback(
+    (text: string) => text.replace(
+      /\[Source (\d+)\]/g,
+      "[Source $1](citation://$1)"
+    ),
+    []
+  );
+
+
   const handleLoadOverview = useCallback(async () => {
     if (!currentNotebook) return;
     try {
@@ -769,8 +797,9 @@ ${src.summary}
                   key={i}
                   data-slot="aui_assistant-message-content"
                   className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
+                  onClick={handleCitationClick}
                 >
-                  <MarkdownTextContent text={msg.content} isRunning={chatLoading && i === chatMessages.length - 1} />
+                  <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
                 </div>
               )
             ))
