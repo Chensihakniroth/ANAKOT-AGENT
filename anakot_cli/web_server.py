@@ -8363,12 +8363,19 @@ async def update_config_raw(body: RawConfigUpdate, request: Request):
 
 @app.get("/api/admin/users")
 async def admin_list_users(request: Request):
-    """Return all {user_id -> metadata} for the admin management UI.
-    Admin-only. Returns every registered user with their role.
+    """Return all registered users for the admin management UI.
+    Admin-only. Each entry includes the user_id so the frontend can
+    identify and act on individual users (disable, delete, grants).
     """
     _require_admin(request)
     from anakot_cli.dashboard_auth.user_metadata import list_all_users
-    return {"users": list(list_all_users().values())}
+    all_users = list_all_users()
+    result = []
+    for uid, meta in all_users.items():
+        entry = dict(meta) if isinstance(meta, dict) else {}
+        entry["user_id"] = uid
+        result.append(entry)
+    return {"users": result}
 
 
 @app.post("/api/admin/users/{user_id}/disable")

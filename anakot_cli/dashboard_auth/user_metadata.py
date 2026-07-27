@@ -103,8 +103,41 @@ def get_metadata(user_id: str) -> dict:
 
 
 def list_all_users() -> dict[str, dict]:
-    """Return all {user_id → metadata} for admin management UI."""
-    return dict(_load_all())
+    """Return all {user_id → metadata} for admin management UI.
+
+    Merges user-metadata.json with auth.users from config.yaml so that
+    users who registered via password auth also appear in the admin panel,
+    even if they never had an explicit metadata entry created.
+    """
+    result = dict(_load_all())
+
+    # Also scan config.yaml auth.users for password-registered users
+    try:
+        import yaml
+        from anakot_constants import get_anakot_home
+        home = get_anakot_home()
+        global_home = home.parent.parent if home.parent.name == "profiles" else home
+        config_path = global_home / "config.yaml"
+        if config_path.exists():
+            raw_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            if isinstance(raw_cfg, dict):
+                auth_users = raw_cfg.get("auth", {}).get("users", {})
+                if isinstance(auth_users, dict):
+                    for uid, info in auth_users.items():
+                        if uid not in result:
+                            meta = {"role": "user"}
+                            if isinstance(info, dict):
+                                if info.get("display_name"):
+                                    meta["display_name"] = info["display_name"]
+                                if info.get("email"):
+                                    meta["email"] = info["email"]
+                                if info.get("role"):
+                                    meta["role"] = info["role"]
+                            result[uid] = meta
+    except Exception:
+        pass  # best-effort: don't break the endpoint if config scan fails
+
+    return result
 
 
 def set_user_disabled(user_id: str, disabled: bool) -> None:
