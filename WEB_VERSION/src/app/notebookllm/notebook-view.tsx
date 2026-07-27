@@ -1,7 +1,7 @@
 // NotebookLLM — Main notebook overlay view
 // Three-panel layout: source list (left) | chat (center) | summary (right)
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $notebooks,
@@ -217,6 +217,20 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   }, [currentNotebook]);
 
   // ── Markdown export ──────────────────────────────────────────────
+  // ── Citation counts from chat messages (cross-reference) ────────
+  const citationCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const msg of chatMessages) {
+      if (msg.role !== "assistant") continue;
+      const matches = msg.content.matchAll(/\[Source (\d+)\]/g);
+      for (const m of matches) {
+        const n = parseInt(m[1], 10);
+        counts[n] = (counts[n] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [chatMessages]);
+
   const handleExportMarkdown = useCallback(() => {
     if (!currentNotebook) return;
     const lines: string[] = [`# ${currentNotebook.title}
@@ -950,7 +964,40 @@ ${src.summary}
                 </p>
               )}
             </div>
-          )}
+            )}
+            {/* ── References / Cross-reference section (only in overview) */}
+            {!selectedSource && sources.length > 0 && (
+              <div className="mt-4 border-t border-(--ui-stroke-secondary) pt-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
+                  Sources ({sources.length})
+                </div>
+                <div className="space-y-1">
+                  {sources.map((src, idx) => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      onClick={() => handleSelectSource(src)}
+                      className="flex w-full items-center gap-2 rounded border border-transparent px-2 py-1.5 text-left hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated) transition-colors"
+                    >
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-(--ui-accent)/15 text-[10px] font-bold text-(--ui-accent)">
+                        {idx + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-(--ui-text-primary)">
+                        {src.original_name}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-(--ui-text-tertiary)">
+                        {src.word_count?.toLocaleString() ?? 0}w
+                      </span>
+                      {(citationCounts[idx + 1] ?? 0) > 0 && (
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-(--ui-accent)/15 px-1.5 py-0.5 text-[9px] font-semibold text-(--ui-accent)">
+                          {citationCounts[idx + 1]}× cited
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
       </div>
 
