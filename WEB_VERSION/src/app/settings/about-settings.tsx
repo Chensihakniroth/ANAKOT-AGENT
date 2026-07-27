@@ -1,11 +1,9 @@
-import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
-import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { ExternalLink, GitBranch, Info, HelpCircle, Link2, Cpu } from '@/lib/icons'
-import { $desktopVersion, refreshDesktopVersion } from '@/store/updates'
+import { getVersion } from '@/lib/web-anakot-desktop'
 
 import { SectionHeading, SettingsContent } from './primitives'
 
@@ -16,14 +14,13 @@ const WEBSITE_URL = 'https://anakot-agent.up.railway.app'
 export function AboutSettings() {
   const { t } = useI18n()
   const a = t.settings.about
-  const version = useStore($desktopVersion)
-  const [versionError, setVersionError] = useState(false)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
   useEffect(() => {
-    refreshDesktopVersion().catch(() => setVersionError(true))
+    getVersion()
+      .then(v => setAppVersion(v?.appVersion ?? null))
+      .catch(() => setAppVersion(null))
   }, [])
-
-  const appVersion = version?.appVersion ?? null
 
   return (
     <SettingsContent>
@@ -33,11 +30,7 @@ export function AboutSettings() {
         <div className="space-y-1">
           <h2 className="text-lg font-semibold tracking-tight">{a.heading}</h2>
           <p className="text-xs text-muted-foreground">
-            {versionError
-              ? a.versionUnavailable
-              : appVersion
-                ? a.version(appVersion)
-                : a.versionUnavailable}
+            {appVersion ? a.version(appVersion) : a.versionUnavailable}
           </p>
         </div>
       </div>
@@ -78,24 +71,34 @@ export function AboutSettings() {
         <section className="space-y-3">
           <SectionHeading icon={Link2} title="Useful Links" />
           <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline">
-              <a href={GITHUB_URL} rel="noreferrer" target="_blank">
-                <GitBranch className="size-3.5" />
-                GitHub Repository
-              </a>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <a href={CHANGELOG_URL} rel="noreferrer" target="_blank">
-                <ExternalLink className="size-3.5" />
-                Changelog / Releases
-              </a>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <a href={WEBSITE_URL} rel="noreferrer" target="_blank">
-                <ExternalLink className="size-3.5" />
-                Web App Home
-              </a>
-            </Button>
+            <a
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              href={GITHUB_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <GitBranch className="size-3.5" />
+              GitHub Repository
+              <ExternalLink className="size-3 opacity-50" />
+            </a>
+            <a
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              href={CHANGELOG_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink className="size-3.5" />
+              Changelog / Releases
+            </a>
+            <a
+              className="inline-flex items-center gap-1.5 rounded-md border border-border/40 bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              href={WEBSITE_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <ExternalLink className="size-3.5" />
+              Web App Home
+            </a>
           </div>
         </section>
 
@@ -106,14 +109,20 @@ export function AboutSettings() {
             {[
               { label: 'Version', value: appVersion ?? '—', mono: true },
               { label: 'Platform', value: 'Web (Railway)', mono: true },
-              { label: 'Auto-updates', value: 'Enabled', mono: true, className: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Auto-updates', value: 'Enabled', mono: true, accent: true },
             ].map(item => (
               <div
                 key={item.label}
                 className="flex items-center justify-between rounded-lg border border-border/30 bg-muted/15 px-4 py-2.5"
               >
                 <span className="text-xs text-muted-foreground">{item.label}</span>
-                <span className={`text-xs ${item.mono ? 'font-mono' : ''} ${item.className ?? 'text-foreground/80'}`}>
+                <span
+                  className={`text-xs ${item.mono ? 'font-mono' : ''} ${
+                    item.accent
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-foreground/80'
+                  }`}
+                >
                   {item.value}
                 </span>
               </div>

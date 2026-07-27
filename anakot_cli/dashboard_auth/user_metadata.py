@@ -177,3 +177,32 @@ def update_user_metadata(user_id: str, *, set_fields: dict | None = None, remove
         _save_all(all_meta)
         _CACHE = all_meta
     return dict(entry)
+
+
+def ensure_user_exists(user_id: str, *, display_name: str = "", email: str = "", provider: str = "") -> None:
+    """Ensure *user_id* has an entry in user-metadata.json.
+
+    Called on every successful login so the admin Users tab always shows
+    every registered user.  Existing fields are never overwritten — only
+    missing ones are filled in.
+    """
+    with _LOCK:
+        all_meta = _load_all()
+        meta = all_meta.get(user_id, {})
+        changed = False
+        if not meta.get("role"):
+            meta.setdefault("role", "user")
+            changed = True
+        if display_name and not meta.get("display_name"):
+            meta["display_name"] = display_name
+            changed = True
+        if email and not meta.get("email"):
+            meta["email"] = email
+            changed = True
+        if provider and not meta.get("provider"):
+            meta["provider"] = provider
+            changed = True
+        if changed:
+            all_meta[user_id] = meta
+            _save_all(all_meta)
+            _CACHE = all_meta
