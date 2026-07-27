@@ -332,6 +332,26 @@ async def gated_auth_middleware(
             status_code=401,
         )
 
+    # Auto-backfill user metadata on every authenticated request.
+    # This catches OAuth users who logged in before ensure_user_exists
+    # was deployed — their email/display_name were in the session but
+    # never persisted. The OIDC verify_session already extracts these
+    # from the ID token claims, so we just need to persist them.
+    # Runs only if the user's metadata is missing email (one-time per user).
+    try:
+        from anakot_cli.dashboard_auth.user_metadata import _load_all
+        _meta = _load_all().get(session.user_id, {})
+        if not _meta.get("email") or not _meta.get("display_name"):
+            from anakot_cli.dashboard_auth.user_metadata import ensure_user_exists
+            ensure_user_exists(
+                session.user_id,
+                display_name=session.display_name,
+                email=session.email,
+                provider=session.provider,
+            )
+    except Exception:
+        pass  # best-effort — never break the request
+
     return await call_next(request)
 
 
