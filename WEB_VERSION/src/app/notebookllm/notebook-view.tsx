@@ -19,7 +19,6 @@ import {
   getSourceText,
   getNotebookContext,
   reExtractSources,
-  chatNotebook,
   summarizeNotebook,
   loadChatHistory,
   saveChatMessage,
@@ -49,6 +48,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const chatStreamAbortRef = useRef<AbortController | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const isNearBottomRef = useRef(true);
   const hasStreamedOnceRef = useRef(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
@@ -63,6 +63,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [overview, setOverview] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   const sources = currentNotebook?.sources ?? [];
 
@@ -205,15 +207,39 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     if (!currentNotebook) return;
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
-    for (const file of files) {
+    // Validate file types
+    const accepted = [".pdf",".txt",".md",".csv",".json",".py",".js",".ts",".html",".css",".log"];
+    const rejected = files.filter((f) => {
+      const ext = "." + f.name.split(".").pop()?.toLowerCase();
+      return !accepted.includes(ext);
+    });
+    if (rejected.length > 0) {
+      notifyError(new Error(`Unsupported: ${rejected.map((f) => f.name).join(", ")}`), "File type not supported");
+    }
+    const validFiles = files.filter((f) => {
+      const ext = "." + f.name.split(".").pop()?.toLowerCase();
+      return accepted.includes(ext);
+    });
+    if (validFiles.length === 0) return;
+    let successCount = 0;
+    for (const file of validFiles) {
       try {
         await uploadSource(currentNotebook.id, file);
+        successCount++;
       } catch (err) {
         notifyError(err, `Failed to upload ${file.name}`);
       }
     }
-    notify({ kind: "success", message: `Uploaded ${files.length} file(s)` });
-    await loadNotebook(currentNotebook.id);
+    if (successCount > 0) {
+      notify({ kind: "success", message: `Uploaded ${successCount} of ${validFiles.length} file(s)` });
+      await loadNotebook(currentNotebook.id);
+      // Auto-summarize sources that don't have summaries
+      setSummarizing(true);
+      summarizeNotebook(currentNotebook.id)
+        .then((r) => { if (r.summarized > 0) loadNotebook(currentNotebook.id); })
+        .catch(() => {})
+        .finally(() => setSummarizing(false));
+    }
   }, [currentNotebook]);
 
   // ── Markdown export ──────────────────────────────────────────────
@@ -349,11 +375,18 @@ ${src.summary}
     if (!currentNotebook) return;
     try {
       const ctx = await getNotebookContext(currentNotebook.id);
-      setOverview(
-        ctx.char_count > 0
-          ? `Combined context: ${ctx.char_count.toLocaleString()} characters from ${sources.length} source(s).`
-          : "No sources yet."
-      );
+      if (ctx.char_count > 0) {
+        const estimatedTokens = Math.ceil(ctx.char_count / 4);
+        const maxTokens = 200000;
+        const pct = Math.min(100, Math.round((estimatedTokens / maxTokens) * 100));
+        setOverview(
+          `**Context:** ${ctx.char_count.toLocaleString()} characters (~${estimatedTokens.toLocaleString()} tokens)\n` +
+          `**Sources:** ${sources.length} source(s)\n` +
+          `**Usage:** ~${pct}% of context window`
+        );
+      } else {
+        setOverview("No sources yet.");
+      }
     } catch {
       setOverview("(unable to load overview)");
     }
@@ -457,13 +490,17 @@ ${src.summary}
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
-        },
-      ]);
+      // Replace the empty assistant bubble with the error instead of appending a second bubble
+      setChatMessages((prev) => {
+        const next = [...prev];
+        const lastIdx = next.length - 1;
+        if (lastIdx >= 0 && next[lastIdx].role === "assistant" && next[lastIdx].content === "") {
+          next[lastIdx] = { role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` };
+        } else {
+          next.push({ role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` });
+        }
+        return next;
+      });
     } finally {
       setChatLoading(false);
     }
@@ -472,9 +509,27 @@ ${src.summary}
   // ── Keyboard shortcuts ──────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Escape: go back to list
-      if (e.key === "Escape" && currentNotebook && !e.defaultPrevented) {
-        $currentNotebook.set(null);
+      const mod = e.metaKey || e.ctrlKey;
+      // Escape: cancel title edit or go back to list
+      if (e.key === "Escape" && !e.defaultPrevented) {
+        if (editingTitle) {
+          setEditingTitle(false);
+          return;
+        }
+        if (currentNotebook) {
+          $currentNotebook.set(null);
+          return;
+        }
+      }
+      // Ctrl/Cmd + E: Export markdown
+      if (mod && e.key === "e") {
+        e.preventDefault();
+        handleExportMarkdown();
+      }
+      // Ctrl/Cmd + L: Clear chat
+      if (mod && e.key === "l") {
+        e.preventDefault();
+        handleClearChat();
       }
     };
     const keyDown = (e: KeyboardEvent) => {
@@ -490,12 +545,24 @@ ${src.summary}
       window.removeEventListener("keydown", handler);
       window.removeEventListener("keydown", keyDown);
     };
-  }, [currentNotebook]);
+  }, [currentNotebook, editingTitle, handleExportMarkdown, handleClearChat]);
 
-  // Auto-scroll chat to bottom during streaming
+  // Track whether user is near the bottom of chat
   useEffect(() => {
     const el = chatScrollRef.current;
-    if (el) {
+    if (!el) return;
+    const onScroll = () => {
+      const threshold = 80; // px from bottom
+      isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll chat to bottom during streaming (only if user hasn't scrolled up)
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el && isNearBottomRef.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
   }, [chatMessages]);
@@ -607,13 +674,14 @@ ${src.summary}
   return (
     <div className="relative flex h-full bg-(--ui-chat-surface-background)">
       {/* Left panel: Source list */}
+      {!leftCollapsed && (
       <div
         className={`flex w-64 flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="border-b border-(--ui-stroke-secondary) p-3">
+        <div className="border-b border-(--ui-stroke-secondary) p-3 flex items-center justify-between">
           <button
             onClick={() => $currentNotebook.set(null)}
             className="text-sm text-(--ui-text-secondary) hover:text-(--ui-text-primary)"
@@ -621,6 +689,12 @@ ${src.summary}
           >
             ← Back
           </button>
+          <button
+            onClick={() => setLeftCollapsed(true)}
+            className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+            type="button"
+            title="Collapse panel"
+          >◀</button>
         </div>
 
         {/* Notebook title */}
@@ -732,9 +806,14 @@ ${src.summary}
         {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">
           {sources.length === 0 ? (
-            <p className="p-2 text-center text-xs text-(--ui-text-tertiary)">
-              No sources yet
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <p className="mb-2 text-xs text-(--ui-text-tertiary)">
+                No sources yet
+              </p>
+              <p className="text-[10px] text-(--ui-text-quaternary)">
+                Upload files or add a URL above
+              </p>
+            </div>
           ) : (
             sources.map((src) => (
               <div
@@ -785,6 +864,17 @@ ${src.summary}
           )}
         </div>
       </div>
+      )}
+
+      {/* Expand button for collapsed left panel */}
+      {leftCollapsed && (
+        <button
+          onClick={() => setLeftCollapsed(false)}
+          className="flex items-center border-r border-(--ui-stroke-secondary) px-1 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) hover:bg-(--ui-surface-elevated)"
+          title="Show source panel"
+          type="button"
+        >▶</button>
+      )}
 
       {/* Center panel: Chat */}
       <div className="flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
@@ -800,25 +890,55 @@ ${src.summary}
           ) : (
             chatMessages.map((msg, i) => (
               msg.role === "user" ? (
-                <div
-                  key={i}
-                  className="ml-12 rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)"
-                >
-                  {msg.content}
+                <div key={i} className="group relative ml-12">
+                  <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
+                    {msg.content}
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
+                    className="absolute -right-1 top-1 hidden rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) opacity-0 transition-opacity hover:text-(--ui-text-primary) group-hover:opacity-100"
+                    type="button"
+                    title="Copy message"
+                  >📋</button>
                 </div>
               ) : (
-                <div
-                  key={i}
-                  data-slot="aui_assistant-message-content"
-                  className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
-                  onClick={handleCitationClick}
-                >
-                  <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
+                <div key={i} className="group relative mr-12">
+                  <div
+                    data-slot="aui_assistant-message-content"
+                    className="rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
+                    onClick={handleCitationClick}
+                  >
+                    <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
+                  </div>
+                  <div className="absolute -right-1 top-1 hidden gap-0.5 group-hover:flex">
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
+                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      type="button"
+                      title="Copy message"
+                    >📋</button>
+                    {i === chatMessages.length - 1 && !chatLoading && (
+                      <button
+                        onClick={() => {
+                          // Remove last AI message and resend the previous user message
+                          const lastUserIdx = chatMessages.findLastIndex((m) => m.role === "user");
+                          if (lastUserIdx < 0) return;
+                          const retryQ = chatMessages[lastUserIdx].content;
+                          setChatMessages(chatMessages.slice(0, lastUserIdx));
+                          hasStreamedOnceRef.current = lastUserIdx > 0;
+                          setChatInput(retryQ);
+                        }}
+                        className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                        type="button"
+                        title="Regenerate response"
+                      >🔄</button>
+                    )}
+                  </div>
                 </div>
               )
             ))
           )}
-          {chatLoading && !hasStreamedOnceRef.current && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
+          {chatLoading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
             <div className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-tertiary)">
               <span className="inline-flex gap-1">
                 <span className="animate-pulse">●</span>
@@ -888,6 +1008,7 @@ ${src.summary}
       </div>
 
       {/* Right panel: Source preview / Overview */}
+      {!rightCollapsed && (
       <div className="flex w-72 flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)">
         <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
@@ -911,6 +1032,12 @@ ${src.summary}
             >
               📥 Export
             </button>
+            <button
+              onClick={() => setRightCollapsed(true)}
+              className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+              type="button"
+              title="Collapse panel"
+            >▶</button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 text-xs text-(--ui-text-secondary) whitespace-pre-wrap">
@@ -935,6 +1062,18 @@ ${src.summary}
                   </span>
                 )}
               </div>
+              {selectedSource.url && (
+                <div className="mb-3">
+                  <a
+                    href={selectedSource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-(--ui-accent) hover:underline break-all"
+                  >
+                    🔗 {selectedSource.url}
+                  </a>
+                </div>
+              )}
               {selectedSource.summary && (
                 <div className="mb-3 rounded border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-3">
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
@@ -1000,6 +1139,17 @@ ${src.summary}
             )}
         </div>
       </div>
+      )}
+
+      {/* Expand button for collapsed right panel */}
+      {rightCollapsed && (
+        <button
+          onClick={() => setRightCollapsed(false)}
+          className="flex items-center border-l border-(--ui-stroke-secondary) px-1 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) hover:bg-(--ui-surface-elevated)"
+          title="Show overview panel"
+          type="button"
+        >◀</button>
+      )}
 
       {confirmDialogJSX}
     </div>

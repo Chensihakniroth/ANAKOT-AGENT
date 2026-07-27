@@ -27,14 +27,6 @@ export interface Notebook {
   updated_at: string;
 }
 
-export interface NotebookOverview {
-  notebook_id: string;
-  title: string;
-  source_count: number;
-  summaries: string[];
-  combined: string;
-}
-
 export interface NotebookContext {
   text: string;
   char_count: number;
@@ -204,36 +196,12 @@ export async function getSourceText(
   return data.text;
 }
 
-/** Update source summary */
-export async function updateSourceSummary(
-  notebookId: string,
-  sourceId: string,
-  summary: string
-): Promise<void> {
-  await fetchJSON(
-    `${API}/notebooks/${notebookId}/sources/${sourceId}/summary`,
-    {
-      method: "PUT",
-      body: JSON.stringify({ summary }),
-    }
-  );
-}
-
 /** Get combined context from all sources */
 export async function getNotebookContext(
   notebookId: string
 ): Promise<NotebookContext> {
   return fetchJSON<NotebookContext>(
     `${API}/notebooks/${notebookId}/context`
-  );
-}
-
-/** Get notebook overview with summaries */
-export async function getNotebookOverview(
-  notebookId: string
-): Promise<NotebookOverview> {
-  return fetchJSON<NotebookOverview>(
-    `${API}/notebooks/${notebookId}/overview`
   );
 }
 
@@ -244,21 +212,6 @@ export async function reExtractSources(
   return fetchJSON<{ re_extracted: number }>(
     `${API}/notebooks/${notebookId}/re-extract`,
     { method: "POST" }
-  );
-}
-
-/** Chat with AI grounded in notebook document context */
-export async function chatNotebook(
-  notebookId: string,
-  message: string,
-  history: Array<{ role: "user" | "assistant"; content: string }> = []
-): Promise<{ response: string; model: string }> {
-  return fetchJSON<{ response: string; model: string }>(
-    `${API}/notebooks/${notebookId}/chat`,
-    {
-      method: "POST",
-      body: JSON.stringify({ message, history }),
-    }
   );
 }
 
