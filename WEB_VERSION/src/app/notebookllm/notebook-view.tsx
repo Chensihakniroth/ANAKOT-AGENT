@@ -787,7 +787,7 @@ ${src.summary}
       </div>
 
       {/* Center panel: Chat */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div className="flex flex-1 flex-col min-w-0 bg-(--ui-surface-background)">
         {/* Chat messages */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
           {chatMessages.length === 0 ? (
@@ -888,7 +888,7 @@ ${src.summary}
       </div>
 
       {/* Right panel: Source preview / Overview */}
-      <div className="flex w-72 flex-col border-l border-(--ui-stroke-secondary)">
+      <div className="flex w-72 flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)">
         <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
             {selectedSource ? "Source Preview" : "Overview"}
