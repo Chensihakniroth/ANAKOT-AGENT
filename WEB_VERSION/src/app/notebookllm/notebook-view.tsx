@@ -16,12 +16,15 @@ import {
   uploadSource,
   addUrlSource,
   deleteSource,
+  getSourceText,
   getNotebookContext,
   reExtractSources,
   chatNotebook,
   summarizeNotebook,
   loadChatHistory,
   saveChatMessage,
+  clearChatHistory,
+  reorderSources,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
@@ -45,6 +48,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [chatLoading, setChatLoading] = useState(false);
   const chatStreamAbortRef = useRef<AbortController | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const hasStreamedOnceRef = useRef(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
@@ -57,6 +61,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   );
   const [sourceText, setSourceText] = useState<string>("");
   const [overview, setOverview] = useState<string>("");
+  const [dragOver, setDragOver] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const sources = currentNotebook?.sources ?? [];
 
@@ -179,13 +185,117 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     }
   }, [currentNotebook]);
 
+  // ── Drag-and-drop handler ──────────────────────────────────────
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    if (!currentNotebook) return;
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    for (const file of files) {
+      try {
+        await uploadSource(currentNotebook.id, file);
+      } catch (err) {
+        notifyError(err, `Failed to upload ${file.name}`);
+      }
+    }
+    notify({ kind: "success", message: `Uploaded ${files.length} file(s)` });
+    await loadNotebook(currentNotebook.id);
+  }, [currentNotebook]);
+
+  // ── Markdown export ──────────────────────────────────────────────
+  const handleExportMarkdown = useCallback(() => {
+    if (!currentNotebook) return;
+    const lines: string[] = [`# ${currentNotebook.title}
+`];
+    lines.push(`*Exported from NotebookLLM — ${new Date().toLocaleDateString()}*
+`);
+    if (overview) {
+      lines.push(`## Overview
+${overview}
+`);
+    }
+    if (sources.length > 0) {
+      lines.push(`## Sources (${sources.length})
+`);
+      for (const src of sources) {
+        lines.push(`### ${src.original_name}`);
+        lines.push(`- Type: ${src.source_type} | Words: ${src.word_count ?? 0} | Chars: ${src.char_count ?? 0}`);
+        if (src.summary) lines.push(`
+${src.summary}
+`);
+        lines.push("");
+      }
+    }
+    if (chatMessages.length > 0) {
+      lines.push(`## Chat History
+`);
+      for (const msg of chatMessages) {
+        const role = msg.role === "user" ? "You" : "AI";
+        lines.push(`**${role}:** ${msg.content}
+`);
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentNotebook.title.replace(/[^a-z0-9]/gi, "_")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [currentNotebook, overview, sources, chatMessages]);
+
+  // ── Source reordering ────────────────────────────────────────────
+  const handleMoveSource = useCallback(async (sourceId: string, direction: "up" | "down") => {
+    if (!currentNotebook) return;
+    const ids = sources.map((s) => s.id);
+    const idx = ids.indexOf(sourceId);
+    if (idx < 0) return;
+    const swap = direction === "up" ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= ids.length) return;
+    [ids[idx], ids[swap]] = [ids[swap], ids[idx]];
+    try {
+      await reorderSources(currentNotebook.id, ids);
+    } catch (err) {
+      notifyError(err, "Reorder failed");
+    }
+  }, [currentNotebook, sources]);
+
+  // ── Clear chat history ───────────────────────────────────────────
+  const handleClearChat = useCallback(() => {
+    if (!currentNotebook) return;
+    setConfirmDialog({
+      message: "Clear all chat history for this notebook?",
+      onConfirm: async () => {
+        await clearChatHistory(currentNotebook.id);
+        setChatMessages([]);
+        hasStreamedOnceRef.current = false;
+        notify({ kind: "success", message: "Chat history cleared" });
+      },
+    });
+  }, [currentNotebook]);
+
   const handleSelectSource = useCallback(
     async (src: NotebookSource) => {
       setSelectedSource(src);
+      setSourceText("");
       if (!currentNotebook) return;
       try {
-        const ctx = await getNotebookContext(currentNotebook.id);
-        setSourceText(ctx.text.slice(0, 5000));
+        const text = await getSourceText(currentNotebook.id, src.id);
+        setSourceText(text.slice(0, 5000));
       } catch {
         setSourceText("(unable to load source text)");
       }
@@ -272,6 +382,15 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             if (data === "[DONE]") break;
             try {
               const parsed = JSON.parse(data);
+              if (parsed.error) {
+                // Backend sent an error (e.g. no API key, provider error)
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = { role: "assistant", content: "" };
+                  return next;
+                });
+                throw new Error(parsed.error);
+              }
               if (parsed.delta) {
                 accumulated += parsed.delta;
                 const snap = accumulated;
@@ -281,7 +400,11 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                   return next;
                 });
               }
-            } catch { /* ignore malformed chunks */ }
+            } catch (e) {
+              if (e instanceof Error && e.message && !e.message.includes("JSON")) {
+                throw e; // Re-throw real errors (not JSON parse errors)
+              }
+            }
           }
         }
       }
@@ -303,6 +426,29 @@ export function NotebookView({ onClose }: NotebookViewProps) {
       setChatLoading(false);
     }
   }, [chatInput, currentNotebook, chatMessages]);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Escape: go back to list
+      if (e.key === "Escape" && currentNotebook && !e.defaultPrevented) {
+        $currentNotebook.set(null);
+      }
+    };
+    const keyDown = (e: KeyboardEvent) => {
+      // /: focus chat input
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        chatInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    window.addEventListener("keydown", keyDown);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("keydown", keyDown);
+    };
+  }, [currentNotebook]);
 
   // Auto-scroll chat to bottom during streaming
   useEffect(() => {
@@ -370,8 +516,15 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             </button>
           </div>
         ) : (
+          <>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notebooks..."
+            className="mb-4 w-full rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+          />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {notebooks.map((nb) => (
+            {notebooks.filter((nb) => !searchQuery || nb.title.toLowerCase().includes(searchQuery.toLowerCase())).map((nb) => (
               <div
                 key={nb.id}
                 className="group cursor-pointer rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-4 transition-colors hover:border-(--ui-accent)"
@@ -401,6 +554,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               </div>
             ))}
           </div>
+          </>
         )}
         {confirmDialogJSX}
       </div>
@@ -411,7 +565,12 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   return (
     <div className="relative flex h-full bg-(--ui-surface-background)">
       {/* Left panel: Source list */}
-      <div className="flex w-64 flex-col border-r border-(--ui-stroke-secondary)">
+      <div
+        className={`flex w-64 flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="border-b border-(--ui-stroke-secondary) p-3">
           <button
             onClick={() => $currentNotebook.set(null)}
@@ -552,18 +711,33 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                   </div>
                   <div className="text-[10px] text-(--ui-text-tertiary)">
                     {(src.word_count ?? 0).toLocaleString()} words
+                    {(src.word_count ?? 0) === 0 && (
+                      <span className="ml-1 text-amber-400" title="Extraction failed">⚠</span>
+                    )}
                   </div>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteSource(src.id);
-                  }}
-                  className="ml-1 text-[10px] text-(--ui-text-tertiary) opacity-0 hover:text-red-500 group-hover:opacity-100"
-                  type="button"
-                >
-                  ✕
-                </button>
+                <div className="ml-1 flex flex-col gap-0 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                    type="button"
+                    disabled={sources.indexOf(src) === 0}
+                    title="Move up"
+                  >▲</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "down"); }}
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                    type="button"
+                    disabled={sources.indexOf(src) === sources.length - 1}
+                    title="Move down"
+                  >▼</button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id); }}
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-red-500"
+                    type="button"
+                    title="Remove source"
+                  >✕</button>
+                </div>
               </div>
             ))
           )}
@@ -596,7 +770,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
                   data-slot="aui_assistant-message-content"
                   className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
                 >
-                  <MarkdownTextContent text={msg.content} isRunning={false} />
+                  <MarkdownTextContent text={msg.content} isRunning={chatLoading && i === chatMessages.length - 1} />
                 </div>
               )
             ))
@@ -614,14 +788,39 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
         {/* Chat input */}
         <div className="border-t border-(--ui-stroke-secondary) p-3">
+          {chatMessages.length > 0 && (
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={handleClearChat}
+                className="text-[10px] text-(--ui-text-tertiary) hover:text-red-400"
+                type="button"
+              >
+                Clear history
+              </button>
+            </div>
+          )}
           <div className="flex gap-2">
-            <input
+            <textarea
+              ref={chatInputRef}
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleChat()}
-              placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources... (Shift+Enter for newline)"}
-              className="flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+              onChange={(e) => {
+                setChatInput(e.target.value);
+                // Auto-resize
+                const el = e.target;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 120) + "px";
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleChat();
+                }
+              }}
+              placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
+              rows={1}
+              className="flex-1 resize-none rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
               disabled={chatLoading}
+              style={{ maxHeight: "120px" }}
             />
             {chatLoading ? (
               <button
@@ -651,15 +850,25 @@ export function NotebookView({ onClose }: NotebookViewProps) {
           <span className="text-xs font-medium text-(--ui-text-secondary)">
             {selectedSource ? "Source Preview" : "Overview"}
           </span>
-          {!selectedSource && (
+          <div className="flex gap-2">
+            {!selectedSource && (
+              <button
+                onClick={handleLoadOverview}
+                className="text-xs text-(--ui-accent) hover:underline"
+                type="button"
+              >
+                Refresh
+              </button>
+            )}
             <button
-              onClick={handleLoadOverview}
-              className="text-xs text-(--ui-accent) hover:underline"
+              onClick={handleExportMarkdown}
+              className="text-xs text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
               type="button"
+              title="Export as Markdown"
             >
-              Refresh
+              📥 Export
             </button>
-          )}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 text-xs text-(--ui-text-secondary) whitespace-pre-wrap">
           {selectedSource ? (

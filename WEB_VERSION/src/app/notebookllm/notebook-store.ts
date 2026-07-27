@@ -313,3 +313,18 @@ export async function clearChatHistory(
     { method: "POST" }
   );
 }
+
+/** Reorder sources within a notebook */
+export async function reorderSources(
+  notebookId: string,
+  sourceIds: string[]
+): Promise<void> {
+  await fetchJSON<{ ok: boolean }>(
+    `${API}/notebooks/${notebookId}/sources/reorder`,
+    {
+      method: "POST",
+      body: JSON.stringify({ source_ids: sourceIds }),
+    }
+  );
+  await loadNotebook(notebookId);
+}

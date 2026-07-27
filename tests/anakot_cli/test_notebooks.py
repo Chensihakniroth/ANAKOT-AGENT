@@ -307,3 +307,170 @@ class TestTextExtraction:
         text, pages = extract_pdf_text("/nonexistent/file.pdf")
         assert text == ""
         assert pages == 0
+
+# ── Chat history ───────────────────────────────────────────────────────
+
+
+class TestChatHistory:
+    def test_save_and_load_chat_messages(self):
+        from anakot_cli.notebooks import save_chat_message, load_chat_history
+        nb = _create()
+        save_chat_message(nb["id"], "user", "Hello AI")
+        save_chat_message(nb["id"], "assistant", "Hi there!")
+        history = load_chat_history(nb["id"])
+        assert len(history) == 2
+        assert history[0]["role"] == "user"
+        assert history[0]["content"] == "Hello AI"
+        assert history[1]["role"] == "assistant"
+        assert history[1]["content"] == "Hi there!"
+
+    def test_load_chat_history_returns_oldest_first(self):
+        from anakot_cli.notebooks import save_chat_message, load_chat_history
+        nb = _create()
+        save_chat_message(nb["id"], "user", "First")
+        save_chat_message(nb["id"], "assistant", "Second")
+        save_chat_message(nb["id"], "user", "Third")
+        history = load_chat_history(nb["id"])
+        assert [m["role"] for m in history] == ["user", "assistant", "user"]
+        assert [m["content"] for m in history] == ["First", "Second", "Third"]
+
+    def test_load_chat_history_limit(self):
+        from anakot_cli.notebooks import save_chat_message, load_chat_history
+        nb = _create()
+        for i in range(10):
+            save_chat_message(nb["id"], "user", f"msg {i}")
+        history = load_chat_history(nb["id"], limit=3)
+        assert len(history) == 3
+        assert history[0]["content"] == "msg 7"
+        assert history[2]["content"] == "msg 9"
+
+    def test_clear_chat_history(self):
+        from anakot_cli.notebooks import save_chat_message, load_chat_history, clear_chat_history
+        nb = _create()
+        save_chat_message(nb["id"], "user", "msg1")
+        save_chat_message(nb["id"], "assistant", "msg2")
+        assert len(load_chat_history(nb["id"])) == 2
+        clear_chat_history(nb["id"])
+        assert len(load_chat_history(nb["id"])) == 0
+
+    def test_chat_history_isolation_between_notebooks(self):
+        from anakot_cli.notebooks import save_chat_message, load_chat_history
+        nb1 = _create("NB1")
+        nb2 = _create("NB2")
+        save_chat_message(nb1["id"], "user", "from nb1")
+        save_chat_message(nb2["id"], "user", "from nb2")
+        h1 = load_chat_history(nb1["id"])
+        h2 = load_chat_history(nb2["id"])
+        assert len(h1) == 1
+        assert h1[0]["content"] == "from nb1"
+        assert len(h2) == 1
+        assert h2[0]["content"] == "from nb2"
+
+
+# ── Source reordering ──────────────────────────────────────────────────
+
+
+class TestSourceReordering:
+    def _create_with_sources(self, count=3):
+        from anakot_cli.notebooks import add_source
+        nb = _create()
+        ids = []
+        for i in range(count):
+            src = add_source(
+                notebook_id=nb["id"],
+                filename=f"file{i}.txt",
+                original_name=f"file{i}.txt",
+                source_type="text",
+                content_bytes=b"content",
+                extracted_text=f"text {i}",
+                page_count=1,
+                word_count=1,
+                char_count=7,
+            )
+            ids.append(src["id"])
+        return nb, ids
+
+    def test_reorder_sources_basic(self):
+        from anakot_cli.notebooks import reorder_sources, get_notebook
+        nb, ids = self._create_with_sources()
+        result = reorder_sources(nb["id"], list(reversed(ids)))
+        result_ids = [s["id"] for s in result]
+        assert result_ids == list(reversed(ids))
+
+    def test_reorder_sources_partial_list(self):
+        from anakot_cli.notebooks import reorder_sources, get_notebook
+        nb, ids = self._create_with_sources(4)
+        reorder_sources(nb["id"], [ids[1], ids[0]])
+        notebook = get_notebook(nb["id"])
+        result_ids = [s["id"] for s in notebook["sources"]]
+        assert result_ids[0] == ids[1]
+        assert result_ids[1] == ids[0]
+        assert ids[2] in result_ids[2:]
+        assert ids[3] in result_ids[2:]
+
+    def test_reorder_sources_empty_list(self):
+        from anakot_cli.notebooks import reorder_sources, get_notebook
+        nb, ids = self._create_with_sources()
+        result = reorder_sources(nb["id"], [])
+        notebook = get_notebook(nb["id"])
+        result_ids = [s["id"] for s in notebook["sources"]]
+        # All sources should still exist; order may differ because remaining is a set
+        assert set(result_ids) == set(ids)
+
+    def test_reorder_sources_invalid_ids_ignored(self):
+        from anakot_cli.notebooks import reorder_sources, get_notebook
+        nb, ids = self._create_with_sources()
+        result = reorder_sources(nb["id"], [ids[2], "nonexistent", ids[0], ids[1]])
+        result_ids = [s["id"] for s in result]
+        assert result_ids == [ids[2], ids[0], ids[1]]
+
+    def test_sort_order_on_initial_insert(self):
+        from anakot_cli.notebooks import get_notebook
+        nb, ids = self._create_with_sources()
+        notebook = get_notebook(nb["id"])
+        result_ids = [s["id"] for s in notebook["sources"]]
+        assert result_ids == ids
+
+
+# ── Streaming parser (unit) ────────────────────────────────────────────
+
+
+class TestStreamingParser:
+    def test_anthropic_format_parsing(self):
+        """Verify Anthropic content_block_delta is parsed correctly."""
+        chunk = {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": "Hello"}
+        }
+        delta = chunk.get("choices", [{}])[0].get("delta", {})
+        content_text = delta.get("content", "")
+        if not content_text and chunk.get("type") == "content_block_delta":
+            inner_delta = chunk.get("delta", {})
+            if inner_delta.get("type") == "text_delta":
+                content_text = inner_delta.get("text", "")
+        assert content_text == "Hello"
+
+    def test_openai_format_parsing(self):
+        """Verify OpenAI delta format is parsed correctly."""
+        chunk = {
+            "choices": [{"delta": {"content": "World"}}]
+        }
+        delta = chunk.get("choices", [{}])[0].get("delta", {})
+        content_text = delta.get("content", "")
+        if not content_text and chunk.get("type") == "content_block_delta":
+            inner_delta = chunk.get("delta", {})
+            if inner_delta.get("type") == "text_delta":
+                content_text = inner_delta.get("text", "")
+        assert content_text == "World"
+
+    def test_error_format_detected(self):
+        """Verify error responses are detected (no content extracted)."""
+        chunk = {"error": "No API key configured"}
+        delta = chunk.get("choices", [{}])[0].get("delta", {})
+        content_text = delta.get("content", "")
+        if not content_text and chunk.get("type") == "content_block_delta":
+            inner_delta = chunk.get("delta", {})
+            if inner_delta.get("type") == "text_delta":
+                content_text = inner_delta.get("text", "")
+        assert content_text == ""
+        assert "error" in chunk

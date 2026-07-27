@@ -10494,6 +10494,7 @@ from anakot_cli.notebooks import (
     extract_pdf_text as _nb_extract_pdf,
     extract_text_content as _nb_extract_text,
     _notebooks_root as _nb_root,
+    reorder_sources as _nb_reorder_sources,
     save_chat_message as _nb_save_chat,
     load_chat_history as _nb_load_chat,
     clear_chat_history as _nb_clear_chat,
@@ -10510,6 +10511,10 @@ class NotebookRename(BaseModel):
 
 class SourceUrl(BaseModel):
     url: str
+
+
+class SourceReorder(BaseModel):
+    source_ids: list[str]
 
 
 class NotebookChatRequest(BaseModel):
@@ -10739,6 +10744,30 @@ async def notebook_delete_source(notebook_id: str, source_id: str):
     return {"ok": True}
 
 
+@app.post("/api/notebooks/{notebook_id}/sources/reorder")
+async def notebook_reorder_sources(
+    request: Request, notebook_id: str, body: SourceReorder
+):
+    """Reorder sources for a notebook.
+
+    Accepts a JSON body with {"source_ids": ["id1", "id2", ...]} listing
+    source IDs in the desired order. Sources not listed are appended at the
+    end in their existing order.
+    """
+    _require_token(request)
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    if not body.source_ids:
+        raise HTTPException(
+            status_code=400, detail="source_ids must be a non-empty list"
+        )
+
+    reordered = _nb_reorder_sources(notebook_id, body.source_ids)
+    return {"ok": True, "sources": reordered}
+
+
 @app.get("/api/notebooks/{notebook_id}/context")
 async def notebook_get_context(notebook_id: str):
     """Get combined extracted text from all sources (for grounding chat)."""
@@ -10951,7 +10980,7 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
 
     import httpx
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as client:
             resp = await client.post(target_url, json=req_body, headers=headers)
         if resp.status_code != 200:
             detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
@@ -11105,6 +11134,12 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
                         try:
                             chunk = _json.loads(data_str)
                             delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            # OpenAI-compatible format
+                            # Anthropic format (content_block_delta events)
+                            if not content_text and chunk.get("type") == "content_block_delta":
+                                inner_delta = chunk.get("delta", {})
+                                if inner_delta.get("type") == "text_delta":
+                                    content_text = inner_delta.get("text", "")
                             content_text = delta.get("content", "")
                             if content_text:
                                 yield f"data: {_json.dumps({'delta': content_text})}\n\n"

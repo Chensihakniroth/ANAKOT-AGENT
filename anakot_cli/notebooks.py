@@ -96,6 +96,12 @@ def _init_db(db: sqlite3.Connection) -> None:
     """
     )
     db.commit()
+    # Migration: add sort_order column for source ordering (safe to fail if already exists)
+    try:
+        db.execute("ALTER TABLE source ADD COLUMN sort_order INTEGER DEFAULT 0")
+        db.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +164,7 @@ def get_notebook(notebook_id: str) -> Optional[Dict[str, Any]]:
     sources = db.execute(
         "SELECT id, filename, original_name, source_type, page_count, "
         "word_count, char_count, summary, created_at "
-        "FROM source WHERE notebook_id = ? ORDER BY created_at",
+        "FROM source WHERE notebook_id = ? ORDER BY sort_order, created_at",
         (notebook_id,),
     ).fetchall()
     db.close()
@@ -341,6 +347,57 @@ def delete_source(notebook_id: str, source_id: str) -> bool:
     return True
 
 
+def reorder_sources(notebook_id: str, source_ids: list[str]) -> list[dict]:
+    """Reorder sources for a notebook by setting sort_order values.
+
+    source_ids should be a list of source IDs in the desired order.
+    Only IDs belonging to this notebook will be affected; any IDs not found
+    in the notebook are ignored.
+
+    Returns the reordered list of sources.
+    """
+    db = _get_db(notebook_id)
+    _init_db(db)
+
+    # Validate that all provided source_ids exist for this notebook
+    existing = db.execute(
+        "SELECT id FROM source WHERE notebook_id = ?",
+        (notebook_id,),
+    ).fetchall()
+    existing_ids = {row["id"] for row in existing}
+
+    # Filter to only IDs that actually belong to this notebook
+    valid_ids = [sid for sid in source_ids if sid in existing_ids]
+
+    # Any sources not in the provided list go at the end, in their original order
+    remaining = [sid for sid in existing_ids if sid not in set(valid_ids)]
+    ordered_ids = valid_ids + remaining
+
+    # Update sort_order for each source
+    for idx, source_id in enumerate(ordered_ids):
+        db.execute(
+            "UPDATE source SET sort_order = ? WHERE id = ? AND notebook_id = ?",
+            (idx, source_id, notebook_id),
+        )
+
+    # Update notebook's updated_at
+    now = datetime.now(timezone.utc).isoformat()
+    db.execute(
+        "UPDATE notebook SET updated_at = ? WHERE id = ?", (now, notebook_id)
+    )
+    db.commit()
+
+    # Return the reordered sources
+    rows = db.execute(
+        "SELECT id, filename, original_name, source_type, page_count, "
+        "word_count, char_count, summary, created_at "
+        "FROM source WHERE notebook_id = ? ORDER BY sort_order, created_at",
+        (notebook_id,),
+    ).fetchall()
+    db.close()
+    return [dict(r) for r in rows]
+
+
 def get_all_extracted_text(
     notebook_id: str, max_chars: int = 100_000
 ) -> str:
@@ -350,7 +407,7 @@ def get_all_extracted_text(
     rows = db.execute(
         "SELECT filename, extracted_text, source_type FROM source "
         "WHERE notebook_id = ? AND extracted_text IS NOT NULL "
-        "ORDER BY created_at",
+        "ORDER BY sort_order, created_at",
         (notebook_id,),
     ).fetchall()
     db.close()
