@@ -67,7 +67,7 @@ try:
     from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.middleware.gzip import GZipMiddleware
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
 except ImportError:
@@ -80,7 +80,7 @@ except ImportError:
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.middleware.gzip import GZipMiddleware
-        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
         from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel
     except Exception:
@@ -10968,6 +10968,171 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     except Exception as exc:
         _log.exception("Notebook chat proxy failed")
         raise HTTPException(status_code=502, detail=f"Provider request failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Streaming chat endpoint (SSE)
+# ---------------------------------------------------------------------------
+
+async def _notebook_chat_stream_generator(notebook_id: str, message: str, history: list):
+    """Generator that yields SSE chunks for notebook chat."""
+    import json as _json
+
+    nb = _nb_get(notebook_id)
+    if not nb:
+        yield f"data: {_json.dumps({'error': 'Notebook not found'})}\n\n"
+        return
+
+    # Build context from all sources
+    context_text = _nb_get_all_text(notebook_id)
+    if not context_text.strip():
+        yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
+        return
+
+    # Truncate to ~80k chars
+    max_context_chars = 80_000
+    if len(context_text) > max_context_chars:
+        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+
+    # Build messages
+    source_names = [s["original_name"] for s in nb.get("sources", [])]
+    sources_list = ", ".join(source_names)
+    system_prompt = (
+        f"You are a helpful research assistant. The user has uploaded "
+        f"{len(source_names)} document(s) to a notebook: [{sources_list}].\n\n"
+        f"Below is the extracted text from these documents. Use this content "
+        f"as your primary source of knowledge when answering the user's "
+        f"question. Cite specific documents when possible.\n\n"
+        f"<document_context>\n{context_text}\n</document_context>"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        for h in history[-20:]:
+            if h.get("role") in ("user", "assistant"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+
+    # Resolve provider config
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "opencode-go": "opencode-go",
+        "google": "gemini", "google-gemini-cli": "gemini", "gemini-cli": "gemini",
+        "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "github": "copilot", "github-copilot": "copilot",
+        "llama.cpp": "custom", "ollama": "custom", "vllm": "custom",
+        "lmstudio": "custom", "lm-studio": "custom",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com",
+        "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "google": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai",
+        "copilot": "https://api.githubcopilot.com",
+        "zai": "https://open.bigmodel.cn/api/paas/v4",
+        "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        env_base_url_var = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(env_base_url_var, "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY")
+        or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        yield f"data: {_json.dumps({'error': f'No API key for provider {provider_name}'})}\n\n"
+        return
+
+    req_body = {
+        "model": model_name or "gpt-4o",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 4096,
+        "stream": True,
+    }
+
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    target_url = f"{base_url}/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            async with client.stream("POST", target_url, json=req_body, headers=headers) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    yield f"data: {_json.dumps({'error': f'Provider error: {body.decode()[:200]}'})}\n\n"
+                    return
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str.strip() == "[DONE]":
+                            yield "data: [DONE]\n\n"
+                            return
+                        try:
+                            chunk = _json.loads(data_str)
+                            delta = chunk.get("choices", [{}])[0].get("delta", {})
+                            content_text = delta.get("content", "")
+                            if content_text:
+                                yield f"data: {_json.dumps({'delta': content_text})}\n\n"
+                        except _json.JSONDecodeError:
+                            pass
+    except httpx.ConnectError:
+        yield f"data: {_json.dumps({'error': 'Cannot connect to provider'})}\n\n"
+    except httpx.TimeoutException:
+        yield f"data: {_json.dumps({'error': 'Provider request timed out'})}\n\n"
+    except Exception as exc:
+        _log.exception("Notebook streaming chat failed")
+        yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
+
+
+@app.post("/api/notebooks/{notebook_id}/chat/stream")
+async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, request: Request):
+    """Streaming version of notebook chat — returns SSE text/event-stream."""
+    _require_token(request)
+    return StreamingResponse(
+        _notebook_chat_stream_generator(
+            notebook_id, body.message, body.history or []
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

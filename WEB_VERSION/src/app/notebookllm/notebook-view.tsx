@@ -1,7 +1,7 @@
 // NotebookLLM — Main notebook overlay view
 // Three-panel layout: source list (left) | chat (center) | summary (right)
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import {
   $notebooks,
@@ -43,6 +43,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     Array<{ role: "user" | "assistant"; content: string }>
   >([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const chatStreamAbortRef = useRef<AbortController | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     message: string;
     onConfirm: () => void;
@@ -191,24 +192,81 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     if (!chatInput.trim() || !currentNotebook) return;
     const question = chatInput.trim();
     setChatInput("");
-    // Build history including the new user message immediately
     const userMsg = { role: "user" as const, content: question };
     const updatedMessages = [...chatMessages, userMsg];
     setChatMessages(updatedMessages);
     // Persist user message
     saveChatMessage(currentNotebook.id, "user", question).catch(() => {});
     setChatLoading(true);
+
+    // Abort any in-flight stream
+    chatStreamAbortRef.current?.abort();
+    const controller = new AbortController();
+    chatStreamAbortRef.current = controller;
+
     try {
-      const result = await chatNotebook(
-        currentNotebook.id,
-        question,
-        updatedMessages
-      );
-      const assistantMsg = { role: "assistant" as const, content: result.response };
-      setChatMessages((prev) => [...prev, assistantMsg]);
-      // Persist assistant message
-      saveChatMessage(currentNotebook.id, "assistant", result.response).catch(() => {});
-    } catch (err) {
+      const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ as string | undefined;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["X-Anakot-Session-Token"] = token;
+
+      const res = await fetch(`/api/notebooks/${currentNotebook.id}/chat/stream`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ message: question, history: updatedMessages.slice(0, -1) }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ detail: "Request failed" }));
+        throw new Error(errBody.detail || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      // Add empty assistant message that we'll update progressively
+      setChatMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") break;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.delta) {
+                accumulated += parsed.delta;
+                const snap = accumulated;
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = { role: "assistant", content: snap };
+                  return next;
+                });
+              }
+            } catch { /* ignore malformed chunks */ }
+          }
+        }
+      }
+
+      // Persist final accumulated response
+      if (accumulated) {
+        saveChatMessage(currentNotebook.id, "assistant", accumulated).catch(() => {});
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setChatMessages((prev) => [
         ...prev,
         {
@@ -501,9 +559,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               )
             ))
           )}
-          {chatLoading && (
+          {chatLoading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
             <div className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-tertiary)">
-              Thinking...
+              <span className="inline-flex gap-1">
+                <span className="animate-pulse">●</span>
+                <span className="animate-pulse" style={{animationDelay: "0.2s"}}>●</span>
+                <span className="animate-pulse" style={{animationDelay: "0.4s"}}>●</span>
+              </span>
             </div>
           )}
         </div>
@@ -553,29 +615,46 @@ export function NotebookView({ onClose }: NotebookViewProps) {
               <h4 className="mb-2 font-medium text-(--ui-text-primary)">
                 {selectedSource.original_name}
               </h4>
-              <div className="mb-2 space-y-1 text-[10px] text-(--ui-text-tertiary)">
-                <div>Type: {selectedSource.source_type}</div>
-                <div>Words: {(selectedSource.word_count ?? 0).toLocaleString()}</div>
-                <div>Chars: {(selectedSource.char_count ?? 0).toLocaleString()}</div>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {selectedSource.source_type}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {(selectedSource.word_count ?? 0).toLocaleString()} words
+                </span>
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {(selectedSource.char_count ?? 0).toLocaleString()} chars
+                </span>
                 {(selectedSource.page_count ?? 0) > 0 && (
-                  <div>Pages: {selectedSource.page_count}</div>
+                  <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                    {selectedSource.page_count} pages
+                  </span>
                 )}
               </div>
               {selectedSource.summary && (
-                <div className="mb-3 rounded bg-(--ui-surface-elevated) p-2">
-                  <div className="mb-1 font-medium text-(--ui-text-primary)">
+                <div className="mb-3 rounded border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
                     Summary
                   </div>
-                  {selectedSource.summary}
+                  <div data-slot="aui_assistant-message-content">
+                    <MarkdownTextContent text={selectedSource.summary} isRunning={false} />
+                  </div>
                 </div>
               )}
-              <div className="text-[10px] text-(--ui-text-tertiary)">
-                {sourceText || "Loading..."}
+              <div className="rounded border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
+                  Extracted Text Preview
+                </div>
+                <div className="max-h-96 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-(--ui-text-secondary)">
+                  {sourceText || "Loading..."}
+                </div>
               </div>
             </div>
           ) : (
-            <div>
-              {overview || (
+            <div data-slot="aui_assistant-message-content" className="prose prose-invert prose-sm max-w-none">
+              {overview ? (
+                <MarkdownTextContent text={overview} isRunning={false} />
+              ) : (
                 <p className="text-center text-(--ui-text-tertiary)">
                   Click "Refresh" to load overview
                 </p>
