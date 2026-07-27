@@ -67,10 +67,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   // If overlay reopens with notebook already selected (from previous session), reload chat
   useEffect(() => {
     if (currentNotebook) {
-      loadChatHistory(currentNotebook.id)
+      const nbId = currentNotebook.id;
+      loadChatHistory(nbId)
         .then((history) => {
-          setChatMessages(history);
-          if (history.length > 0) hasStreamedOnceRef.current = true;
+          if ($currentNotebook.get()?.id === nbId) {
+            setChatMessages(history);
+            if (history.length > 0) hasStreamedOnceRef.current = true;
+          }
         })
         .catch(() => {});
     }
@@ -309,7 +312,22 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     }
   }, [chatMessages]);
 
-  // ── Notebook list view (no notebook selected) ──────────────────────────
+    // Shared confirm dialog
+  const confirmDialogJSX = confirmDialog && (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-5 shadow-lg">
+        <p className="mb-4 text-sm text-(--ui-text-primary)">
+          {confirmDialog.message}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button onClick={() => setConfirmDialog(null)} className="rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary)" type="button">Cancel</button>
+          <button onClick={async () => { const action = confirmDialog.onConfirm; setConfirmDialog(null); await action(); }} className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+  );
+
+// ── Notebook list view (no notebook selected) ──────────────────────────
   if (!currentNotebook) {
     return (
       <div className="flex h-full flex-col bg-(--ui-surface-background) p-6">
@@ -384,13 +402,14 @@ export function NotebookView({ onClose }: NotebookViewProps) {
             ))}
           </div>
         )}
+        {confirmDialogJSX}
       </div>
     );
   }
 
   // ── Notebook detail view (three-panel) ─────────────────────────────────
   return (
-    <div className="flex h-full bg-(--ui-surface-background)">
+    <div className="relative flex h-full bg-(--ui-surface-background)">
       {/* Left panel: Source list */}
       <div className="flex w-64 flex-col border-r border-(--ui-stroke-secondary)">
         <div className="border-b border-(--ui-stroke-secondary) p-3">
@@ -697,36 +716,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
         </div>
       </div>
 
-      {/* Custom confirm dialog */}
-      {confirmDialog && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-5 shadow-lg">
-            <p className="mb-4 text-sm text-(--ui-text-primary)">
-              {confirmDialog.message}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDialog(null)}
-                className="rounded-md border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  const action = confirmDialog.onConfirm;
-                  setConfirmDialog(null);
-                  await action();
-                }}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
-                type="button"
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmDialogJSX}
     </div>
   );
 }
