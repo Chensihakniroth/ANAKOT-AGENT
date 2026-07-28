@@ -10927,8 +10927,8 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
             detail="No extracted text in this notebook. Upload documents first.",
         )
 
-    # Truncate to ~80k chars (roughly 20k tokens) to stay within context limits
-    max_context_chars = 80_000
+    # Truncate to ~50k chars to stay within context limits for smaller models
+    max_context_chars = 50_000
     if len(context_text) > max_context_chars:
         context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
 
@@ -11075,8 +11075,8 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
         yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
         return
 
-    # Truncate to ~80k chars
-    max_context_chars = 80_000
+    # Truncate to ~50k chars
+    max_context_chars = 50_000
     if len(context_text) > max_context_chars:
         context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
 
@@ -11180,35 +11180,63 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
     }
 
     import httpx
+    # Fallback models if primary fails (e.g. opencode-zen big-pickle)
+    fallback_models = []
+    if model_name and model_name not in ("gpt-4o", "gpt-4o-mini"):
+        fallback_models = ["gpt-4o-mini", "gpt-4o"]
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
-            async with client.stream("POST", target_url, json=req_body, headers=headers) as resp:
-                if resp.status_code != 200:
-                    body = await resp.aread()
-                    yield f"data: {_json.dumps({'error': f'Provider error: {body.decode()[:200]}'})}\n\n"
-                    return
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str.strip() == "[DONE]":
-                            yield "data: [DONE]\n\n"
+            models_to_try = [model_name or "gpt-4o"] + fallback_models
+            for attempt_model in models_to_try:
+                req_body["model"] = attempt_model
+                try:
+                    async with client.stream("POST", target_url, json=req_body, headers=headers) as resp:
+                        if resp.status_code != 200:
+                            body = await resp.aread()
+                            try:
+                                err_json = _json.loads(body.decode())
+                                err_msg = err_json.get("error", {}).get("message", "") or body.decode()[:200]
+                            except Exception:
+                                err_msg = body.decode()[:200]
+                            # If this model failed and there are fallbacks, try next
+                            if attempt_model != models_to_try[-1]:
+                                _log.warning("Notebook chat model %s failed (%d: %s), trying fallback", attempt_model, resp.status_code, err_msg[:100])
+                                continue
+                            yield f"data: {_json.dumps({'error': f'Provider returned {resp.status_code}: {err_msg}'})}\n\n"
                             return
-                        try:
-                            chunk = _json.loads(data_str)
-                            delta = chunk.get("choices", [{}])[0].get("delta", {})
-                            # OpenAI-compatible format
-                            # Anthropic format (content_block_delta events)
-                            if not content_text and chunk.get("type") == "content_block_delta":
-                                inner_delta = chunk.get("delta", {})
-                                if inner_delta.get("type") == "text_delta":
-                                    content_text = inner_delta.get("text", "")
-                            content_text = delta.get("content", "")
-                            if content_text:
-                                yield f"data: {_json.dumps({'delta': content_text})}\n\n"
-                        except _json.JSONDecodeError:
-                            pass
+                        # Success — stream the response
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data: "):
+                                data_str = line[6:]
+                                if data_str.strip() == "[DONE]":
+                                    yield "data: [DONE]\n\n"
+                                    return
+                                try:
+                                    chunk = _json.loads(data_str)
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                    # OpenAI-compatible format
+                                    content_text = delta.get("content", "")
+                                    # Anthropic format (content_block_delta events)
+                                    if not content_text and chunk.get("type") == "content_block_delta":
+                                        inner_delta = chunk.get("delta", {})
+                                        if inner_delta.get("type") == "text_delta":
+                                            content_text = inner_delta.get("text", "")
+                                    if content_text:
+                                        yield f"data: {_json.dumps({'delta': content_text})}\n\n"
+                                except _json.JSONDecodeError:
+                                    pass
+                        # If we got here, streaming succeeded — we're done
+                        return
+                except (httpx.ConnectError, httpx.TimeoutException):
+                    if attempt_model != models_to_try[-1]:
+                        _log.warning("Notebook chat model %s connection failed, trying fallback", attempt_model)
+                        continue
+                    raise
+            # All models exhausted
+            yield f"data: {_json.dumps({'error': 'All models failed'})}\n\n"
     except httpx.ConnectError:
         yield f"data: {_json.dumps({'error': 'Cannot connect to provider'})}\n\n"
     except httpx.TimeoutException:
