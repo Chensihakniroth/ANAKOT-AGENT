@@ -11043,7 +11043,7 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
             detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
             raise HTTPException(status_code=502, detail=f"Provider error: {detail}")
         data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
         return {"response": content, "model": req_body["model"]}
     except httpx.ConnectError as exc:
         raise HTTPException(status_code=502, detail=f"Cannot connect to provider: {exc}")
@@ -11216,7 +11216,8 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
                                     return
                                 try:
                                     chunk = _json.loads(data_str)
-                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                    choices = chunk.get("choices") or []
+                                    delta = choices[0].get("delta", {}) if choices else {}
                                     # OpenAI-compatible format
                                     content_text = delta.get("content", "")
                                     # Anthropic format (content_block_delta events)
@@ -11224,9 +11225,14 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
                                         inner_delta = chunk.get("delta", {})
                                         if inner_delta.get("type") == "text_delta":
                                             content_text = inner_delta.get("text", "")
+                                    # Some providers send error objects
+                                    if not content_text and chunk.get("error"):
+                                        err_msg = chunk["error"] if isinstance(chunk["error"], str) else chunk["error"].get("message", str(chunk["error"]))
+                                        yield f"data: {_json.dumps({'error': err_msg})}\n\n"
+                                        return
                                     if content_text:
                                         yield f"data: {_json.dumps({'delta': content_text})}\n\n"
-                                except _json.JSONDecodeError:
+                                except (_json.JSONDecodeError, KeyError, IndexError):
                                     pass
                         # If we got here, streaming succeeded — we're done
                         return
@@ -11417,7 +11423,7 @@ async def notebook_summarize(notebook_id: str, body: SummarizeRequest, request: 
                 resp = await client.post(target_url, json=req_body, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
-                summary = data["choices"][0]["message"]["content"].strip()
+                summary = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
                 db.execute(
                     "UPDATE source SET summary = ? WHERE id = ?",
                     (summary, row["id"]),
