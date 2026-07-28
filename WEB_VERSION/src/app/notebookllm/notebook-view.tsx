@@ -713,7 +713,7 @@ ${src.summary}
                   </button>
                 </div>
                 <p className="text-sm text-(--ui-text-tertiary)">
-                  {(nb.sources ?? []).length} source{(nb.sources ?? []).length !== 1 ? "s" : ""}
+                  {(nb.source_count ?? 0)} source{(nb.source_count ?? 0) !== 1 ? "s" : ""}
                 </p>
                 <p className="mt-1 text-xs text-(--ui-text-tertiary)">
                   {new Date(nb.created_at).toLocaleDateString()}
