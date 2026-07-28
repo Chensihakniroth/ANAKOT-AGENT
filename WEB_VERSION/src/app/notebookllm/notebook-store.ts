@@ -27,6 +27,14 @@ export interface Notebook {
   updated_at: string;
 }
 
+export interface NotebookOverview {
+  notebook_id: string;
+  title: string;
+  source_count: number;
+  summaries: string[];
+  combined: string;
+}
+
 export interface NotebookContext {
   text: string;
   char_count: number;
@@ -212,6 +220,15 @@ export async function reExtractSources(
   return fetchJSON<{ re_extracted: number }>(
     `${API}/notebooks/${notebookId}/re-extract`,
     { method: "POST" }
+  );
+}
+
+/** Get notebook overview with all source summaries */
+export async function getNotebookOverview(
+  notebookId: string
+): Promise<NotebookOverview> {
+  return fetchJSON<NotebookOverview>(
+    `${API}/notebooks/${notebookId}/overview`
   );
 }
 

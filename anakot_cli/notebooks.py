@@ -435,13 +435,20 @@ def get_all_extracted_text(
 
 
 def save_chat_message(notebook_id: str, role: str, content: str) -> None:
-    """Save a chat message to the notebook's history."""
+    """Save a chat message to the notebook's history. Keeps last 200 messages."""
     db = _get_db(notebook_id)
     _init_db(db)
     now = datetime.now(timezone.utc).isoformat()
     db.execute(
         "INSERT INTO chat_history (notebook_id, role, content, created_at) VALUES (?, ?, ?, ?)",
         (notebook_id, role, content, now),
+    )
+    # Keep only the last 200 messages per notebook
+    db.execute(
+        """DELETE FROM chat_history WHERE notebook_id = ? AND id NOT IN (
+            SELECT id FROM chat_history WHERE notebook_id = ? ORDER BY id DESC LIMIT 200
+        )""",
+        (notebook_id, notebook_id),
     )
     db.commit()
     db.close()

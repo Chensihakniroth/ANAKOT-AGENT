@@ -10600,6 +10600,11 @@ async def notebook_upload_source(notebook_id: str, file: UploadFile):
     # Read content
     content_bytes = await file.read()
 
+    # Enforce 50MB limit
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    if len(content_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large: {len(content_bytes) / 1024 / 1024:.1f}MB exceeds 50MB limit")
+
     # Determine source type and extract text
     source_type = "text"
     extracted_text = ""

@@ -19,6 +19,7 @@ import {
   getSourceText,
   getNotebookContext,
   reExtractSources,
+  getNotebookOverview,
   summarizeNotebook,
   loadChatHistory,
   saveChatMessage,
@@ -129,10 +130,18 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   const [summarizing, setSummarizing] = useState(false);
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  const ACCEPTED_EXTENSIONS = [".pdf",".txt",".md",".csv",".json",".py",".js",".ts",".html",".css",".log"];
+
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file || !currentNotebook) return;
+      if (file.size > MAX_FILE_SIZE) {
+        notifyError(new Error(`${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit`), "File too large");
+        e.target.value = "";
+        return;
+      }
       await uploadSource(currentNotebook.id, file);
       e.target.value = "";
       // Auto-summarize sources that don't have summaries
@@ -207,18 +216,21 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     if (!currentNotebook) return;
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
-    // Validate file types
-    const accepted = [".pdf",".txt",".md",".csv",".json",".py",".js",".ts",".html",".css",".log"];
+    // Validate file types and sizes
     const rejected = files.filter((f) => {
       const ext = "." + f.name.split(".").pop()?.toLowerCase();
-      return !accepted.includes(ext);
+      return !ACCEPTED_EXTENSIONS.includes(ext);
     });
     if (rejected.length > 0) {
       notifyError(new Error(`Unsupported: ${rejected.map((f) => f.name).join(", ")}`), "File type not supported");
     }
+    const tooLarge = files.filter((f) => f.size > MAX_FILE_SIZE);
+    if (tooLarge.length > 0) {
+      notifyError(new Error(`Too large: ${tooLarge.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(1)}MB)`).join(", ")}`), "File exceeds 50MB limit");
+    }
     const validFiles = files.filter((f) => {
       const ext = "." + f.name.split(".").pop()?.toLowerCase();
-      return accepted.includes(ext);
+      return ACCEPTED_EXTENSIONS.includes(ext) && f.size <= MAX_FILE_SIZE;
     });
     if (validFiles.length === 0) return;
     let successCount = 0;
@@ -374,23 +386,23 @@ ${src.summary}
   const handleLoadOverview = useCallback(async () => {
     if (!currentNotebook) return;
     try {
-      const ctx = await getNotebookContext(currentNotebook.id);
-      if (ctx.char_count > 0) {
-        const estimatedTokens = Math.ceil(ctx.char_count / 4);
-        const maxTokens = 200000;
-        const pct = Math.min(100, Math.round((estimatedTokens / maxTokens) * 100));
-        setOverview(
-          `**Context:** ${ctx.char_count.toLocaleString()} characters (~${estimatedTokens.toLocaleString()} tokens)\n` +
-          `**Sources:** ${sources.length} source(s)\n` +
-          `**Usage:** ~${pct}% of context window`
-        );
+      const ov = await getNotebookOverview(currentNotebook.id);
+      if (ov.combined && ov.combined !== "No sources yet. Upload sources and generate summaries.") {
+        setOverview(ov.combined);
       } else {
-        setOverview("No sources yet.");
+        // Fallback: show context stats
+        const ctx = await getNotebookContext(currentNotebook.id);
+        if (ctx.char_count > 0) {
+          const estimatedTokens = Math.ceil(ctx.char_count / 4);
+          setOverview(`No summaries yet. Upload sources and click "Summarize all" to generate an overview.\n\nContext: ${ctx.char_count.toLocaleString()} chars (~${estimatedTokens.toLocaleString()} tokens)`);
+        } else {
+          setOverview("No sources yet. Upload files or add a URL to get started.");
+        }
       }
     } catch {
       setOverview("(unable to load overview)");
     }
-  }, [currentNotebook, sources.length]);
+  }, [currentNotebook]);
 
   // Auto-refresh overview when notebook loads
   useEffect(() => {
@@ -423,7 +435,7 @@ ${src.summary}
         method: "POST",
         headers,
         credentials: "include",
-        body: JSON.stringify({ message: question, history: updatedMessages.slice(0, -1) }),
+        body: JSON.stringify({ message: question, history: updatedMessages.slice(0, -1).slice(-20) }),
         signal: controller.signal,
       });
 
