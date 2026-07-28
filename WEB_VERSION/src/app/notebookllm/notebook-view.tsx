@@ -1089,75 +1089,72 @@ ${src.summary}
             sources.map((src) => (
               <div
                 key={src.id}
-                className={`group flex items-center justify-between rounded p-2 text-xs cursor-pointer transition-colors ${
+                className={`group flex items-center gap-2 rounded p-2 text-xs cursor-pointer transition-colors ${
                   selectedSource?.id === src.id
                     ? "bg-(--ui-accent)/10 text-(--ui-accent)"
                     : "text-(--ui-text-secondary) hover:bg-(--ui-surface-elevated)"
                 }`}
                 onClick={() => handleSelectSource(src)}
               >
-                <div className="flex items-start gap-2 min-w-0 flex-1">
-                  <input
-                    type="checkbox"
-                    checked={selectedSources.has(src.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={() => toggleSourceSelection(src.id)}
-                    className="mt-0.5 accent-(--ui-accent)"
-                  />
-                  <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">
-                    {src.source_type === "pdf" ? <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : src.source_type === "url" ? <Link size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" />}
-                    {editingSourceId === src.id ? (
-                      <input
-                        autoFocus
-                        value={editingSourceName}
-                        onChange={(e) => setEditingSourceName(e.target.value)}
-                        onBlur={handleSaveRename}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveRename();
-                          if (e.key === "Escape") setEditingSourceId(null);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-transparent border-b border-(--ui-accent) text-(--ui-text-primary) outline-none text-xs"
-                      />
-                    ) : (
-                      <span
-                        onDoubleClick={(e) => { e.stopPropagation(); handleStartRename(src); }}
-                        title="Double-click to rename"
-                      >
-                        {src.original_name}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-(--ui-text-tertiary)">
-                    {(src.word_count ?? 0).toLocaleString()} words
-                    {(src.word_count ?? 0) === 0 && (
-                      <span className="ml-1 text-amber-400" title="Extraction failed"><AlertTriangle size={12} /></span>
-                    )}
-                  </div>
+                <input
+                  type="checkbox"
+                  checked={selectedSources.has(src.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => toggleSourceSelection(src.id)}
+                  className="shrink-0 accent-(--ui-accent)"
+                />
+                {src.source_type === "url" ? <Link size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" />}
+                <div className="min-w-0 flex-1">
+                  {editingSourceId === src.id ? (
+                    <input
+                      autoFocus
+                      value={editingSourceName}
+                      onChange={(e) => setEditingSourceName(e.target.value)}
+                      onBlur={handleSaveRename}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveRename();
+                        if (e.key === "Escape") setEditingSourceId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full bg-transparent border-b border-(--ui-accent) text-(--ui-text-primary) outline-none text-xs"
+                    />
+                  ) : (
+                    <span
+                      className="truncate block"
+                      onDoubleClick={(e) => { e.stopPropagation(); handleStartRename(src); }}
+                      title="Double-click to rename"
+                    >
+                      {src.original_name}
+                    </span>
+                  )}
                 </div>
-                </div>
-                <div className="ml-1 flex flex-col gap-0 opacity-0 transition-opacity group-hover:opacity-100">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
+                <span className="shrink-0 text-[10px] text-(--ui-text-quaternary) whitespace-nowrap">
+                  {(src.word_count ?? 0).toLocaleString()}w
+                  {(src.word_count ?? 0) === 0 && (
+                    <AlertTriangle size={10} className="ml-0.5 inline text-amber-400" title="Extraction failed" />
+                  )}
+                </span>
+                <div className="shrink-0 flex flex-col gap-0 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
                     className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                     type="button"
                     disabled={sources.indexOf(src) === 0}
                     title="Move up"
-                  ><ChevronUp size={12} /></button>
+                  ><ChevronUp size={10} /></button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "down"); }}
                     className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                     type="button"
                     disabled={sources.indexOf(src) === sources.length - 1}
                     title="Move down"
-                  ><ChevronDown size={12} /></button>
+                  ><ChevronDown size={10} /></button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id); }}
                     className="text-[10px] text-(--ui-text-tertiary) hover:text-red-500"
                     type="button"
                     title="Remove source"
-                  ><X size={12} /></button>
+                  ><X size={10} /></button>
                 </div>
               </div>
             ))
