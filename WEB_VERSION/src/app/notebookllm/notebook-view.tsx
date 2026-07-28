@@ -64,10 +64,13 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [overview, setOverview] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(256); // px, 0 = collapsed
+  const [rightWidth, setRightWidth] = useState(288); // px, 0 = collapsed
+  const [dragging, setDragging] = useState<"left" | "right" | null>(null);
   const [scopeToSource, setScopeToSource] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  const MIN_PANEL = 40; // px — below this, panel collapses
   const sources = currentNotebook?.sources ?? [];
 
   useEffect(() => {
@@ -617,6 +620,40 @@ ${src.summary}
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // ── Panel resize drag logic ──────────────────────────────────
+  const handleResizeStart = useCallback((which: "left" | "right") => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(which);
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      if (dragging === "left") {
+        const newW = Math.max(0, Math.min(e.clientX - rect.left, 400));
+        setLeftWidth(newW < MIN_PANEL ? 0 : newW);
+      } else if (dragging === "right") {
+        const newW = Math.max(0, Math.min(rect.right - e.clientX, 400));
+        setRightWidth(newW < MIN_PANEL ? 0 : newW);
+      }
+    };
+
+    const onMouseUp = () => {
+      setDragging(null);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [dragging]);
+
   // Auto-scroll chat to bottom during streaming (only if user hasn't scrolled up)
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -730,11 +767,13 @@ ${src.summary}
 
   // ── Notebook detail view (three-panel) ─────────────────────────────────
   return (
-    <div className="relative flex h-full bg-(--ui-chat-surface-background)">
+    <div ref={containerRef} className={`relative flex h-full bg-(--ui-chat-surface-background) ${dragging ? "select-none cursor-col-resize" : ""}`}>
       {/* Left panel: Source list */}
-      {!leftCollapsed && (
+      {leftWidth > 0 && (
+      <>
       <div
-        className={`flex w-64 flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
+        className={`flex flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
+        style={{ width: leftWidth, minWidth: leftWidth }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -747,12 +786,6 @@ ${src.summary}
           >
             ← Back
           </button>
-          <button
-            onClick={() => setLeftCollapsed(true)}
-            className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
-            type="button"
-            title="Collapse panel"
-          >◀</button>
         </div>
 
         {/* Notebook title */}
@@ -922,16 +955,15 @@ ${src.summary}
           )}
         </div>
       </div>
-      )}
-
-      {/* Expand button for collapsed left panel */}
-      {leftCollapsed && (
-        <button
-          onClick={() => setLeftCollapsed(false)}
-          className="flex items-center border-r border-(--ui-stroke-secondary) px-1 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) hover:bg-(--ui-surface-elevated)"
-          title="Show source panel"
-          type="button"
-        >▶</button>
+      {/* Left resize handle */}
+      <div
+        onMouseDown={handleResizeStart("left")}
+        className="group w-1 cursor-col-resize bg-transparent hover:bg-(--ui-accent)/30 active:bg-(--ui-accent)/50 transition-colors flex items-center justify-center"
+        title="Drag to resize panel"
+      >
+        <div className="h-8 w-px bg-(--ui-stroke-secondary) group-hover:bg-(--ui-accent)" />
+      </div>
+      </>
       )}
 
       {/* Center panel: Chat */}
@@ -1120,8 +1152,20 @@ ${src.summary}
       </div>
 
       {/* Right panel: Source preview / Overview */}
-      {!rightCollapsed && (
-      <div className="flex w-72 flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)">
+      {rightWidth > 0 && (
+      <>
+      {/* Right resize handle */}
+      <div
+        onMouseDown={handleResizeStart("right")}
+        className="group w-1 cursor-col-resize bg-transparent hover:bg-(--ui-accent)/30 active:bg-(--ui-accent)/50 transition-colors flex items-center justify-center"
+        title="Drag to resize panel"
+      >
+        <div className="h-8 w-px bg-(--ui-stroke-secondary) group-hover:bg-(--ui-accent)" />
+      </div>
+      <div
+        className="flex flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)"
+        style={{ width: rightWidth, minWidth: rightWidth }}
+      >
         <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
             {selectedSource ? "Source Preview" : "Overview"}
@@ -1144,12 +1188,6 @@ ${src.summary}
             >
               📥 Export
             </button>
-            <button
-              onClick={() => setRightCollapsed(true)}
-              className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
-              type="button"
-              title="Collapse panel"
-            >▶</button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3 text-xs text-(--ui-text-secondary) whitespace-pre-wrap">
@@ -1251,16 +1289,7 @@ ${src.summary}
             )}
         </div>
       </div>
-      )}
-
-      {/* Expand button for collapsed right panel */}
-      {rightCollapsed && (
-        <button
-          onClick={() => setRightCollapsed(false)}
-          className="flex items-center border-l border-(--ui-stroke-secondary) px-1 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) hover:bg-(--ui-surface-elevated)"
-          title="Show overview panel"
-          type="button"
-        >◀</button>
+      </>
       )}
 
       {confirmDialogJSX}
