@@ -753,7 +753,7 @@ ${src.summary}
     return (
       <div className="flex h-full flex-col bg-(--ui-chat-surface-background) p-6">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-(--ui-text-primary)">
+          <h1 className="inline-flex items-center gap-2 text-xl font-semibold text-(--ui-text-primary)">
             <NotebookTabs size={16} /> Notebooks
           </h1>
           <div className="flex gap-2">
