@@ -2295,6 +2295,7 @@ _AUX_TASK_SLOTS: Tuple[str, ...] = (
     "profile_describer",
     "curator",
     "commit_gen",
+    "notebook_chat",
 )
 
 
@@ -10965,6 +10966,17 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     if not isinstance(model_cfg, dict):
         model_cfg = {}
 
+    # Check for a dedicated notebook_chat auxiliary model
+    aux_cfg = cfg.get("auxiliary", {}) if isinstance(cfg, dict) else {}
+    if isinstance(aux_cfg, dict):
+        nb_aux = aux_cfg.get("notebook_chat", {})
+        if isinstance(nb_aux, dict) and nb_aux.get("provider") and nb_aux["provider"] != "auto":
+            model_cfg = {
+                "provider": nb_aux.get("provider", ""),
+                "default": nb_aux.get("model", ""),
+                "base_url": nb_aux.get("base_url", ""),
+            }
+
     provider_name = (model_cfg.get("provider") or "").strip().lower()
     base_url = (model_cfg.get("base_url") or "").rstrip("/")
     model_name = model_cfg.get("default") or model_cfg.get("name") or ""
@@ -11106,11 +11118,22 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
                 messages.append({"role": h["role"], "content": h["content"]})
     messages.append({"role": "user", "content": message})
 
-    # Resolve provider config
+    # Resolve provider config — check notebook_chat auxiliary slot first
     cfg = load_config()
     model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
     if not isinstance(model_cfg, dict):
         model_cfg = {}
+
+    # Check for a dedicated notebook_chat auxiliary model
+    aux_cfg = cfg.get("auxiliary", {}) if isinstance(cfg, dict) else {}
+    if isinstance(aux_cfg, dict):
+        nb_aux = aux_cfg.get("notebook_chat", {})
+        if isinstance(nb_aux, dict) and nb_aux.get("provider") and nb_aux["provider"] != "auto":
+            model_cfg = {
+                "provider": nb_aux.get("provider", ""),
+                "default": nb_aux.get("model", ""),
+                "base_url": nb_aux.get("base_url", ""),
+            }
 
     provider_name = (model_cfg.get("provider") or "").strip().lower()
     base_url = (model_cfg.get("base_url") or "").rstrip("/")

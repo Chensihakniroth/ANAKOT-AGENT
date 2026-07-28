@@ -684,7 +684,8 @@ export const zh: Translations = {
         mcp: { label: 'MCP', hint: 'MCP 工具路由' },
         title_generation: { label: '标题生成', hint: '会话标题' },
         curator: { label: '维护器', hint: '技能使用审查' },
-        commit_gen: { label: '提交生成', hint: '提交信息' }
+        commit_gen: { label: '提交生成', hint: '提交信息' },
+        notebook_chat: { label: '笔记本对话', hint: 'NotebookLLM 对话' }
       }
     },
     providers: {
