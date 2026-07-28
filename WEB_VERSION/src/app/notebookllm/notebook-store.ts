@@ -22,6 +22,7 @@ export interface Notebook {
   id: string;
   title: string;
   source_count: number;
+  source_names?: string[];
   sources: NotebookSource[];
   created_at: string;
   updated_at: string;
@@ -123,6 +124,20 @@ export async function renameNotebook(
   if (cur?.id === id) {
     $currentNotebook.set({ ...cur, title });
   }
+}
+
+/** Duplicate a notebook with all its sources */
+export async function duplicateNotebook(
+  notebookId: string,
+  title?: string
+): Promise<Notebook> {
+  const data = await fetchJSON<Notebook>(`${API}/notebooks/${notebookId}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+  // Reload the full list to get correct source_counts
+  await loadNotebooks();
+  return data;
 }
 
 /** Rename a source */

@@ -10524,6 +10524,7 @@ from anakot_cli.notebooks import (
     save_chat_message as _nb_save_chat,
     load_chat_history as _nb_load_chat,
     clear_chat_history as _nb_clear_chat,
+    duplicate_notebook as _nb_duplicate,
 )
 
 
@@ -10586,6 +10587,20 @@ async def notebook_delete(notebook_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Notebook not found")
     return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/duplicate")
+async def notebook_duplicate(notebook_id: str, request: Request):
+    """Duplicate a notebook with all its sources."""
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    body = await request.json()
+    title = body.get("title") if isinstance(body, dict) else None
+    result = _nb_duplicate(notebook_id, title=title)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to duplicate notebook")
+    return result
 
 
 @app.post("/api/notebooks/{notebook_id}/sources/upload")

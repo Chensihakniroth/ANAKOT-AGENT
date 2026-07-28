@@ -26,9 +26,11 @@ import {
   clearChatHistory,
   reorderSources,
   renameSource,
+  duplicateNotebook,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
+import { CodeHighlight } from "./code-highlight";
 import { notify, notifyError } from "@/store/notifications";
 import {
   AlertTriangle,
@@ -67,7 +69,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [urlInput, setUrlInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<
-    Array<{ role: "user" | "assistant"; content: string }>
+    Array<{ role: "user" | "assistant"; content: string; created_at?: string }>
   >([]);
   const [chatLoading, setChatLoading] = useState(false);
   const chatStreamAbortRef = useRef<AbortController | null>(null);
@@ -96,6 +98,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [editingSourceName, setEditingSourceName] = useState("");
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement>(null);
 
   const MIN_PANEL = 40; // px — below this, panel collapses
@@ -150,6 +153,18 @@ export function NotebookView({ onClose }: NotebookViewProps) {
           notify({ kind: "success", message: "Notebook deleted" });
         },
       });
+    },
+    []
+  );
+
+  const handleDuplicateNotebook = useCallback(
+    async (id: string) => {
+      try {
+        const nb = await duplicateNotebook(id);
+        notify({ kind: "success", message: `Duplicated as "${nb.title}"` });
+      } catch (err) {
+        notifyError("Failed to duplicate notebook", err instanceof Error ? err.message : String(err));
+      }
     },
     []
   );
@@ -213,6 +228,44 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     },
     [currentNotebook, selectedSource]
   );
+
+  // ── Batch source delete ────────────────────────────────────────
+  const handleBatchDelete = useCallback(() => {
+    if (!currentNotebook || selectedSources.size === 0) return;
+    const count = selectedSources.size;
+    setConfirmDialog({
+      message: `Delete ${count} source${count !== 1 ? "s" : ""}?`,
+      onConfirm: async () => {
+        let deleted = 0;
+        for (const srcId of selectedSources) {
+          try {
+            await deleteSource(currentNotebook.id, srcId);
+            deleted++;
+          } catch {}
+        }
+        setSelectedSources(new Set());
+        await loadNotebook(currentNotebook.id);
+        notify({ kind: "success", message: `Deleted ${deleted} source(s)` });
+      },
+    });
+  }, [currentNotebook, selectedSources]);
+
+  const toggleSourceSelection = useCallback((id: string) => {
+    setSelectedSources((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAllSources = useCallback(() => {
+    if (selectedSources.size === sources.length) {
+      setSelectedSources(new Set());
+    } else {
+      setSelectedSources(new Set(sources.map((s) => s.id)));
+    }
+  }, [sources, selectedSources]);
 
   const [reExtracting, setReExtracting] = useState(false);
   const handleReExtract = useCallback(async () => {
@@ -289,6 +342,20 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   }, [currentNotebook]);
 
   // ── Markdown export ──────────────────────────────────────────────
+  // ── Relative time formatter ─────────────────────────────────────
+  const formatRelativeTime = useCallback((iso?: string): string => {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return "just now";
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }, []);
+
   // ── Citation counts from chat messages (cross-reference) ────────
   const citationCounts = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -799,7 +866,13 @@ ${src.summary}
             className="mb-4 w-full rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
           />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {notebooks.filter((nb) => !searchQuery || nb.title.toLowerCase().includes(searchQuery.toLowerCase())).map((nb) => (
+            {notebooks.filter((nb) => {
+              if (!searchQuery) return true;
+              const q = searchQuery.toLowerCase();
+              if (nb.title.toLowerCase().includes(q)) return true;
+              if (nb.source_names?.some((n) => n.toLowerCase().includes(q))) return true;
+              return false;
+            }).map((nb) => (
               <div
                 key={nb.id}
                 className="group cursor-pointer rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-4 transition-colors hover:border-(--ui-accent)"
@@ -809,16 +882,30 @@ ${src.summary}
                   <h3 className="font-medium text-(--ui-text-primary)">
                     {nb.title}
                   </h3>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteNotebook(nb.id);
-                    }}
-                    className="text-xs text-(--ui-text-tertiary) opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                    type="button"
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDuplicateNotebook(nb.id);
+                      }}
+                      className="text-xs text-(--ui-text-tertiary) hover:text-(--ui-accent)"
+                      type="button"
+                      title="Duplicate notebook"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteNotebook(nb.id);
+                      }}
+                      className="text-xs text-(--ui-text-tertiary) hover:text-red-500"
+                      type="button"
+                      title="Delete notebook"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm text-(--ui-text-tertiary)">
                   {(nb.source_count ?? 0)} source{(nb.source_count ?? 0) !== 1 ? "s" : ""}
@@ -967,6 +1054,28 @@ ${src.summary}
 
         {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">
+          {sources.length > 1 && (
+            <div className="mb-1 flex items-center gap-2 px-2 py-1">
+              <input
+                type="checkbox"
+                checked={selectedSources.size === sources.length && sources.length > 0}
+                onChange={toggleAllSources}
+                className="accent-(--ui-accent)"
+              />
+              <span className="text-[10px] text-(--ui-text-tertiary)">
+                {selectedSources.size > 0 ? `${selectedSources.size} selected` : `Select all (${sources.length})`}
+              </span>
+              {selectedSources.size > 0 && (
+                <button
+                  onClick={handleBatchDelete}
+                  className="ml-auto text-[10px] text-red-400 hover:text-red-300"
+                  type="button"
+                >
+                  Delete selected
+                </button>
+              )}
+            </div>
+          )}
           {sources.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <p className="mb-2 text-xs text-(--ui-text-tertiary)">
@@ -987,7 +1096,15 @@ ${src.summary}
                 }`}
                 onClick={() => handleSelectSource(src)}
               >
-                <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2 min-w-0 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedSources.has(src.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSourceSelection(src.id)}
+                    className="mt-0.5 accent-(--ui-accent)"
+                  />
+                  <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">
                     {src.source_type === "pdf" ? <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : src.source_type === "url" ? <Link size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" />}
                     {editingSourceId === src.id ? (
@@ -1019,9 +1136,10 @@ ${src.summary}
                     )}
                   </div>
                 </div>
+                </div>
                 <div className="ml-1 flex flex-col gap-0 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
                     className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                     type="button"
                     disabled={sources.indexOf(src) === 0}
@@ -1122,9 +1240,10 @@ ${src.summary}
             chatMessages.map((msg, i) => (
               msg.role === "user" ? (
                 <div key={i} className="group relative ml-12">
-                  <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
-                    {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
-                  </div>
+                    <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
+                      {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
+                    </div>
+                    {msg.created_at && <span className="mt-1 block text-right text-[10px] text-(--ui-text-quaternary)">{formatRelativeTime(msg.created_at)}</span>}
                   <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
@@ -1154,6 +1273,7 @@ ${src.summary}
                   >
                     <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
                   </div>
+                  {msg.created_at && <span className="mt-1 block text-[10px] text-(--ui-text-quaternary)">{formatRelativeTime(msg.created_at)}</span>}
                   <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
@@ -1241,28 +1361,35 @@ ${src.summary}
                 <Search size={14} className="shrink-0 text-(--ui-accent)" /> {selectedSource.original_name}
               </span>
             )}
-            <textarea
-              ref={chatInputRef}
-              value={chatInput}
-              onChange={(e) => {
-                setChatInput(e.target.value);
-                // Auto-resize
-                const el = e.target;
-                el.style.height = "auto";
-                el.style.height = Math.min(el.scrollHeight, 120) + "px";
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleChat();
-                }
-              }}
-              placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
-              rows={1}
-              className="flex-1 resize-none rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
-              disabled={chatLoading}
-              style={{ maxHeight: "120px" }}
-            />
+            <div className="relative flex-1">
+              <textarea
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={(e) => {
+                  setChatInput(e.target.value);
+                  // Auto-resize
+                  const el = e.target;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChat();
+                  }
+                }}
+                placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
+                rows={1}
+                disabled={chatLoading}
+                style={{ maxHeight: "120px" }}
+                className="w-full resize-none rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 pr-16 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+              />
+              {chatInput.length > 0 && (
+                <span className="absolute bottom-2 right-2 text-[10px] text-(--ui-text-quaternary)">
+                  ~{Math.ceil(chatInput.length / 4)} tokens
+                </span>
+              )}
+            </div>
             {chatLoading ? (
               <button
                 onClick={() => chatStreamAbortRef.current?.abort()}
@@ -1378,9 +1505,7 @@ ${src.summary}
                     <MarkdownTextContent text={sourceText || "Loading..."} isRunning={false} />
                   </div>
                 ) : (
-                  <div className="max-h-96 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-(--ui-text-secondary)">
-                    {sourceText || "Loading..."}
-                  </div>
+                  <CodeHighlight code={sourceText || ""} filename={selectedSource.original_name} />
                 )}
               </div>
             </div>

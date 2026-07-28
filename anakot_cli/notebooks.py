@@ -138,6 +138,13 @@ def list_notebooks() -> List[Dict[str, Any]]:
                     "SELECT COUNT(*) as cnt FROM source WHERE notebook_id = ?",
                     (d.name,),
                 ).fetchone()["cnt"]
+                source_names = [
+                    r[0]
+                    for r in db.execute(
+                        "SELECT original_name FROM source WHERE notebook_id = ? ORDER BY sort_order",
+                        (d.name,),
+                    ).fetchall()
+                ]
                 notebooks.append(
                     {
                         "id": row["id"],
@@ -145,6 +152,7 @@ def list_notebooks() -> List[Dict[str, Any]]:
                         "created_at": row["created_at"],
                         "updated_at": row["updated_at"],
                         "source_count": source_count,
+                        "source_names": source_names,
                     }
                 )
             db.close()
@@ -185,6 +193,66 @@ def delete_notebook(notebook_id: str) -> bool:
 
     shutil.rmtree(nb_dir, ignore_errors=True)
     return True
+
+
+def duplicate_notebook(notebook_id: str, title: str | None = None) -> Dict[str, Any] | None:
+    """Duplicate a notebook with all its sources (copies files, creates new DB)."""
+    import shutil
+
+    src_dir = _notebooks_root() / notebook_id
+    if not src_dir.exists():
+        return None
+
+    src_db = _get_db(notebook_id)
+    _init_db(src_db)
+    src_row = src_db.execute("SELECT * FROM notebook WHERE id = ?", (notebook_id,)).fetchone()
+    if not src_row:
+        src_db.close()
+        return None
+
+    new_id = uuid.uuid4().hex[:12]
+    new_title = title or f"{src_row['title']} (copy)"
+    now = datetime.now(timezone.utc).isoformat()
+    new_dir = _notebook_dir(new_id)
+
+    # Copy source files and extracted text
+    src_sources = src_db.execute("SELECT * FROM source WHERE notebook_id = ? ORDER BY sort_order", (notebook_id,)).fetchall()
+    src_db.close()
+
+    for src in src_sources:
+        # Copy uploaded file
+        src_file = src_dir / "sources" / src["filename"]
+        dst_file = new_dir / "sources" / src["filename"]
+        if src_file.exists():
+            shutil.copy2(src_file, dst_file)
+        # Copy extracted text
+        src_extracted = src_dir / "extracted" / f"{src['id']}.txt"
+        dst_extracted = new_dir / "extracted" / f"{src['id']}.txt"
+        if src_extracted.exists():
+            shutil.copy2(src_extracted, dst_extracted)
+
+    # Create new DB
+    new_db = _get_db(new_id)
+    _init_db(new_db)
+    new_db.execute(
+        "INSERT INTO notebook (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        (new_id, new_title, now, now),
+    )
+
+    for src in src_sources:
+        new_db.execute(
+            """INSERT INTO source (id, notebook_id, filename, original_name, source_type, url,
+               page_count, word_count, char_count, summary, sort_order, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (src["id"], new_id, src["filename"], src["original_name"], src["source_type"],
+             src["url"], src["page_count"], src["word_count"], src["char_count"],
+             src["summary"], src["sort_order"], now),
+        )
+
+    new_db.commit()
+    new_db.close()
+
+    return {"id": new_id, "title": new_title, "source_count": len(src_sources), "created_at": now, "updated_at": now}
 
 
 def rename_notebook(notebook_id: str, title: str) -> bool:
