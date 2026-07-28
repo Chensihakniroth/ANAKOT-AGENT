@@ -1125,10 +1125,10 @@ ${src.summary}
                   <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
                     {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
                   </div>
-                  <div className="absolute -right-1 top-1 hidden gap-0.5 group-hover:flex">
+                  <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
-                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
                       title="Copy message"
                     ><Copy size={12} /></button>
@@ -1139,7 +1139,7 @@ ${src.summary}
                         hasStreamedOnceRef.current = i > 0;
                         chatInputRef.current?.focus();
                       }}
-                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
                       title="Edit & re-send"
                     ><Pencil size={12} /></button>
@@ -1154,10 +1154,10 @@ ${src.summary}
                   >
                     <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
                   </div>
-                  <div className="absolute -right-1 top-1 hidden gap-0.5 group-hover:flex">
+                  <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
-                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
                       title="Copy message"
                     ><Copy size={12} /></button>
@@ -1172,7 +1172,7 @@ ${src.summary}
                           hasStreamedOnceRef.current = lastUserIdx > 0;
                           setChatInput(retryQ);
                         }}
-                        className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                        className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                         type="button"
                         title="Regenerate response"
                       ><RefreshCw size={12} /></button>
@@ -1190,9 +1190,9 @@ ${src.summary}
                   key={q}
                   type="button"
                   onClick={() => handleClickSuggestion(q)}
-                  className="rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-1.5 text-[11px] text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-1.5 text-[11px] text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
                 >
-                  <Zap size={12} className="shrink-0 text-(--ui-accent)" /> {q}
+                  <Zap size={12} className="shrink-0 text-(--ui-accent)" />{q}
                 </button>
               ))}
             </div>
@@ -1347,14 +1347,15 @@ ${src.summary}
                 )}
               </div>
               {selectedSource.url && (
-                <div className="mb-3">
+                <div className="mb-3 flex items-start gap-1.5">
+                  <Link size={12} className="mt-0.5 shrink-0 text-(--ui-text-tertiary)" />
                   <a
                     href={selectedSource.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[11px] text-(--ui-accent) hover:underline break-all"
                   >
-                    <Link size={12} className="shrink-0" /> {selectedSource.url}
+                    {selectedSource.url}
                   </a>
                 </div>
               )}
