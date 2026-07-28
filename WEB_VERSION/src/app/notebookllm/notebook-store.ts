@@ -125,6 +125,31 @@ export async function renameNotebook(
   }
 }
 
+/** Rename a source */
+export async function renameSource(
+  notebookId: string,
+  sourceId: string,
+  name: string
+): Promise<void> {
+  const data = await fetchJSON<{ source: NotebookSource }>(
+    `${API}/notebooks/${notebookId}/sources/${sourceId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }
+  );
+  // Update local state
+  const cur = $currentNotebook.get();
+  if (cur?.id === notebookId) {
+    $currentNotebook.set({
+      ...cur,
+      sources: cur.sources.map((s) =>
+        s.id === sourceId ? { ...s, original_name: name } : s
+      ),
+    });
+  }
+}
+
 /** Delete a notebook */
 export async function deleteNotebook(id: string): Promise<void> {
   await fetchJSON(`${API}/notebooks/${id}`, { method: "DELETE" });

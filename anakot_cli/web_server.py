@@ -10774,6 +10774,26 @@ async def notebook_delete_source(notebook_id: str, source_id: str):
     return {"ok": True}
 
 
+@app.patch("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_rename_source(
+    request: Request, notebook_id: str, source_id: str, body: dict
+):
+    """Rename a source (update its original_name)."""
+    _require_token(request)
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    for src in nb.get("sources", []):
+        if src["id"] == source_id:
+            src["original_name"] = new_name
+            _nb_save(notebook_id, nb)
+            return {"ok": True, "source": src}
+    raise HTTPException(status_code=404, detail="Source not found")
+
+
 @app.post("/api/notebooks/{notebook_id}/sources/reorder")
 async def notebook_reorder_sources(
     request: Request, notebook_id: str, body: SourceReorder

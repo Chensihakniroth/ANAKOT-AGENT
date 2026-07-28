@@ -25,6 +25,7 @@ import {
   saveChatMessage,
   clearChatHistory,
   reorderSources,
+  renameSource,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
@@ -68,6 +69,10 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [rightWidth, setRightWidth] = useState(288); // px, 0 = collapsed
   const [dragging, setDragging] = useState<"left" | "right" | null>(null);
   const [scopeToSource, setScopeToSource] = useState(false);
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editingSourceName, setEditingSourceName] = useState("");
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const MIN_PANEL = 40; // px — below this, panel collapses
@@ -427,6 +432,30 @@ ${src.summary}
     chatInputRef.current?.focus();
   }, []);
 
+  // ── Source rename ────────────────────────────────────────────
+  const handleStartRename = useCallback((src: NotebookSource) => {
+    setEditingSourceId(src.id);
+    setEditingSourceName(src.original_name);
+  }, []);
+
+  const handleSaveRename = useCallback(async () => {
+    if (!editingSourceId || !currentNotebook) return;
+    const name = editingSourceName.trim();
+    if (!name || name === sources.find((s) => s.id === editingSourceId)?.original_name) {
+      setEditingSourceId(null);
+      return;
+    }
+    try {
+      await renameSource(currentNotebook.id, editingSourceId, name);
+      if (selectedSource?.id === editingSourceId) {
+        setSelectedSource((prev) => prev ? { ...prev, original_name: name } : null);
+      }
+    } catch (e: any) {
+      notify({ kind: "error", message: `Rename failed: ${e.message}` });
+    }
+    setEditingSourceId(null);
+  }, [editingSourceId, editingSourceName, currentNotebook, sources, selectedSource]);
+
 
   const handleLoadOverview = useCallback(async () => {
     if (!currentNotebook) return;
@@ -567,6 +596,20 @@ ${src.summary}
     }
   }, [chatInput, currentNotebook, chatMessages, scopeToSource, selectedSource]);
 
+  // ── Chat search highlight ─────────────────────────────────────
+  const highlightMatch = useCallback((text: string, query: string): React.ReactNode => {
+    if (!query.trim()) return text;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+    const parts = text.split(regex);
+    return parts.map((part, i) =>
+      regex.test(part) ? (
+        <mark key={i} className="bg-yellow-500/30 text-(--ui-text-primary) rounded px-0.5">{part}</mark>
+      ) : (
+        part
+      )
+    );
+  }, []);
+
   // ── Keyboard shortcuts ──────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -591,6 +634,11 @@ ${src.summary}
       if (mod && e.key === "l") {
         e.preventDefault();
         handleClearChat();
+      }
+      // Ctrl/Cmd + F: Search chat
+      if (mod && e.key === "f") {
+        e.preventDefault();
+        setChatSearchOpen((prev) => !prev);
       }
     };
     const keyDown = (e: KeyboardEvent) => {
@@ -919,7 +967,27 @@ ${src.summary}
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">
                     {src.source_type === "pdf" ? "📄" : src.source_type === "url" ? "🔗" : "📝"}{" "}
-                    {src.original_name}
+                    {editingSourceId === src.id ? (
+                      <input
+                        autoFocus
+                        value={editingSourceName}
+                        onChange={(e) => setEditingSourceName(e.target.value)}
+                        onBlur={handleSaveRename}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleSaveRename();
+                          if (e.key === "Escape") setEditingSourceId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-transparent border-b border-(--ui-accent) text-(--ui-text-primary) outline-none text-xs"
+                      />
+                    ) : (
+                      <span
+                        onDoubleClick={(e) => { e.stopPropagation(); handleStartRename(src); }}
+                        title="Double-click to rename"
+                      >
+                        {src.original_name}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] text-(--ui-text-tertiary)">
                     {(src.word_count ?? 0).toLocaleString()} words
@@ -968,6 +1036,37 @@ ${src.summary}
 
       {/* Center panel: Chat */}
       <div className="flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
+        {/* Chat search bar */}
+        {chatSearchOpen && (
+          <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2">
+            <span className="text-xs text-(--ui-text-tertiary)">🔍</span>
+            <input
+              autoFocus
+              value={chatSearchQuery}
+              onChange={(e) => setChatSearchQuery(e.target.value)}
+              placeholder="Search in chat..."
+              className="flex-1 bg-transparent text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary)"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setChatSearchOpen(false);
+                  setChatSearchQuery("");
+                }
+              }}
+            />
+            {chatSearchQuery && (
+              <span className="text-[10px] text-(--ui-text-tertiary)">
+                {chatMessages.filter((m) =>
+                  m.content.toLowerCase().includes(chatSearchQuery.toLowerCase())
+                ).length} matches
+              </span>
+            )}
+            <button
+              onClick={() => { setChatSearchOpen(false); setChatSearchQuery(""); }}
+              className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+              type="button"
+            >✕</button>
+          </div>
+        )}
         {/* Chat messages */}
         <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
           {chatMessages.length === 0 ? (
@@ -1002,14 +1101,27 @@ ${src.summary}
               msg.role === "user" ? (
                 <div key={i} className="group relative ml-12">
                   <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
-                    {msg.content}
+                    {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
                   </div>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
-                    className="absolute -right-1 top-1 hidden rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) opacity-0 transition-opacity hover:text-(--ui-text-primary) group-hover:opacity-100"
-                    type="button"
-                    title="Copy message"
-                  >📋</button>
+                  <div className="absolute -right-1 top-1 hidden gap-0.5 group-hover:flex">
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
+                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      type="button"
+                      title="Copy message"
+                    >📋</button>
+                    <button
+                      onClick={() => {
+                        setChatInput(msg.content);
+                        setChatMessages(chatMessages.slice(0, i));
+                        hasStreamedOnceRef.current = i > 0;
+                        chatInputRef.current?.focus();
+                      }}
+                      className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1.5 py-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      type="button"
+                      title="Edit & re-send"
+                    >✏️</button>
+                  </div>
                 </div>
               ) : (
                 <div key={i} className="group relative mr-12">
@@ -1236,11 +1348,17 @@ ${src.summary}
               )}
               <div className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
-                  Extracted Text Preview
+                  {selectedSource.original_name.endsWith(".md") ? "Markdown Preview" : "Extracted Text Preview"}
                 </div>
-                <div className="max-h-96 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-(--ui-text-secondary)">
-                  {sourceText || "Loading..."}
-                </div>
+                {selectedSource.original_name.endsWith(".md") ? (
+                  <div className="max-h-96 overflow-y-auto text-xs text-(--ui-text-secondary)" data-slot="aui_assistant-message-content">
+                    <MarkdownTextContent text={sourceText || "Loading..."} isRunning={false} />
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-(--ui-text-secondary)">
+                    {sourceText || "Loading..."}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
