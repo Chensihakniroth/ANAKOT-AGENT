@@ -66,6 +66,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [scopeToSource, setScopeToSource] = useState(false);
 
   const sources = currentNotebook?.sources ?? [];
 
@@ -97,6 +98,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     setSelectedSource(null);
     setSourceText("");
     setOverview("");
+    setScopeToSource(false);
     hasStreamedOnceRef.current = false;
     // Load persisted chat history
     try {
@@ -172,6 +174,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
           if (selectedSource?.id === sourceId) {
             setSelectedSource(null);
             setSourceText("");
+            setScopeToSource(false);
           }
           notify({ kind: "success", message: "Source removed" });
         },
@@ -382,6 +385,45 @@ ${src.summary}
     []
   );
 
+  // ── Suggested follow-up questions (heuristic, no extra API call) ────────
+  const suggestedFollowUps = useMemo(() => {
+    if (chatMessages.length === 0 || chatLoading) return [];
+    const last = chatMessages[chatMessages.length - 1];
+    if (last.role !== "assistant" || !last.content) return [];
+    const suggestions: string[] = [];
+
+    // If answer cites sources, ask to elaborate on the most-cited one
+    const cited = [...last.content.matchAll(/\[Source (\d+)\]/g)].map((m) => parseInt(m[1]));
+    if (cited.length > 0) {
+      const top = cited.sort((a, b) => cited.filter((x) => x === b).length - cited.filter((x) => x === a).length)[0];
+      const src = sources[top - 1];
+      if (src) suggestions.push(`Tell me more about ${src.original_name}`);
+    }
+
+    // Generic follow-ups based on context
+    const lc = last.content.toLowerCase();
+    if (lc.includes("summar")) {
+      suggestions.push("What are the key takeaways?");
+    } else if (lc.includes("differ") || lc.includes("compar") || lc.includes("similar")) {
+      suggestions.push("Which source is most relevant for this topic?");
+    } else {
+      suggestions.push("Can you summarize the main points?");
+      suggestions.push("Are there any contradictions between sources?");
+    }
+
+    // If multiple sources exist, suggest source-specific question
+    if (sources.length > 1 && !suggestions.some((s) => s.includes("source"))) {
+      suggestions.push("Which source should I read first?");
+    }
+
+    return suggestions.slice(0, 3);
+  }, [chatMessages, chatLoading, sources]);
+
+  const handleClickSuggestion = useCallback((q: string) => {
+    setChatInput(q);
+    chatInputRef.current?.focus();
+  }, []);
+
 
   const handleLoadOverview = useCallback(async () => {
     if (!currentNotebook) return;
@@ -411,9 +453,13 @@ ${src.summary}
 
   const handleChat = useCallback(async () => {
     if (!chatInput.trim() || !currentNotebook) return;
-    const question = chatInput.trim();
+    let question = chatInput.trim();
+    // Scope to selected source if toggle is on
+    if (scopeToSource && selectedSource) {
+      question = `[Focus on source: "${selectedSource.original_name}" (ID: ${selectedSource.id})] ${question}`;
+    }
     setChatInput("");
-    const userMsg = { role: "user" as const, content: question };
+    const userMsg = { role: "user" as const, content: chatInput.trim() };
     const updatedMessages = [...chatMessages, userMsg];
     setChatMessages(updatedMessages);
     // Persist user message
@@ -516,7 +562,7 @@ ${src.summary}
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, currentNotebook, chatMessages]);
+  }, [chatInput, currentNotebook, chatMessages, scopeToSource, selectedSource]);
 
   // ── Keyboard shortcuts ──────────────────────────────────────
   useEffect(() => {
@@ -895,9 +941,29 @@ ${src.summary}
           {chatMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-(--ui-text-tertiary)">
               <div className="mb-3 text-3xl">💬</div>
-              <p className="text-sm">
+              <p className="mb-4 text-sm">
                 Ask questions about your {sources.length} source{sources.length !== 1 ? "s" : ""}
               </p>
+              {sources.length > 0 && (
+                <div className="grid max-w-md grid-cols-2 gap-2">
+                  {[
+                    { icon: "📝", label: "Summarize all sources" },
+                    { icon: "🔍", label: "Find contradictions" },
+                    { icon: "📋", label: "Create an outline" },
+                    { icon: "🔑", label: "List key takeaways" },
+                  ].map((starter) => (
+                    <button
+                      key={starter.label}
+                      type="button"
+                      onClick={() => handleClickSuggestion(starter.label)}
+                      className="flex items-center gap-2 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-2.5 text-left text-xs text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
+                    >
+                      <span className="text-sm">{starter.icon}</span>
+                      {starter.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             chatMessages.map((msg, i) => (
@@ -950,6 +1016,21 @@ ${src.summary}
               )
             ))
           )}
+          {/* Follow-up suggestions after last AI message */}
+          {suggestedFollowUps.length > 0 && !chatLoading && (
+            <div className="mr-12 flex flex-wrap gap-1.5 pt-1">
+              {suggestedFollowUps.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => handleClickSuggestion(q)}
+                  className="rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-1.5 text-[11px] text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
+                >
+                  💡 {q}
+                </button>
+              ))}
+            </div>
+          )}
           {chatLoading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
             <div className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-tertiary)">
               <span className="inline-flex gap-1">
@@ -963,6 +1044,20 @@ ${src.summary}
 
         {/* Chat input */}
         <div className="border-t border-(--ui-stroke-secondary) p-3">
+          {/* Source scope toggle */}
+          {selectedSource && (
+            <div className="mb-2 flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-(--ui-text-secondary)">
+                <input
+                  type="checkbox"
+                  checked={scopeToSource}
+                  onChange={(e) => setScopeToSource(e.target.checked)}
+                  className="accent-(--ui-accent)"
+                />
+                Ask about <span className="font-medium text-(--ui-text-primary)">{selectedSource.original_name}</span> only
+              </label>
+            </div>
+          )}
           {chatMessages.length > 0 && (
             <div className="mb-2 flex justify-end">
               <button
@@ -975,6 +1070,11 @@ ${src.summary}
             </div>
           )}
           <div className="flex gap-2">
+            {scopeToSource && selectedSource && (
+              <span className="self-center rounded bg-(--ui-accent)/15 px-1.5 py-0.5 text-[10px] font-medium text-(--ui-accent)">
+                🔍 {selectedSource.original_name}
+              </span>
+            )}
             <textarea
               ref={chatInputRef}
               value={chatInput}
