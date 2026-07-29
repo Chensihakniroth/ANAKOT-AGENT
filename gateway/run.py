@@ -2065,33 +2065,6 @@ class GatewayRunner:
             except Exception as exc:
                 logger.debug("state.db auto-maintenance skipped: %s", exc)
 
-    def _resolve_session_db(self, source=None):
-        """Return the profile-specific SessionDB for the given source.
-
-        Falls back to the root ``self._session_db`` when the source has no
-        user mapping or the profile DB doesn't exist yet.  This ensures
-        per-user operations (title, tokens, agent persistence) hit the
-        correct database in multi-user (OAuth/web) deployments.
-        """
-        if source is not None:
-            user_id = getattr(source, "user_id", None)
-            if user_id:
-                try:
-                    from anakot_cli.dashboard_auth.user_profiles import (
-                        get_profile_for_user,
-                    )
-                    pname = get_profile_for_user(str(user_id))
-                    if pname:
-                        from anakot_cli import profiles as profiles_mod
-                        from anakot_state import SessionDB as _SDB
-                        home = profiles_mod.get_profile_dir(pname)
-                        pdb = Path(home) / "state.db"
-                        if pdb.exists():
-                            return _SDB(db_path=pdb)
-                except Exception:
-                    pass
-        return self._session_db
-
         # Opportunistic shadow-repo cleanup — deletes orphan/stale
         # checkpoint repos under ~/.anakot/checkpoints/.  Opt-in via
         # checkpoints.auto_prune, idempotent via .last_prune marker.
@@ -2127,6 +2100,32 @@ class GatewayRunner:
         # Track background tasks to prevent garbage collection mid-execution
         self._background_tasks: set = set()
 
+    def _resolve_session_db(self, source=None):
+        """Return the profile-specific SessionDB for the given source.
+
+        Falls back to the root ``self._session_db`` when the source has no
+        user mapping or the profile DB doesn't exist yet.  This ensures
+        per-user operations (title, tokens, agent persistence) hit the
+        correct database in multi-user (OAuth/web) deployments.
+        """
+        if source is not None:
+            user_id = getattr(source, "user_id", None)
+            if user_id:
+                try:
+                    from anakot_cli.dashboard_auth.user_profiles import (
+                        get_profile_for_user,
+                    )
+                    pname = get_profile_for_user(str(user_id))
+                    if pname:
+                        from anakot_cli import profiles as profiles_mod
+                        from anakot_state import SessionDB as _SDB
+                        home = profiles_mod.get_profile_dir(pname)
+                        pdb = Path(home) / "state.db"
+                        if pdb.exists():
+                            return _SDB(db_path=pdb)
+                except Exception:
+                    pass
+        return self._session_db
 
     def _wire_teams_pipeline_runtime(self) -> None:
         """Bind the Teams meeting pipeline runtime to Graph webhook ingress.

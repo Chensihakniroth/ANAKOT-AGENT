@@ -93,7 +93,7 @@ try {
 # ============================================================================
 
 $RepoUrlSsh = "git@github.com:Chensihakniroth/ANAKOT-AGENT.git"
-$RepoUrlHttps = "https://github.com:Chensihakniroth/ANAKOT-AGENT.git"
+$RepoUrlHttps = "https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
 $PythonVersion = "3.11"
 $NodeVersion = "22"
 
@@ -1325,7 +1325,7 @@ function Install-Repository {
             if ($Commit) {
                 Write-Info "Pinning to commit $Commit..."
                 git -c windows.appendAtomically=false fetch origin $Commit
-                git -c windows.appendAtomically=false checkout --detach $Commit
+                git -c windows.appendAtomically=false checkout -f --detach $Commit
                 if ($LASTEXITCODE -ne 0) {
                     throw "git checkout $Commit failed (exit $LASTEXITCODE)"
                 }
