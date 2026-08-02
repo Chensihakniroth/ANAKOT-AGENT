@@ -40,6 +40,14 @@ export interface SessionTitleResponse {
   session_key?: string
 }
 
+export interface ReloadMcpResponse {
+  // 'confirm_required' == backend wants explicit consent before rebuilding
+  // the session's tool snapshot (prompt-cache invalidation); the caller must
+  // re-invoke with confirm=true (or always=true) to proceed.
+  status?: 'confirm_required' | 'reloaded'
+  message?: string
+}
+
 export interface ExecCommandDispatchResponse {
   type: 'exec' | 'plugin'
   output?: string

@@ -10525,6 +10525,7 @@ from anakot_cli.notebooks import (
     load_chat_history as _nb_load_chat,
     clear_chat_history as _nb_clear_chat,
     duplicate_notebook as _nb_duplicate,
+    rename_source as _nb_rename_source,
 )
 
 
@@ -10550,40 +10551,45 @@ class NotebookChatRequest(BaseModel):
 
 
 @app.get("/api/notebooks")
-async def notebook_list():
-    """List all notebooks."""
-    return {"notebooks": _nb_list()}
+async def notebook_list(request: Request):
+    """List all notebooks for the current user."""
+    user_id = _get_session_user_id(request)
+    return {"notebooks": _nb_list(user_id=user_id)}
 
 
 @app.post("/api/notebooks")
-async def notebook_create(body: NotebookCreate):
+async def notebook_create(body: NotebookCreate, request: Request):
     """Create a new notebook."""
-    nb = _nb_create(body.title)
+    user_id = _get_session_user_id(request)
+    nb = _nb_create(body.title, user_id=user_id)
     return nb
 
 
 @app.get("/api/notebooks/{notebook_id}")
-async def notebook_get(notebook_id: str):
+async def notebook_get(notebook_id: str, request: Request):
     """Get notebook details with sources."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
     return nb
 
 
 @app.put("/api/notebooks/{notebook_id}")
-async def notebook_update(notebook_id: str, body: NotebookRename):
+async def notebook_update(notebook_id: str, body: NotebookRename, request: Request):
     """Rename a notebook."""
-    ok = _nb_rename(notebook_id, body.title)
+    user_id = _get_session_user_id(request)
+    ok = _nb_rename(notebook_id, body.title, user_id=user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Notebook not found")
     return {"ok": True}
 
 
 @app.delete("/api/notebooks/{notebook_id}")
-async def notebook_delete(notebook_id: str):
+async def notebook_delete(notebook_id: str, request: Request):
     """Delete a notebook and all its sources."""
-    ok = _nb_delete(notebook_id)
+    user_id = _get_session_user_id(request)
+    ok = _nb_delete(notebook_id, user_id=user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Notebook not found")
     return {"ok": True}
@@ -10592,21 +10598,23 @@ async def notebook_delete(notebook_id: str):
 @app.post("/api/notebooks/{notebook_id}/duplicate")
 async def notebook_duplicate(notebook_id: str, request: Request):
     """Duplicate a notebook with all its sources."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
     body = await request.json()
     title = body.get("title") if isinstance(body, dict) else None
-    result = _nb_duplicate(notebook_id, title=title)
+    result = _nb_duplicate(notebook_id, title=title, user_id=user_id)
     if not result:
         raise HTTPException(status_code=500, detail="Failed to duplicate notebook")
     return result
 
 
 @app.post("/api/notebooks/{notebook_id}/sources/upload")
-async def notebook_upload_source(notebook_id: str, file: UploadFile):
+async def notebook_upload_source(notebook_id: str, file: UploadFile, request: Request):
     """Upload a file (PDF, TXT, MD, CSV) as a source."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
@@ -10675,14 +10683,16 @@ async def notebook_upload_source(notebook_id: str, file: UploadFile):
         page_count=page_count,
         word_count=word_count,
         char_count=char_count,
+        user_id=user_id,
     )
     return source
 
 
 @app.post("/api/notebooks/{notebook_id}/sources/url")
-async def notebook_add_url_source(notebook_id: str, body: SourceUrl):
+async def notebook_add_url_source(notebook_id: str, body: SourceUrl, request: Request):
     """Add a URL as a source - fetches and extracts content."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
@@ -10748,23 +10758,26 @@ async def notebook_add_url_source(notebook_id: str, body: SourceUrl):
         word_count=word_count,
         char_count=char_count,
         url=body.url,
+        user_id=user_id,
     )
     return source
 
 
 @app.get("/api/notebooks/{notebook_id}/sources/{source_id}")
-async def notebook_get_source(notebook_id: str, source_id: str):
+async def notebook_get_source(notebook_id: str, source_id: str, request: Request):
     """Get source details."""
-    src = _nb_get_source(notebook_id, source_id)
+    user_id = _get_session_user_id(request)
+    src = _nb_get_source(notebook_id, source_id, user_id=user_id)
     if not src:
         raise HTTPException(status_code=404, detail="Source not found")
     return src
 
 
 @app.get("/api/notebooks/{notebook_id}/sources/{source_id}/text")
-async def notebook_get_source_text(notebook_id: str, source_id: str):
+async def notebook_get_source_text(notebook_id: str, source_id: str, request: Request):
     """Get extracted text for a source."""
-    text = _nb_get_source_text(notebook_id, source_id)
+    user_id = _get_session_user_id(request)
+    text = _nb_get_source_text(notebook_id, source_id, user_id=user_id)
     if text is None:
         raise HTTPException(status_code=404, detail="Source not found")
     return {"text": text}
@@ -10772,19 +10785,21 @@ async def notebook_get_source_text(notebook_id: str, source_id: str):
 
 @app.put("/api/notebooks/{notebook_id}/sources/{source_id}/summary")
 async def notebook_update_summary(
-    notebook_id: str, source_id: str, body: dict
+    notebook_id: str, source_id: str, body: dict, request: Request
 ):
     """Update a source's summary (called after AI generates it)."""
-    ok = _nb_update_source_summary(notebook_id, source_id, body.get("summary", ""))
+    user_id = _get_session_user_id(request)
+    ok = _nb_update_source_summary(notebook_id, source_id, body.get("summary", ""), user_id=user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Source not found")
     return {"ok": True}
 
 
 @app.delete("/api/notebooks/{notebook_id}/sources/{source_id}")
-async def notebook_delete_source(notebook_id: str, source_id: str):
+async def notebook_delete_source(notebook_id: str, source_id: str, request: Request):
     """Delete a source from a notebook."""
-    ok = _nb_delete_source(notebook_id, source_id)
+    user_id = _get_session_user_id(request)
+    ok = _nb_delete_source(notebook_id, source_id, user_id=user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Source not found")
     return {"ok": True}
@@ -10796,18 +10811,14 @@ async def notebook_rename_source(
 ):
     """Rename a source (update its original_name)."""
     _require_token(request)
+    user_id = _get_session_user_id(request)
     new_name = (body.get("name") or "").strip()
     if not new_name:
         raise HTTPException(status_code=400, detail="Name is required")
-    nb = _nb_get(notebook_id)
-    if not nb:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-    for src in nb.get("sources", []):
-        if src["id"] == source_id:
-            src["original_name"] = new_name
-            _nb_save(notebook_id, nb)
-            return {"ok": True, "source": src}
-    raise HTTPException(status_code=404, detail="Source not found")
+    ok = _nb_rename_source(notebook_id, source_id, new_name, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
 
 
 @app.post("/api/notebooks/{notebook_id}/sources/reorder")
@@ -10821,7 +10832,8 @@ async def notebook_reorder_sources(
     end in their existing order.
     """
     _require_token(request)
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
@@ -10830,26 +10842,28 @@ async def notebook_reorder_sources(
             status_code=400, detail="source_ids must be a non-empty list"
         )
 
-    reordered = _nb_reorder_sources(notebook_id, body.source_ids)
+    reordered = _nb_reorder_sources(notebook_id, body.source_ids, user_id=user_id)
     return {"ok": True, "sources": reordered}
 
 
 @app.get("/api/notebooks/{notebook_id}/context")
-async def notebook_get_context(notebook_id: str):
+async def notebook_get_context(notebook_id: str, request: Request):
     """Get combined extracted text from all sources (for grounding chat)."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
-    text = _nb_get_all_text(notebook_id)
+    text = _nb_get_all_text(notebook_id, user_id=user_id)
     return {"text": text, "char_count": len(text)}
 
 
 @app.post("/api/notebooks/{notebook_id}/re-extract")
-async def notebook_re_extract(notebook_id: str):
+async def notebook_re_extract(notebook_id: str, request: Request):
     """Re-extract text from all sources that have empty extracted text.
     Useful after pymupdf is installed to fix previously uploaded PDFs."""
+    user_id = _get_session_user_id(request)
     import sqlite3 as _sq
-    db_path = _nb_root() / notebook_id / "metadata.db"
+    db_path = _nb_root(user_id) / notebook_id / "metadata.db"
     if not db_path.exists():
         raise HTTPException(status_code=404, detail="Notebook not found")
     db = _sq.connect(str(db_path))
@@ -10888,9 +10902,10 @@ async def notebook_re_extract(notebook_id: str):
     return {"re_extracted": re_extracted}
 
 @app.get("/api/notebooks/{notebook_id}/overview")
-async def notebook_get_overview(notebook_id: str):
+async def notebook_get_overview(notebook_id: str, request: Request):
     """Get notebook overview with all source summaries."""
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
     # Combine summaries
@@ -10930,13 +10945,14 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     and proxies to the configured AI provider.
     """
     _require_token(request)
+    user_id = _get_session_user_id(request)
 
-    nb = _nb_get(notebook_id)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
     # Build context from all sources
-    context_text = _nb_get_all_text(notebook_id)
+    context_text = _nb_get_all_text(notebook_id, user_id=user_id)
     if not context_text.strip():
         raise HTTPException(
             status_code=400,
@@ -11319,10 +11335,11 @@ async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, requ
 async def notebook_chat_history(notebook_id: str, request: Request):
     """Load chat history for a notebook."""
     _require_token(request)
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
-    messages = _nb_load_chat(notebook_id)
+    messages = _nb_load_chat(notebook_id, user_id=user_id)
     return {"messages": messages}
 
 
@@ -11330,7 +11347,8 @@ async def notebook_chat_history(notebook_id: str, request: Request):
 async def notebook_save_chat_message(notebook_id: str, request: Request):
     """Save a single chat message to history."""
     _require_token(request)
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
     body = await request.json()
@@ -11338,7 +11356,7 @@ async def notebook_save_chat_message(notebook_id: str, request: Request):
     msg_content = body.get("content", "")
     if not msg_content:
         raise HTTPException(status_code=400, detail="Content required")
-    _nb_save_chat(notebook_id, role, msg_content)
+    _nb_save_chat(notebook_id, role, msg_content, user_id=user_id)
     return {"ok": True}
 
 
@@ -11346,10 +11364,11 @@ async def notebook_save_chat_message(notebook_id: str, request: Request):
 async def notebook_clear_chat_history(notebook_id: str, request: Request):
     """Clear all chat history for a notebook."""
     _require_token(request)
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
-    _nb_clear_chat(notebook_id)
+    _nb_clear_chat(notebook_id, user_id=user_id)
     return {"ok": True}
 
 

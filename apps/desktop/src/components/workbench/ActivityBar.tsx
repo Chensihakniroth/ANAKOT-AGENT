@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { $sidebarPanel, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
 import { $sidebarOpen } from '@/store/layout'
 import { $gitStatus } from '@/store/git'
-import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, PROFILES_ROUTE, PLUGINS_ROUTE } from '../../app/routes'
+import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, PROFILES_ROUTE, PLUGINS_ROUTE, NOTEBOOK_ROUTE } from '../../app/routes'
 
 interface ActivityBarItem {
   id: string
@@ -28,6 +28,7 @@ const GLOBAL_VIEW_ITEMS: ActivityBarItem[] = [
   { id: 'artifacts', icon: 'files', label: 'Artifacts', route: ARTIFACTS_ROUTE },
   { id: 'profiles', icon: 'person', label: 'Profiles', route: PROFILES_ROUTE },
   { id: 'plugins', icon: 'plug', label: 'Plugins', route: PLUGINS_ROUTE },
+  { id: 'notebook', icon: 'book', label: 'Notebook', route: NOTEBOOK_ROUTE },
 ]
 
 export function ActivityBar() {

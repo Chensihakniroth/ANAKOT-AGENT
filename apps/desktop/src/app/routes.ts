@@ -9,6 +9,7 @@ export const CRON_ROUTE = '/cron'
 export const PROFILES_ROUTE = '/profiles'
 export const AGENTS_ROUTE = '/agents'
 export const PLUGINS_ROUTE = '/plugins'
+export const NOTEBOOK_ROUTE = '/notebook'
 
 export type AppView =
   | 'agents'
@@ -17,6 +18,7 @@ export type AppView =
   | 'command-center'
   | 'cron'
   | 'messaging'
+  | 'notebook'
   | 'profiles'
   | 'settings'
   | 'skills'
@@ -29,6 +31,7 @@ export type AppRouteId =
   | 'cron'
   | 'messaging'
   | 'new'
+  | 'notebook'
   | 'profiles'
   | 'settings'
   | 'skills'
@@ -46,6 +49,7 @@ export const APP_ROUTES = [
   { id: 'command-center', path: COMMAND_CENTER_ROUTE, view: 'command-center' },
   { id: 'skills', path: SKILLS_ROUTE, view: 'skills' },
   { id: 'messaging', path: MESSAGING_ROUTE, view: 'messaging' },
+  { id: 'notebook', path: NOTEBOOK_ROUTE, view: 'notebook' },
   { id: 'artifacts', path: ARTIFACTS_ROUTE, view: 'artifacts' },
   { id: 'cron', path: CRON_ROUTE, view: 'cron' },
   { id: 'profiles', path: PROFILES_ROUTE, view: 'profiles' },
@@ -65,7 +69,7 @@ export function registerPluginPaths(paths: string[]) {
 }
 // While one is open the app's titlebar control clusters must hide so they don't
 // bleed over the overlay (they sit at a higher z-index than the overlay card).
-export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set(['agents', 'command-center', 'cron', 'profiles', 'settings'])
+export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set(['agents', 'command-center', 'cron', 'notebook', 'profiles', 'settings'])
 
 export function isOverlayView(view: AppView | 'plugin-page'): boolean {
   return OVERLAY_VIEWS.has(view as AppView)
