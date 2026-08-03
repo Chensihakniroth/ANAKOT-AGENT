@@ -1119,6 +1119,17 @@ function Install-Repository {
                     git -c windows.appendAtomically=false stash push --include-untracked -m "$stashName"
                     if ($LASTEXITCODE -eq 0) { $autostashRef = "stash@{0}" }
                 }
+                # Repoint origin at the canonical owner repo so updates always
+                # converge there, even if this clone was originally created
+                # from a fork (the divergence failure mode in the bootstrap
+                # log: "have N and M different commits each" -> ff-only pull
+                # aborts -> install dies). If origin is somehow missing, add
+                # it fresh.
+                git -c windows.appendAtomically=false remote set-url origin $RepoUrlHttps 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    git -c windows.appendAtomically=false remote add origin $RepoUrlHttps
+                    if ($LASTEXITCODE -ne 0) { throw "git remote add origin failed (exit $LASTEXITCODE)" }
+                }
                 git -c windows.appendAtomically=false fetch origin
                 if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE)" }
                 # Precedence: Commit > Tag > Branch.  Commit and Tag check
@@ -1135,10 +1146,19 @@ function Install-Repository {
                     git -c windows.appendAtomically=false checkout --detach "refs/tags/$Tag"
                     if ($LASTEXITCODE -ne 0) { throw "git checkout tag $Tag failed (exit $LASTEXITCODE)" }
                 } else {
-                    git -c windows.appendAtomically=false checkout $Branch
-                    if ($LASTEXITCODE -ne 0) { throw "git checkout $Branch failed (exit $LASTEXITCODE)" }
-                    git -c windows.appendAtomically=false pull --ff-only origin $Branch
-                    if ($LASTEXITCODE -ne 0) { throw "git pull failed (exit $LASTEXITCODE)" }
+                    # Dynamic realign: origin was just repointed at the owner
+                    # repo and fetched above, so force the branch to match
+                    # origin/$Branch exactly. This is deterministic -- unlike
+                    # `pull --ff-only`, it cannot fail on a diverged history
+                    # (bootstrap log: "have N and M different commits each").
+                    # Local working-tree edits were already stashed above and
+                    # get restored afterwards; anything the user committed
+                    # locally on the old branch is preserved in the stash or
+                    # the old branch ref (checkout -B just moves the pointer;
+                    # the old commits stay reachable via the reflog).
+                    git -c windows.appendAtomically=false checkout -B $Branch origin/$Branch
+                    if ($LASTEXITCODE -ne 0) { throw "git checkout -B $Branch origin/$Branch failed (exit $LASTEXITCODE)" }
+                    Write-Info "Aligned $Branch to $RepoUrlHttps ($(git rev-parse --short origin/$Branch))."
                 }
 
                 if ($autostashRef) {
