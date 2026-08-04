@@ -1,5 +1,6 @@
 import { atom } from 'nanostores'
 import { addGitLogEntry } from './git-log'
+import { refreshChurnData } from './review'
 
 export interface GitFile {
   path: string
@@ -178,6 +179,8 @@ export async function refreshGitStatus(cwd: string, options?: { silent?: boolean
         ...result,
         files: result.files.map(f => ({ ...f, status: normalizeStatus(f.status) }))
       })
+      // Fire-and-forget churn data refresh (non-critical)
+      void refreshChurnData(cwd.trim())
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Failed to load git status'

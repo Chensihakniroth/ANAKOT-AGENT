@@ -84,7 +84,10 @@ declare global {
       gitPush?: (cwd: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitCommitAmend?: (cwd: string, message: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitDiff?: (cwd: string, file: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitDiffStats?: (cwd: string) => Promise<{ ok: boolean; stats?: Record<string, { added: number; removed: number }>; error?: string }>
       gitStagedDiff?: (cwd: string) => Promise<{ ok: boolean; diff: string; error?: string }>
+      gitShipInfo?: (cwd: string) => Promise<{ ok: boolean; ghReady?: boolean; prs?: Array<{ number: number; title: string; url: string; headRefName: string }>; error?: string }>
+      gitCreatePr?: (cwd: string, title: string, body: string) => Promise<{ ok: boolean; output?: string; error?: string }>
       gitLog?: (cwd: string, limit?: number) => Promise<{ ok: boolean; commits: Array<{ hash: string; name: string; email: string; date: string; message: string }>; error?: string }>
       gitBranches?: (cwd: string) => Promise<{ ok: boolean; branches: Array<{ name: string; current: boolean }>; error?: string }>
       gitCheckout?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>

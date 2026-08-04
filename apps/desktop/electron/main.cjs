@@ -6765,6 +6765,97 @@ ipcMain.handle('anakot:git:checkout-new-branch', async (_event, { cwd, branch })
   }
 })
 
+// ── Git diff stats (churn data) ────────────────────────────────────────────
+
+ipcMain.handle('anakot:git:diff-stats', async (_event, { cwd }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const result = await runGit(['diff', '--numstat'], { cwd: root })
+    if (!result.ok) return { ok: false, error: result.stderr || 'diff --numstat failed' }
+    const lines = result.stdout.trim().split('\n').filter(Boolean)
+    const stats = {}
+    for (const line of lines) {
+      const parts = line.split('\t')
+      if (parts.length >= 3) {
+        const added = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0
+        const removed = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0
+        stats[parts[2]] = { added, removed }
+      }
+    }
+    return { ok: true, stats }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'diff-stats failed' }
+  }
+})
+
+// ── Ship info (gh CLI: auth status + open PRs) ─────────────────────────────
+
+ipcMain.handle('anakot:git:ship-info', async (_event, { cwd }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    // Check gh auth status
+    const cp = require('child_process')
+    const authResult = await new Promise(resolve => {
+      cp.execFile('gh', ['auth', 'status'], { cwd: root, windowsHide: true, timeout: 10000 }, (err, stdout, stderr) => {
+        resolve({ ok: !err, output: (stderr || stdout || '').trim() })
+      })
+    })
+    if (!authResult.ok) return { ok: true, ghReady: false, prs: [] }
+    // Find existing open PRs
+    const prResult = await new Promise(resolve => {
+      cp.execFile('gh', ['pr', 'list', '--json', 'number,title,url,headRefName', '--state', 'open'], { cwd: root, windowsHide: true, timeout: 15000 }, (err, stdout) => {
+        if (err) return resolve({ ok: false, prs: [] })
+        try { resolve({ ok: true, prs: JSON.parse(stdout || '[]') }) }
+        catch { resolve({ ok: false, prs: [] }) }
+      })
+    })
+    return { ok: true, ghReady: true, prs: prResult.ok ? prResult.prs : [] }
+  } catch (error) {
+    return { ok: false, ghReady: false, error: error?.message || 'ship-info failed' }
+  }
+})
+
+// ── Create PR via gh CLI ────────────────────────────────────────────────────
+
+ipcMain.handle('anakot:git:create-pr', async (_event, { cwd, title, body }) => {
+  try {
+    let rawPath = String(cwd || '').trim().replace(/\//g, '\\')
+    rawPath = rawPath.replace(/[\\/]+$/, '')
+    if (!rawPath) return { ok: false, error: 'empty-path' }
+    if (rawPath.startsWith('\\\\') || rawPath.startsWith('//')) {
+      return { ok: false, error: 'network or invalid path' }
+    }
+    const root = await findGitRoot(rawPath)
+    if (!root) return { ok: false, error: 'not a git repo' }
+    const args = ['pr', 'create']
+    if (title) args.push('--title', title)
+    if (body) args.push('--body', body)
+    const cp = require('child_process')
+    const result = await new Promise(resolve => {
+      cp.execFile('gh', args, { cwd: root, windowsHide: true, timeout: 30000 }, (err, stdout, stderr) => {
+        resolve({ ok: !err, output: (stdout || '').trim(), error: err ? (stderr || stdout || '').trim() : undefined })
+      })
+    })
+    return result
+  } catch (error) {
+    return { ok: false, error: error?.message || 'create-pr failed' }
+  }
+})
+
 ipcMain.handle('anakot:terminal:start', async (event, payload = {}) => {
   if (!nodePty) {
     throw new Error('PTY support is unavailable. Reinstall desktop dependencies and restart Anakot.')

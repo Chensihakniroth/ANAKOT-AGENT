@@ -13,6 +13,8 @@ import Failure from './routes/failure'
  * in-window repeat of the H mark + words was redundant slop).
  *
  * Route state lives in a single $route atom — 4 screens, no react-router.
+ * Screen transitions use a fade animation via the anakot-fade-in class
+ * applied to each route component.
  */
 export default function App() {
   const route = useStore($route)

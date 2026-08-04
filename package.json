@@ -11,7 +11,7 @@
     "ui-tui/packages/*"
   ],
   "scripts": {
-    "postinstall": "echo '\u2705 Browser tools ready. Run: python run_agent.py --help' && npm run dedupe-shiki 2>/dev/null || true",
+    "postinstall": "node scripts/postinstall.cjs",
     "install:root": "npm install --workspaces=false",
     "install:web": "npm install --workspace web",
     "install:tui": "npm install --workspace ui-tui",

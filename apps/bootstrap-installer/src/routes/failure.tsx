@@ -9,7 +9,7 @@ import {
   startUpdate,
   type BootstrapStateModel
 } from '../store'
-import { RefreshCw, FileText } from 'lucide-react'
+import { RefreshCw, FileText, AlertTriangle } from 'lucide-react'
 
 interface FailureProps {
   bootstrap: BootstrapStateModel
@@ -29,9 +29,17 @@ export default function Failure({ bootstrap }: FailureProps) {
 
   return (
     <div className="anakot-fade-in flex h-full flex-col items-center justify-center gap-6 px-12 py-10">
-      <div className="w-full max-w-2xl min-w-0 text-center">
+      {/* Error indicator */}
+      <div className="relative z-10 flex items-center gap-3 text-destructive">
+        <AlertTriangle size={28} strokeWidth={1.5} />
+        <span className="text-sm font-medium">
+          {isUpdate ? 'Update failed' : 'Installation failed'}
+        </span>
+      </div>
+
+      <div className="relative z-10 w-full max-w-2xl min-w-0 text-center">
         <p
-          className="fit-text mx-auto mb-4 w-full font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em] text-destructive mix-blend-plus-lighter dark:text-destructive/90"
+          className="fit-text mx-auto mb-4 w-full font-['StarAvenue'] uppercase leading-[0.9] tracking-[0.08em] text-destructive mix-blend-plus-lighter dark:text-destructive/90"
           style={
             {
               '--fit-text-line-height': '0.9',

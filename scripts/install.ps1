@@ -1191,6 +1191,27 @@ function Install-Repository {
                         git -c windows.appendAtomically=false stash apply $autostashRef
                         if ($LASTEXITCODE -eq 0) {
                             git -c windows.appendAtomically=false stash drop $autostashRef 2>$null
+                            # Dependency manifests are load-bearing: a stale
+                            # package.json/package-lock.json restored on top of
+                            # the updated tree makes npm ci/install fail with
+                            # ERESOLVE (observed in the field: bootstrap dies at
+                            # the desktop stage on every retry). npm must always
+                            # resolve against the branch's clean manifests, so
+                            # discard restored manifest changes right here.
+                            $manifestFiles = @()
+                            $restoredStatus = git -c windows.appendAtomically=false status --porcelain 2>$null
+                            foreach ($line in $restoredStatus) {
+                                $f = ($line -replace '^...', '').Trim('"')
+                                if ($f -match '(^|/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|uv\.lock)$') {
+                                    $manifestFiles += $f
+                                }
+                            }
+                            if ($manifestFiles.Count -gt 0) {
+                                git -c windows.appendAtomically=false checkout -- $manifestFiles 2>$null
+                                if ($LASTEXITCODE -eq 0) {
+                                    Write-Warn "Discarded restored changes to dependency manifests ($($manifestFiles -join ', ')) so npm resolves a clean tree."
+                                }
+                            }
                             Write-Warn "Local changes were restored on top of the updated codebase."
                             Write-Warn "Review git diff / git status if Anakot behaves unexpectedly."
                         } else {

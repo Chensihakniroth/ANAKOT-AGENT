@@ -15,6 +15,29 @@ import {
   gitPush, gitCommitAmend, gitCheckoutNewBranch,
   gitLoadBranches, gitCheckoutBranch, type GitFile
 } from '@/store/git'
+import {
+  $reviewChurnData, $reviewShipInfo, $reviewShipBusy,
+  refreshChurnData, refreshShipInfo, createPr,
+} from '@/store/review'
+import { motion, AnimatePresence } from 'framer-motion'
+
+const CHURN_BAR_COLOR = 'rgb(139, 92, 246)'
+const HEAVY_LIST_CAP = 60
+
+function ChurnBar({ churn }: { churn?: number }) {
+  if (!churn || churn <= 0) return null
+  const pct = Math.min(churn / 40, 1)
+  const display = churn >= 100 ? '99+' : String(churn)
+  return (
+    <span className="flex items-center gap-0.5 shrink-0">
+      <span
+        className="inline-block h-1 rounded-full"
+        style={{ width: `${Math.max(pct * 20, 3)}px`, backgroundColor: CHURN_BAR_COLOR, minWidth: '3px' }}
+      />
+      <span className="text-[0.45rem] font-mono text-muted-foreground/60">{display}</span>
+    </span>
+  )
+}
 
 interface ContextMenuState {
   x: number
@@ -53,11 +76,18 @@ export function GitSourceControl() {
   const error = useStore($gitError)
   const loading = useStore($gitLoading)
   const commitMessage = useStore($gitCommitMessage)
+  const churnData = useStore($reviewChurnData)
+  const shipInfo = useStore($reviewShipInfo)
+  const shipBusy = useStore($reviewShipBusy)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [checkoutConflict, setCheckoutConflict] = useState<{ branch: string, message: string } | null>(null)
   const [generating, setGenerating] = useState(false)
   const [stagedCollapsed, setStagedCollapsed] = useState(false)
   const [changesCollapsed, setChangesCollapsed] = useState(false)
+  const [prTitle, setPrTitle] = useState('')
+  const [prBusy, setPrBusy] = useState(false)
+  const [prResult, setPrResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [copiedPrompt, setCopiedPrompt] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Track the current git root in a ref so async callbacks always see the latest value
@@ -65,6 +95,13 @@ export function GitSourceControl() {
   useEffect(() => {
     gitRootRef.current = status.root
   }, [status.root])
+
+  // Load churn data on mount / when root changes
+  useEffect(() => {
+    if (status.root) {
+      void refreshChurnData(status.root)
+    }
+  }, [status.root, status.files.length])
 
   useEffect(() => {
     if (cwd.trim()) {
@@ -123,19 +160,22 @@ export function GitSourceControl() {
   const stagedFiles = useMemo(() => status.files.filter(f => f.staged), [status.files])
   const unstagedFiles = useMemo(() => status.files.filter(f => !f.staged), [status.files])
 
+  // Load ship info when there are staged files (depends on stagedFiles, so must be after it)
+  useEffect(() => {
+    if (status.root && stagedFiles.length > 0) {
+      void refreshShipInfo(status.root)
+    }
+  }, [status.root, stagedFiles.length])
+
   const handleStage = useCallback(async (file: string) => {
-    
     setContextMenu(null)
     const root = status.root || cwd
-    
     await gitStageFile(root, file)
   }, [cwd, status.root])
 
   const handleUnstage = useCallback(async (file: string) => {
-    
     setContextMenu(null)
     const root = status.root || cwd
-    
     try {
       await gitUnstageFile(root, file)
     } catch (e) {
@@ -152,25 +192,19 @@ export function GitSourceControl() {
   }, [cwd, status.root])
 
   const handleStageAll = useCallback(async () => {
-    
     setContextMenu(null)
     const root = status.root || cwd
     const files = unstagedFiles.map(f => f.path)
     if (files.length > 0) {
-      const result = await gitStageAllFiles(root, files)
-      
+      await gitStageAllFiles(root, files)
     }
   }, [cwd, status.root, unstagedFiles])
 
   const generatingRef = useRef(false)
 
   const handleGenerate = useCallback(async () => {
-    if (!cwd.trim()) {
-      return
-    }
-    if (generatingRef.current) {
-      return
-    }
+    if (!cwd.trim()) return
+    if (generatingRef.current) return
     setGenerating(true)
     generatingRef.current = true
     try {
@@ -184,12 +218,10 @@ export function GitSourceControl() {
           el.value = message
           el.style.height = 'auto'
           el.style.height = `${el.scrollHeight}px`
-        } else {
         }
-      } else {
       }
     } catch (err) {
-      console.error('[Sparkle] 💥 Unhandled error in handleGenerate:', err)
+      console.error('[GitSourceControl] 💥 handleGenerate error:', err)
     } finally {
       generatingRef.current = false
       setGenerating(false)
@@ -274,18 +306,57 @@ export function GitSourceControl() {
     void window.anakotDesktop?.openExternal?.(`file://${parentDir}`)
   }, [cwd, status.root])
 
+  const handleShipAndPush = useCallback(async () => {
+    if (!status.root || !prTitle.trim()) return
+    setPrBusy(true)
+    setPrResult(null)
+    try {
+      const result = await createPr(status.root, prTitle.trim(), '')
+      setPrResult({ ok: result.ok, message: result.ok ? (result.output || 'PR created successfully') : (result.error || 'Failed to create PR') })
+    } catch (e) {
+      setPrResult({ ok: false, message: String(e) })
+    } finally {
+      setPrBusy(false)
+    }
+  }, [status.root, prTitle])
+
+  const handleCopyAgentPrompt = useCallback(async () => {
+    const root = status.root || cwd
+    try {
+      // Collect diff from main process
+      const allFiles = [...stagedFiles, ...unstagedFiles]
+      let diff = ''
+      if (window.anakotDesktop?.gitDiff) {
+        for (const f of allFiles) {
+          try {
+            const result = await window.anakotDesktop.gitDiff(root, f.path)
+            if (result?.diff) diff += `\n--- ${f.path} ---\n${result.diff}`
+          } catch { /* skip */ }
+        }
+      }
+        const prompt = `I just committed the following changes. Please review them.\n\nCommit message: ${commitMessage}\n\nDiff:\n${diff}\n\nPlease provide a thorough code review.`
+      await navigator.clipboard.writeText(prompt)
+      setCopiedPrompt(true)
+      setTimeout(() => setCopiedPrompt(false), 2000)
+    } catch (e) {
+      console.error('[GitSourceControl] Failed to copy agent prompt:', e)
+    }
+  }, [status.root, cwd, stagedFiles, unstagedFiles, commitMessage])
+
   const renderFileItem = (file: GitFile, type: 'staged' | 'changes') => {
     const statusInfo = STATUS_LETTER[file.status] || STATUS_LETTER.modified
     const fileName = file.path.split('/').pop() || file.path
     const fileDir = file.path.split('/').slice(0, -1).join('/')
     const iconName = getFileIcon(fileName)
+    const churnEntry = churnData.get(file.path)
+    const churn = churnEntry ? churnEntry.added + churnEntry.removed : undefined
+
     return (
       <div
         key={file.path}
         className="group flex items-start gap-1.5 rounded-[2px] px-2 py-[3px] text-xs leading-4 hover:bg-(--ui-control-hover-background) w-full cursor-pointer"
         onContextMenu={e => openContextMenu(e, file, type)}
         onClick={() => {
-          
           void handleOpenFile(file.path)
         }}
       >
@@ -293,7 +364,10 @@ export function GitSourceControl() {
         <Codicon name={iconName} size="0.65rem" className="shrink-0 mt-0.5 text-muted-foreground" />
         {/* Filename + path (middle) */}
         <div className="flex-1 min-w-0">
-          <div className="truncate text-foreground text-[0.6rem]" title={file.path}>{fileName}</div>
+          <div className="flex items-center gap-1 truncate text-foreground text-[0.6rem]" title={file.path}>
+            {fileName}
+            <ChurnBar churn={churn} />
+          </div>
           {fileDir && (
             <div className="truncate text-[0.5rem] leading-3 text-muted-foreground/45">{fileDir}</div>
           )}
@@ -307,7 +381,7 @@ export function GitSourceControl() {
           {type === 'staged' && (
              <button
                className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
-               onClick={e => { e.stopPropagation(); e.preventDefault();  handleUnstage(file.path) }}
+               onClick={e => { e.stopPropagation(); e.preventDefault(); handleUnstage(file.path) }}
                title="Unstage"
                type="button"
              >
@@ -318,7 +392,7 @@ export function GitSourceControl() {
             <>
               <button
                 className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none"
-                onClick={e => { e.stopPropagation(); e.preventDefault();  handleStage(file.path) }}
+                onClick={e => { e.stopPropagation(); e.preventDefault(); handleStage(file.path) }}
                 title="Stage"
                 type="button"
               >
@@ -326,7 +400,7 @@ export function GitSourceControl() {
               </button>
               <button
                 className="rounded-sm p-0.5 text-muted-foreground hover:text-destructive focus:outline-none"
-                onClick={e => { e.stopPropagation(); e.preventDefault();  handleDiscard(file.path) }}
+                onClick={e => { e.stopPropagation(); e.preventDefault(); handleDiscard(file.path) }}
                 title="Discard"
                 type="button"
               >
@@ -338,6 +412,8 @@ export function GitSourceControl() {
       </div>
     )
   }
+
+  const isHeavy = status.files.length > HEAVY_LIST_CAP
 
   return (
     <div tabIndex={-1} className="flex h-full min-w-0 min-h-0 flex-col gap-2 p-2 outline-none" onFocus={handleFocus}>
@@ -547,7 +623,11 @@ export function GitSourceControl() {
               </div>
               {!stagedCollapsed && (
                 <div className="flex flex-col gap-px">
-                  {stagedFiles.map(f => renderFileItem(f, 'staged'))}
+                  {isHeavy ? (
+                    stagedFiles.map(f => renderFileItem(f, 'staged'))
+                  ) : (
+                    stagedFiles.map(f => renderFileItem(f, 'staged'))
+                  )}
                 </div>
               )}
             </div>
@@ -578,11 +658,68 @@ export function GitSourceControl() {
             </div>
             {!changesCollapsed && unstagedFiles.length > 0 && (
               <div className="flex flex-col gap-px">
-                {unstagedFiles.map(f => renderFileItem(f, 'changes'))}
+                {isHeavy ? (
+                  unstagedFiles.map(f => renderFileItem(f, 'changes'))
+                ) : (
+                  unstagedFiles.map(f => renderFileItem(f, 'changes'))
+                )}
               </div>
             )}
           </div>
         </div>
+      )}
+
+      {/* ========= SHIP / PR SECTION ========= */}
+      {status.root && stagedFiles.length > 0 && (
+        <div className="mt-1 rounded-[4px] border border-[#3b82f6]/30 bg-[#3b82f6]/5 p-2">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Codicon name="cloud-upload" size="0.7rem" className="text-[#60a5fa]" />
+            <span className="text-[0.6rem] font-medium text-[#60a5fa]">SHIP</span>
+          </div>
+
+          {status.branch && (
+            <div className="text-[0.5rem] text-muted-foreground/60 mb-2 space-y-0.5">
+              <div>{status.branch} · {stagedFiles.length} staged file{stagedFiles.length !== 1 ? 's' : ''} ready to commit</div>
+              {shipInfo.ghReady && <div className="text-green-400/70">gh CLI authenticated</div>}
+              {!shipInfo.ghReady && <div className="text-amber-400/70">gh CLI not available — install & auth for PR creation</div>}
+            </div>
+          )}
+
+          <input
+            className="w-full rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2 py-1 text-[0.55rem] text-foreground placeholder:text-muted-foreground/45 focus:border-primary focus:outline-none mb-1.5"
+            placeholder="PR title (e.g. Add X feature)"
+            value={prTitle}
+            onChange={e => setPrTitle(e.target.value)}
+          />
+
+          <button
+            className="w-full rounded-[2px] border border-[#3b82f6]/50 bg-[#3b82f6]/10 px-2 py-1 text-[0.55rem] font-medium text-[#60a5fa] hover:bg-[#3b82f6]/20 disabled:opacity-40 disabled:pointer-events-none"
+            disabled={!prTitle.trim() || prBusy}
+            onClick={handleShipAndPush}
+            type="button"
+          >
+            {prBusy ? 'Creating PR...' : 'Ship & Push'}
+          </button>
+
+          {prResult && (
+            <div className={`mt-1.5 rounded-[2px] p-1.5 text-[0.5rem] ${prResult.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+              {prResult.message}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Agent handoff button */}
+      {status.root && commitMessage.trim() && (
+        <button
+          className="flex w-full items-center justify-center gap-1.5 rounded-[2px] border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-2 py-1.5 text-[0.55rem] text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground transition-colors"
+          onClick={handleCopyAgentPrompt}
+          type="button"
+          title="Copy prompt with diff to clipboard, then paste into chat"
+        >
+          <Codicon name="robot" size="0.65rem" />
+          {copiedPrompt ? 'Copied!' : 'Let agent handle it'}
+        </button>
       )}
 
       {/* Context menu */}
@@ -609,7 +746,7 @@ export function GitSourceControl() {
               <>
                 <button
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-                  onClick={() => {  handleStage(contextMenu.file.path) }}
+                  onClick={() => { handleStage(contextMenu.file.path) }}
                   type="button"
                 >
                   <Codicon name="add" size="0.75rem" />
@@ -657,7 +794,7 @@ export function GitSourceControl() {
           </div>
         </>
       )}
-            {/* Checkout Conflict Dialog */}
+      {/* Checkout Conflict Dialog */}
       <Dialog open={!!checkoutConflict} onOpenChange={(open) => !open && setCheckoutConflict(null)}>
         <DialogContent>
           <DialogHeader>
