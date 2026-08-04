@@ -262,6 +262,14 @@ const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
 // tracks main. User can also override at runtime via
 // anakotDesktop.updates.setBranch().
 const DEFAULT_UPDATE_BRANCH = 'main'
+// The canonical upstream repo. The self-update check ALWAYS compares against
+// this repo, regardless of what `origin` currently points at in the managed
+// checkout. A stale fork remote (e.g. a pre-existing install cloned from a
+// different account) makes `git fetch origin <branch>` silently resolve
+// against the fork's history and report "up to date" while upstream is
+// actually ahead — observed in the field. checkUpdates() repoints origin
+// before every fetch.
+const CANONICAL_REPO_URL = 'https://github.com/Chensihakniroth/ANAKOT-AGENT.git'
 // desktop.log lives under ANAKOT_HOME/logs/ so it sits next to agent.log,
 // errors.log, gateway.log produced by anakot_logging.setup_logging — one log
 // directory per user, regardless of which UI surface produced the line.
@@ -1430,6 +1438,18 @@ function emitUpdateProgress(payload) {
   }
 }
 
+// Repoint the managed checkout's origin at the canonical upstream repo so
+// update checks always compare against the real project history, never a
+// leftover fork. `set-url` is idempotent; a missing remote is added fresh.
+async function ensureCanonicalOrigin(updateRoot) {
+  const set = await runGit(['remote', 'set-url', 'origin', CANONICAL_REPO_URL], { cwd: updateRoot })
+  if (set.code === 0) {
+    return true
+  }
+  const add = await runGit(['remote', 'add', 'origin', CANONICAL_REPO_URL], { cwd: updateRoot })
+  return add.code === 0
+}
+
 // Self-heal the tracked update branch: if origin no longer publishes it (e.g.
 // bb/gui was merged into main and deleted), fall back to main and persist so
 // every later check/apply follows main — no manual flip, even for already-
@@ -1473,6 +1493,9 @@ async function checkUpdates() {
     }
   }
 
+  // Always check against the canonical upstream repo, never a leftover fork
+  // remote that would silently compare against the wrong history.
+  await ensureCanonicalOrigin(updateRoot)
   branch = await resolveHealedBranch(updateRoot, branch)
   const fetched = await runGit(['fetch', '--quiet', 'origin', branch], { cwd: updateRoot })
   if (fetched.code !== 0) {
