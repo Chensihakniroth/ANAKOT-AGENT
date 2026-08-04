@@ -1,4 +1,4 @@
-import { atom, computed } from 'nanostores'
+import { atom } from 'nanostores'
 
 export type ReviewViewMode = 'tree' | 'flat'
 
@@ -17,14 +17,83 @@ export interface ReviewFile {
   staged: boolean
 }
 
+// ── Persistent view mode (survives relaunch) ─────────────────────────────────
+const VIEW_MODE_KEY = 'anakot-review-view-mode'
+function loadViewMode(): ReviewViewMode {
+  try {
+    const saved = window.localStorage.getItem(VIEW_MODE_KEY)
+    if (saved === 'flat' || saved === 'tree') return saved
+  } catch { /* ignore */ }
+  return 'tree'
+}
+
 export const $reviewSelectedPath = atom<string | null>(null)
 export const $reviewDiff = atom<string>('')
 export const $reviewDiffLines = atom<ReviewDiffLine[]>([])
-export const $reviewViewMode = atom<ReviewViewMode>('tree')
+export const $reviewViewMode = atom<ReviewViewMode>(loadViewMode())
+$reviewViewMode.subscribe(v => {
+  try { window.localStorage.setItem(VIEW_MODE_KEY, v) } catch { /* ignore */ }
+})
 export const $reviewLoadingDiff = atom(false)
 export const $reviewDiffError = atom<string | null>(null)
 export const $reviewCollapsedDirs = atom<Set<string>>(new Set())
 export const $reviewChurnData = atom<Map<string, { added: number; removed: number }>>(new Map())
+
+// ── Ship info (PR integration) ───────────────────────────────────────────────
+export interface ReviewShipPr {
+  number: number
+  title: string
+  url: string
+  headRefName: string
+}
+
+export const $reviewShipInfo = atom<{ ghReady: boolean; prs: ReviewShipPr[] }>({ ghReady: false, prs: [] })
+export const $reviewShipBusy = atom(false)
+
+/** Refresh ship info (gh auth status + open PRs). */
+export async function refreshShipInfo(cwd: string): Promise<void> {
+  try {
+    const safePath = cwd.replace(/\\/g, '/')
+    const result = await window.anakotDesktop?.gitShipInfo?.(safePath)
+    if (result?.ok) {
+      $reviewShipInfo.set({ ghReady: !!result.ghReady, prs: result.prs || [] })
+    } else {
+      $reviewShipInfo.set({ ghReady: false, prs: [] })
+    }
+  } catch {
+    $reviewShipInfo.set({ ghReady: false, prs: [] })
+  }
+}
+
+/** Create a PR via gh CLI. */
+export async function createPr(cwd: string, title: string, body: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  $reviewShipBusy.set(true)
+  try {
+    const safePath = cwd.replace(/\\/g, '/')
+    const result = await window.anakotDesktop?.gitCreatePr?.(safePath, title, body)
+    return result || { ok: false, error: 'create-pr not available' }
+  } finally {
+    $reviewShipBusy.set(false)
+  }
+}
+
+// ── Churn data (from git diff --numstat) ─────────────────────────────────────
+/** Refresh churn data from the backend (git diff --numstat). */
+export async function refreshChurnData(cwd: string): Promise<void> {
+  try {
+    const safePath = cwd.replace(/\\/g, '/')
+    const result = await window.anakotDesktop?.gitDiffStats?.(safePath)
+    if (result?.ok && result.stats) {
+      const map = new Map<string, { added: number; removed: number }>()
+      for (const [path, stat] of Object.entries(result.stats) as Array<[string, { added: number; removed: number }]>) {
+        map.set(path, stat)
+      }
+      $reviewChurnData.set(map)
+    }
+  } catch {
+    // Non-critical — degrade silently
+  }
+}
 
 /** Parse a unified diff into structured line objects for rendering. */
 function parseDiffLines(raw: string): ReviewDiffLine[] {

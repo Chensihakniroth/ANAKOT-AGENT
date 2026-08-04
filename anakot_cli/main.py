@@ -10576,54 +10576,20 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # against a non-default channel.
         branch = _resolve_update_branch(args)
 
-        # If user is on a different branch than the update target, switch
-        # to the target. When the target is "main" this is the historical
-        # "always update against main" behavior; for any other target it's
-        # the same thing — get HEAD onto the requested branch first, then
-        # fast-forward.
+        # If user is on a different branch than the update target, stay on
+        # the current branch and merge the target.  This lets feature-branch
+        # users (e.g. "notebookllm") pull in main's changes without being
+        # forced onto main — they stay on their branch and see a clean merge.
+        # When on the target branch already, just fast-forward pull.
         if current_branch != branch:
             label = (
                 "detached HEAD"
                 if current_branch == "HEAD"
                 else f"branch '{current_branch}'"
             )
-            print(f"  ⚠ Currently on {label} — switching to {branch} for update...")
-            # Stash before checkout so uncommitted work isn't lost
-            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, PROJECT_ROOT)
-            checkout_result = subprocess.run(
-                git_cmd + ["checkout", branch],
-                cwd=PROJECT_ROOT,
-                capture_output=True,
-                text=True,
-            )
-            if checkout_result.returncode != 0:
-                # Local checkout doesn't have this branch yet. Try to set
-                # it up as a tracking branch of origin/<branch>. This is
-                # the common case when the requested branch exists upstream
-                # but was never checked out locally.
-                track_result = subprocess.run(
-                    git_cmd + ["checkout", "-B", branch, f"origin/{branch}"],
-                    cwd=PROJECT_ROOT,
-                    capture_output=True,
-                    text=True,
-                )
-                if track_result.returncode != 0:
-                    # Restore the user's prior branch + stash before bailing
-                    # so we don't leave them stranded in a weird state.
-                    if auto_stash_ref is not None:
-                        _restore_stashed_changes(
-                            git_cmd,
-                            PROJECT_ROOT,
-                            auto_stash_ref,
-                            prompt_user=False,
-                            input_fn=gw_input_fn,
-                        )
-                    print(f"✗ Branch '{branch}' does not exist locally or on origin.")
-                    if track_result.stderr.strip():
-                        print(f"  {track_result.stderr.strip().splitlines()[0]}")
-                    sys.exit(1)
-        else:
-            auto_stash_ref = _stash_local_changes_if_needed(git_cmd, PROJECT_ROOT)
+            print(f"  ⚠ Currently on {label} — will merge {branch} into it...")
+        # Stash local changes so the merge/pull has a clean tree
+        auto_stash_ref = _stash_local_changes_if_needed(git_cmd, PROJECT_ROOT)
 
         prompt_for_restore = (
             auto_stash_ref is not None
@@ -10648,7 +10614,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
             if is_fork and branch == "main":
                 _sync_with_upstream_if_needed(git_cmd, PROJECT_ROOT)
 
-            # Restore stash and switch back to original branch if we moved
+            # Restore stash — no branch switchback needed since we stayed
+            # on the current branch throughout.
             if auto_stash_ref is not None:
                 _restore_stashed_changes(
                     git_cmd,
@@ -10656,14 +10623,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     auto_stash_ref,
                     prompt_user=prompt_for_restore,
                     input_fn=gw_input_fn,
-                )
-            if current_branch not in {branch, "HEAD"}:
-                subprocess.run(
-                    git_cmd + ["checkout", current_branch],
-                    cwd=PROJECT_ROOT,
-                    capture_output=True,
-                    text=True,
-                    check=False,
                 )
             print("✓ Already up to date!")
             return
@@ -10696,33 +10655,54 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # the bad commit and the fix landing).
         pre_pull_sha = _capture_head_sha(git_cmd, PROJECT_ROOT)
         try:
-            pull_result = subprocess.run(
-                git_cmd + ["pull", "--ff-only", "origin", branch],
-                cwd=PROJECT_ROOT,
-                capture_output=True,
-                text=True,
-            )
-            if pull_result.returncode != 0:
-                # ff-only failed — local and remote have diverged (e.g. upstream
-                # force-pushed or rebase).  Since local changes are already
-                # stashed, reset to match the remote exactly.
-                print(
-                    "  ⚠ Fast-forward not possible (history diverged), resetting to match remote..."
-                )
-                reset_result = subprocess.run(
-                    git_cmd + ["reset", "--hard", f"origin/{branch}"],
+            if current_branch != branch and current_branch != "HEAD":
+                # Feature branch: merge the update target into the current
+                # branch so the user stays on their branch with the latest
+                # upstream changes.
+                merge_result = subprocess.run(
+                    git_cmd + ["merge", f"origin/{branch}"],
                     cwd=PROJECT_ROOT,
                     capture_output=True,
                     text=True,
                 )
-                if reset_result.returncode != 0:
-                    print(f"✗ Failed to reset to origin/{branch}.")
-                    if reset_result.stderr.strip():
-                        print(f"  {reset_result.stderr.strip()}")
+                if merge_result.returncode != 0:
+                    print("  ⚠ Merge failed (conflicts or unrelated histories).")
+                    stderr = merge_result.stderr.strip()
+                    if stderr:
+                        print(f"  {stderr.splitlines()[0]}")
                     print(
-                        f"  Try manually: git fetch origin && git reset --hard origin/{branch}"
+                        f"  Resolve manually: git merge origin/{branch}"
                     )
                     sys.exit(1)
+            else:
+                # Same branch or detached HEAD: fast-forward pull.
+                pull_result = subprocess.run(
+                    git_cmd + ["pull", "--ff-only", "origin", branch],
+                    cwd=PROJECT_ROOT,
+                    capture_output=True,
+                    text=True,
+                )
+                if pull_result.returncode != 0:
+                    # ff-only failed — local and remote have diverged (e.g. upstream
+                    # force-pushed or rebase).  Since local changes are already
+                    # stashed, reset to match the remote exactly.
+                    print(
+                        "  ⚠ Fast-forward not possible (history diverged), resetting to match remote..."
+                    )
+                    reset_result = subprocess.run(
+                        git_cmd + ["reset", "--hard", f"origin/{branch}"],
+                        cwd=PROJECT_ROOT,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if reset_result.returncode != 0:
+                        print(f"✗ Failed to reset to origin/{branch}.")
+                        if reset_result.stderr.strip():
+                            print(f"  {reset_result.stderr.strip()}")
+                        print(
+                            f"  Try manually: git fetch origin && git reset --hard origin/{branch}"
+                        )
+                        sys.exit(1)
 
             # Post-pull syntax guard: validate critical-path files actually
             # parse before declaring the update successful. If a bad commit

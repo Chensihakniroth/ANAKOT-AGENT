@@ -30,7 +30,7 @@
 @keyframes anakot-fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -39,7 +39,16 @@
 }
 
 .anakot-fade-in {
-  animation: anakot-fade-in 0.45s ease-out both;
+  animation: anakot-fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes anakot-glow-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .anakot-glow {
@@ -48,4 +57,5 @@
     color-mix(in srgb, var(--ui-warm) 18%, transparent) 0%,
     transparent 60%
   );
+  animation: anakot-glow-pulse 4s ease-in-out infinite;
 }
