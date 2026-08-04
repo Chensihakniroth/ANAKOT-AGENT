@@ -93,7 +93,7 @@ try {
 # ============================================================================
 
 $RepoUrlSsh = "git@github.com:Chensihakniroth/ANAKOT-AGENT.git"
-$RepoUrlHttps = "https://github.com:Chensihakniroth/ANAKOT-AGENT.git"
+$RepoUrlHttps = "https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
 $PythonVersion = "3.11"
 $NodeVersion = "22"
 
