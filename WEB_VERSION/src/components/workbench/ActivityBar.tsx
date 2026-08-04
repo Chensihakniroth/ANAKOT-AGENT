@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { useNavigate } from 'react-router-dom'
 import { $sidebarPanel, setSidebarPanel, toggleSidebar, type SidebarPanelId } from '@/store/workbench'
 import { $sidebarOpen } from '@/store/layout'
-import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, PROFILES_ROUTE, PLUGINS_ROUTE, STARMAP_ROUTE } from '../../app/routes'
+import { SKILLS_ROUTE, MESSAGING_ROUTE, ARTIFACTS_ROUTE, SETTINGS_ROUTE, PROFILES_ROUTE, PLUGINS_ROUTE, STARMAP_ROUTE, NOTEBOOK_ROUTE } from '../../app/routes'
 
 interface ActivityBarItem {
   id: string
@@ -20,6 +20,7 @@ const SIDEBAR_TOGGLE_ITEMS: ActivityBarItem[] = [
 ]
 
 const GLOBAL_VIEW_ITEMS: ActivityBarItem[] = [
+  { id: 'notebook', icon: 'book', label: 'Notebook', route: NOTEBOOK_ROUTE },
   { id: 'skills', icon: 'symbol-misc', label: 'Skills & Tools', route: SKILLS_ROUTE },
   { id: 'messaging', icon: 'comment', label: 'Messaging', route: MESSAGING_ROUTE },
   { id: 'artifacts', icon: 'files', label: 'Artifacts', route: ARTIFACTS_ROUTE },

@@ -67,7 +67,7 @@ try:
     from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.middleware.gzip import GZipMiddleware
-    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+    from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
 except ImportError:
@@ -80,7 +80,7 @@ except ImportError:
         from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
         from fastapi.middleware.cors import CORSMiddleware
         from fastapi.middleware.gzip import GZipMiddleware
-        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
         from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel
     except Exception:
@@ -240,9 +240,18 @@ def _require_admin(request: Request) -> None:
 
 
 def _require_token(request: Request) -> None:
-    """Validate the ephemeral session token.  Raises 401 on mismatch."""
-    if not _has_valid_session_token(request):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    """Validate the session — either via OAuth cookie (already set by the
+    gated middleware) or via the legacy ephemeral session token header.
+    Raises 401 if neither is present."""
+    # In OAuth mode the middleware already verified the session cookie and
+    # attached it to request.state.session.  Trust it.
+    if getattr(request.app.state, "auth_required", False):
+        if getattr(request.state, "session", None) is not None:
+            return  # OAuth middleware already authenticated this request
+    # Fallback: legacy loopback / insecure mode via session header
+    if _has_valid_session_token(request):
+        return
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def _get_session_user_id(request: Request) -> str | None:
@@ -2286,6 +2295,7 @@ _AUX_TASK_SLOTS: Tuple[str, ...] = (
     "profile_describer",
     "curator",
     "commit_gen",
+    "notebook_chat",
 )
 
 
@@ -8354,12 +8364,37 @@ async def update_config_raw(body: RawConfigUpdate, request: Request):
 
 @app.get("/api/admin/users")
 async def admin_list_users(request: Request):
-    """Return all {user_id -> metadata} for the admin management UI.
-    Admin-only. Returns every registered user with their role.
+    """Return all registered users for the admin management UI.
+    Admin-only. Each entry includes the user_id so the frontend can
+    identify and act on individual users (disable, delete, grants).
     """
     _require_admin(request)
     from anakot_cli.dashboard_auth.user_metadata import list_all_users
-    return {"users": list(list_all_users().values())}
+    all_users = list_all_users()
+
+    # Fetch profile mappings so we can show each user's active profile
+    try:
+        from anakot_cli.dashboard_auth.user_profiles import list_all_mappings
+        profile_map = list_all_mappings()
+    except Exception:
+        profile_map = {}
+
+    result = []
+    for uid, meta in all_users.items():
+        entry = dict(meta) if isinstance(meta, dict) else {}
+        entry["user_id"] = uid
+        profile_name = profile_map.get(uid, "")
+        if not entry.get("profile") and profile_name:
+            entry["profile"] = profile_name
+        # Use profile name as display_name fallback for OAuth users
+        # (their user_id is a raw Google numeric ID, not human-readable)
+        if not entry.get("display_name"):
+            if profile_name:
+                entry["display_name"] = profile_name
+            else:
+                entry["display_name"] = uid
+        result.append(entry)
+    return {"users": result}
 
 
 @app.post("/api/admin/users/{user_id}/disable")
@@ -10464,6 +10499,1000 @@ async def upload_attachment(file: UploadFile):
         "filename": unique_name,
         "preview_url": f"/uploads/{unique_name}",
     }
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM API routes
+# ---------------------------------------------------------------------------
+
+from anakot_cli.notebooks import (
+    create_notebook as _nb_create,
+    list_notebooks as _nb_list,
+    get_notebook as _nb_get,
+    delete_notebook as _nb_delete,
+    rename_notebook as _nb_rename,
+    add_source as _nb_add_source,
+    get_source as _nb_get_source,
+    get_source_text as _nb_get_source_text,
+    update_source_summary as _nb_update_source_summary,
+    delete_source as _nb_delete_source,
+    get_all_extracted_text as _nb_get_all_text,
+    extract_pdf_text as _nb_extract_pdf,
+    extract_text_content as _nb_extract_text,
+    _notebooks_root as _nb_root,
+    reorder_sources as _nb_reorder_sources,
+    save_chat_message as _nb_save_chat,
+    load_chat_history as _nb_load_chat,
+    clear_chat_history as _nb_clear_chat,
+    duplicate_notebook as _nb_duplicate,
+    rename_source as _nb_rename_source,
+)
+
+
+class NotebookCreate(BaseModel):
+    title: str = "Untitled Notebook"
+
+
+class NotebookRename(BaseModel):
+    title: str
+
+
+class SourceUrl(BaseModel):
+    url: str
+
+
+class SourceReorder(BaseModel):
+    source_ids: list[str]
+
+
+class NotebookChatRequest(BaseModel):
+    notebook_id: str
+    question: str
+
+
+@app.get("/api/notebooks")
+async def notebook_list(request: Request):
+    """List all notebooks for the current user."""
+    user_id = _get_session_user_id(request)
+    return {"notebooks": _nb_list(user_id=user_id)}
+
+
+@app.post("/api/notebooks")
+async def notebook_create(body: NotebookCreate, request: Request):
+    """Create a new notebook."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_create(body.title, user_id=user_id)
+    return nb
+
+
+@app.get("/api/notebooks/{notebook_id}")
+async def notebook_get(notebook_id: str, request: Request):
+    """Get notebook details with sources."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return nb
+
+
+@app.put("/api/notebooks/{notebook_id}")
+async def notebook_update(notebook_id: str, body: NotebookRename, request: Request):
+    """Rename a notebook."""
+    user_id = _get_session_user_id(request)
+    ok = _nb_rename(notebook_id, body.title, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return {"ok": True}
+
+
+@app.delete("/api/notebooks/{notebook_id}")
+async def notebook_delete(notebook_id: str, request: Request):
+    """Delete a notebook and all its sources."""
+    user_id = _get_session_user_id(request)
+    ok = _nb_delete(notebook_id, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/duplicate")
+async def notebook_duplicate(notebook_id: str, request: Request):
+    """Duplicate a notebook with all its sources."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    body = await request.json()
+    title = body.get("title") if isinstance(body, dict) else None
+    result = _nb_duplicate(notebook_id, title=title, user_id=user_id)
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to duplicate notebook")
+    return result
+
+
+@app.post("/api/notebooks/{notebook_id}/sources/upload")
+async def notebook_upload_source(notebook_id: str, file: UploadFile, request: Request):
+    """Upload a file (PDF, TXT, MD, CSV) as a source."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    original_name = (file.filename or "file").strip()
+    ext = Path(original_name).suffix.lower()
+
+    # Read content
+    content_bytes = await file.read()
+
+    # Enforce 50MB limit
+    MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+    if len(content_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large: {len(content_bytes) / 1024 / 1024:.1f}MB exceeds 50MB limit")
+
+    # Determine source type and extract text
+    source_type = "text"
+    extracted_text = ""
+    page_count = 0
+
+    if ext == ".pdf":
+        source_type = "pdf"
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content_bytes)
+            tmp_path = tmp.name
+        try:
+            extracted_text, page_count = _nb_extract_pdf(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+    elif ext in (
+        ".txt", ".md", ".csv", ".json", ".log",
+        ".py", ".js", ".ts", ".html", ".css",
+    ):
+        source_type = "text"
+        try:
+            extracted_text = content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            extracted_text = content_bytes.decode("latin-1")
+        extracted_text, page_count = _nb_extract_text(extracted_text)
+    else:
+        # Try as text
+        try:
+            extracted_text = content_bytes.decode("utf-8")
+            source_type = "text"
+            extracted_text, page_count = _nb_extract_text(extracted_text)
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Supported: .pdf, .txt, .md, .csv, .json, .py, .js, .ts",
+            )
+
+    # Save to notebook
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    safe_name = f"{stamp}_{_uuid.uuid4().hex[:6]}{ext}"
+    word_count = len(extracted_text.split())
+    char_count = len(extracted_text)
+
+    source = _nb_add_source(
+        notebook_id=notebook_id,
+        filename=safe_name,
+        original_name=original_name,
+        source_type=source_type,
+        content_bytes=content_bytes,
+        extracted_text=extracted_text,
+        page_count=page_count,
+        word_count=word_count,
+        char_count=char_count,
+        user_id=user_id,
+    )
+    return source
+
+
+@app.post("/api/notebooks/{notebook_id}/sources/url")
+async def notebook_add_url_source(notebook_id: str, body: SourceUrl, request: Request):
+    """Add a URL as a source - fetches and extracts content."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Fetch URL content using urllib (lightweight, no external deps)
+    try:
+        import urllib.request
+        import urllib.error
+
+        req = urllib.request.Request(
+            body.url, headers={"User-Agent": "Anakot-NotebookLLM/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw = resp.read()
+            # Try UTF-8 first
+            try:
+                content = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                content = raw.decode("latin-1")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+
+    # Basic HTML to text stripping
+    if "<html" in content.lower()[:500]:
+        import re
+
+        # Remove scripts and styles
+        content = re.sub(
+            r"<script[^>]*>.*?</script>", "", content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        content = re.sub(
+            r"<style[^>]*>.*?</style>", "", content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        # Remove tags
+        content = re.sub(r"<[^>]+>", " ", content)
+        # Collapse whitespace
+        content = re.sub(r"\s+", " ", content).strip()
+
+    extracted_text, page_count = _nb_extract_text(content)
+    word_count = len(extracted_text.split())
+    char_count = len(extracted_text)
+
+    # Derive filename from URL
+    from urllib.parse import urlparse
+
+    parsed = urlparse(body.url)
+    filename_part = (
+        parsed.path.strip("/").split("/")[-1]
+        if parsed.path.strip("/")
+        else parsed.netloc
+    )
+    safe_name = f"url_{filename_part[:50]}_{_uuid.uuid4().hex[:6]}.txt"
+
+    source = _nb_add_source(
+        notebook_id=notebook_id,
+        filename=safe_name,
+        original_name=body.url,
+        source_type="url",
+        content_bytes=content.encode("utf-8"),
+        extracted_text=extracted_text,
+        page_count=page_count,
+        word_count=word_count,
+        char_count=char_count,
+        url=body.url,
+        user_id=user_id,
+    )
+    return source
+
+
+@app.get("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_get_source(notebook_id: str, source_id: str, request: Request):
+    """Get source details."""
+    user_id = _get_session_user_id(request)
+    src = _nb_get_source(notebook_id, source_id, user_id=user_id)
+    if not src:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return src
+
+
+@app.get("/api/notebooks/{notebook_id}/sources/{source_id}/text")
+async def notebook_get_source_text(notebook_id: str, source_id: str, request: Request):
+    """Get extracted text for a source."""
+    user_id = _get_session_user_id(request)
+    text = _nb_get_source_text(notebook_id, source_id, user_id=user_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"text": text}
+
+
+@app.put("/api/notebooks/{notebook_id}/sources/{source_id}/summary")
+async def notebook_update_summary(
+    notebook_id: str, source_id: str, body: dict, request: Request
+):
+    """Update a source's summary (called after AI generates it)."""
+    user_id = _get_session_user_id(request)
+    ok = _nb_update_source_summary(notebook_id, source_id, body.get("summary", ""), user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
+
+
+@app.delete("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_delete_source(notebook_id: str, source_id: str, request: Request):
+    """Delete a source from a notebook."""
+    user_id = _get_session_user_id(request)
+    ok = _nb_delete_source(notebook_id, source_id, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
+
+
+@app.patch("/api/notebooks/{notebook_id}/sources/{source_id}")
+async def notebook_rename_source(
+    request: Request, notebook_id: str, source_id: str, body: dict
+):
+    """Rename a source (update its original_name)."""
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    ok = _nb_rename_source(notebook_id, source_id, new_name, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/sources/reorder")
+async def notebook_reorder_sources(
+    request: Request, notebook_id: str, body: SourceReorder
+):
+    """Reorder sources for a notebook.
+
+    Accepts a JSON body with {"source_ids": ["id1", "id2", ...]} listing
+    source IDs in the desired order. Sources not listed are appended at the
+    end in their existing order.
+    """
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    if not body.source_ids:
+        raise HTTPException(
+            status_code=400, detail="source_ids must be a non-empty list"
+        )
+
+    reordered = _nb_reorder_sources(notebook_id, body.source_ids, user_id=user_id)
+    return {"ok": True, "sources": reordered}
+
+
+@app.get("/api/notebooks/{notebook_id}/context")
+async def notebook_get_context(notebook_id: str, request: Request):
+    """Get combined extracted text from all sources (for grounding chat)."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    text = _nb_get_all_text(notebook_id, user_id=user_id)
+    return {"text": text, "char_count": len(text)}
+
+
+@app.post("/api/notebooks/{notebook_id}/re-extract")
+async def notebook_re_extract(notebook_id: str, request: Request):
+    """Re-extract text from all sources that have empty extracted text.
+    Useful after pymupdf is installed to fix previously uploaded PDFs."""
+    user_id = _get_session_user_id(request)
+    import sqlite3 as _sq
+    db_path = _nb_root(user_id) / notebook_id / "metadata.db"
+    if not db_path.exists():
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    db = _sq.connect(str(db_path))
+    db.row_factory = _sq.Row
+    rows = db.execute(
+        "SELECT id, filename, file_path, source_type FROM source "
+        "WHERE notebook_id = ? AND (extracted_text IS NULL OR extracted_text = '')",
+        (notebook_id,),
+    ).fetchall()
+    re_extracted = 0
+    for row in rows:
+        fp = row["file_path"]
+        if not fp or not os.path.exists(fp):
+            continue
+        if row["source_type"] == "pdf":
+            text, pages = _nb_extract_pdf(fp)
+        else:
+            try:
+                text = open(fp, "r", encoding="utf-8").read()
+            except Exception:
+                try:
+                    text = open(fp, "r", encoding="latin-1").read()
+                except Exception:
+                    continue
+            pages = max(1, len(text.split()) // 300)
+        if text.strip():
+            word_count = len(text.split())
+            char_count = len(text)
+            db.execute(
+                "UPDATE source SET extracted_text=?, word_count=?, char_count=?, page_count=? WHERE id=?",
+                (text, word_count, char_count, pages, row["id"]),
+            )
+            re_extracted += 1
+    db.commit()
+    db.close()
+    return {"re_extracted": re_extracted}
+
+@app.get("/api/notebooks/{notebook_id}/overview")
+async def notebook_get_overview(notebook_id: str, request: Request):
+    """Get notebook overview with all source summaries."""
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    # Combine summaries
+    summaries = []
+    for src in nb.get("sources", []):
+        if src.get("summary"):
+            summaries.append(
+                f"**{src['original_name']}**: {src['summary']}"
+            )
+    return {
+        "notebook_id": notebook_id,
+        "title": nb["title"],
+        "source_count": len(nb.get("sources", [])),
+        "summaries": summaries,
+        "combined": (
+            "\n\n".join(summaries)
+            if summaries
+            else "No sources yet. Upload sources and generate summaries."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Chat endpoint (context-grounded AI)
+# ---------------------------------------------------------------------------
+
+class NotebookChatRequest(BaseModel):
+    message: str
+    history: Optional[List[Dict[str, str]]] = None  # [{role, content}, ...]
+
+
+@app.post("/api/notebooks/{notebook_id}/chat")
+async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Request):
+    """Chat with the AI grounded in notebook document context.
+
+    Fetches extracted text from all sources, injects it as system context,
+    and proxies to the configured AI provider.
+    """
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Build context from all sources
+    context_text = _nb_get_all_text(notebook_id, user_id=user_id)
+    if not context_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No extracted text in this notebook. Upload documents first.",
+        )
+
+    # Truncate to ~50k chars to stay within context limits for smaller models
+    max_context_chars = 50_000
+    if len(context_text) > max_context_chars:
+        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+
+    # Build messages
+    source_names = [s["original_name"] for s in nb.get("sources", [])]
+    sources_list = ", ".join(source_names)
+    system_prompt = (
+        f"You are a helpful research assistant. The user has uploaded "
+        f"{len(source_names)} document(s) to a notebook.\n\n"
+        f"When citing sources, always use the format [Source N] where N is the "
+        f"source number (1-indexed, in the order sources appear below). "
+        f"For example: [Source 1], [Source 2].\n\n"
+        "Source list: " + ", ".join(
+            f"[Source {i+1}]: {name}" for i, name in enumerate(source_names)
+        ) + "\n\n"
+        f"Below is the extracted text from these documents, each marked with "
+        f"its source number. Use this content as your primary source of "
+        f"knowledge when answering the user's question. Always cite "
+        f"sources using [Source N].\n\n"
+        f"<document_context>\n{context_text}\n</document_context>"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    # Add conversation history if provided (max 20 turns)
+    if body.history:
+        for h in body.history[-20:]:
+            if h.get("role") in ("user", "assistant"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": body.message})
+
+    # Resolve provider config (same pattern as proxy_chat_completions)
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+
+    # Check for a dedicated notebook_chat auxiliary model
+    aux_cfg = cfg.get("auxiliary", {}) if isinstance(cfg, dict) else {}
+    if isinstance(aux_cfg, dict):
+        nb_aux = aux_cfg.get("notebook_chat", {})
+        if isinstance(nb_aux, dict) and nb_aux.get("provider") and nb_aux["provider"] != "auto":
+            model_cfg = {
+                "provider": nb_aux.get("provider", ""),
+                "default": nb_aux.get("model", ""),
+                "base_url": nb_aux.get("base_url", ""),
+            }
+
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+
+    # Normalize provider aliases
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "opencode-go": "opencode-go",
+        "google": "gemini", "google-gemini-cli": "gemini", "gemini-cli": "gemini",
+        "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "github": "copilot", "github-copilot": "copilot",
+        "llama.cpp": "custom", "ollama": "custom", "vllm": "custom",
+        "lmstudio": "custom", "lm-studio": "custom",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com",
+        "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai",
+        "copilot": "https://api.githubcopilot.com",
+        "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        env_base_url_var = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(env_base_url_var, "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+
+    # Find API key
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY")
+        or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        raise HTTPException(
+            status_code=502,
+            detail=f"No API key for provider '{provider_name}'. Check your .env.",
+        )
+
+    # Build request body
+    req_body = {
+        "model": model_name or "gpt-4o",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 4096,
+    }
+
+    # Forward to provider
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    target_url = f"{base_url}/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=120, write=10, pool=10)) as client:
+            resp = await client.post(target_url, json=req_body, headers=headers)
+        if resp.status_code != 200:
+            detail = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else resp.text
+            raise HTTPException(status_code=502, detail=f"Provider error: {detail}")
+        data = resp.json()
+        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        return {"response": content, "model": req_body["model"]}
+    except httpx.ConnectError as exc:
+        raise HTTPException(status_code=502, detail=f"Cannot connect to provider: {exc}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Provider request timed out")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.exception("Notebook chat proxy failed")
+        raise HTTPException(status_code=502, detail=f"Provider request failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Streaming chat endpoint (SSE)
+# ---------------------------------------------------------------------------
+
+async def _notebook_chat_stream_generator(notebook_id: str, message: str, history: list):
+    """Generator that yields SSE chunks for notebook chat."""
+    import json as _json
+
+    nb = _nb_get(notebook_id)
+    if not nb:
+        yield f"data: {_json.dumps({'error': 'Notebook not found'})}\n\n"
+        return
+
+    # Build context from all sources
+    context_text = _nb_get_all_text(notebook_id)
+    if not context_text.strip():
+        yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
+        return
+
+    # Truncate to ~50k chars
+    max_context_chars = 50_000
+    if len(context_text) > max_context_chars:
+        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+
+    # Build messages
+    source_names = [s["original_name"] for s in nb.get("sources", [])]
+    sources_list = ", ".join(source_names)
+    system_prompt = (
+        f"You are a helpful research assistant. The user has uploaded "
+        f"{len(source_names)} document(s) to a notebook.\n\n"
+        f"When citing sources, always use the format [Source N] where N is the "
+        f"source number (1-indexed, in the order sources appear below). "
+        f"For example: [Source 1], [Source 2].\n\n"
+        "Source list: " + ", ".join(
+            f"[Source {i+1}]: {name}" for i, name in enumerate(source_names)
+        ) + "\n\n"
+        f"Below is the extracted text from these documents, each marked with "
+        f"its source number. Use this content as your primary source of "
+        f"knowledge when answering the user's question. Always cite "
+        f"sources using [Source N].\n\n"
+        f"<document_context>\n{context_text}\n</document_context>"
+    )
+
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        for h in history[-20:]:
+            if h.get("role") in ("user", "assistant"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": message})
+
+    # Resolve provider config — check notebook_chat auxiliary slot first
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+
+    # Check for a dedicated notebook_chat auxiliary model
+    aux_cfg = cfg.get("auxiliary", {}) if isinstance(cfg, dict) else {}
+    if isinstance(aux_cfg, dict):
+        nb_aux = aux_cfg.get("notebook_chat", {})
+        if isinstance(nb_aux, dict) and nb_aux.get("provider") and nb_aux["provider"] != "auto":
+            model_cfg = {
+                "provider": nb_aux.get("provider", ""),
+                "default": nb_aux.get("model", ""),
+                "base_url": nb_aux.get("base_url", ""),
+            }
+
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "opencode-go": "opencode-go",
+        "google": "gemini", "google-gemini-cli": "gemini", "gemini-cli": "gemini",
+        "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "github": "copilot", "github-copilot": "copilot",
+        "llama.cpp": "custom", "ollama": "custom", "vllm": "custom",
+        "lmstudio": "custom", "lm-studio": "custom",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com",
+        "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "google": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai",
+        "copilot": "https://api.githubcopilot.com",
+        "zai": "https://open.bigmodel.cn/api/paas/v4",
+        "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        env_base_url_var = f"{provider_name.upper()}_BASE_URL"
+        base_url = os.getenv(env_base_url_var, "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY")
+        or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY")
+        or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        yield f"data: {_json.dumps({'error': f'No API key for provider {provider_name}'})}\n\n"
+        return
+
+    req_body = {
+        "model": model_name or "gpt-4o",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 4096,
+        "stream": True,
+    }
+
+    if base_url.endswith("/v1"):
+        base_url = base_url[:-3]
+    target_url = f"{base_url}/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    import httpx
+    # Fallback models if primary fails (e.g. opencode-zen big-pickle)
+    fallback_models = []
+    if model_name and model_name not in ("gpt-4o", "gpt-4o-mini"):
+        fallback_models = ["gpt-4o-mini", "gpt-4o"]
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+            models_to_try = [model_name or "gpt-4o"] + fallback_models
+            for attempt_model in models_to_try:
+                req_body["model"] = attempt_model
+                try:
+                    async with client.stream("POST", target_url, json=req_body, headers=headers) as resp:
+                        if resp.status_code != 200:
+                            body = await resp.aread()
+                            try:
+                                err_json = _json.loads(body.decode())
+                                err_msg = err_json.get("error", {}).get("message", "") or body.decode()[:200]
+                            except Exception:
+                                err_msg = body.decode()[:200]
+                            # If this model failed and there are fallbacks, try next
+                            if attempt_model != models_to_try[-1]:
+                                _log.warning("Notebook chat model %s failed (%d: %s), trying fallback", attempt_model, resp.status_code, err_msg[:100])
+                                continue
+                            yield f"data: {_json.dumps({'error': f'Provider returned {resp.status_code}: {err_msg}'})}\n\n"
+                            return
+                        # Success — stream the response
+                        async for line in resp.aiter_lines():
+                            if not line:
+                                continue
+                            if line.startswith("data: "):
+                                data_str = line[6:]
+                                if data_str.strip() == "[DONE]":
+                                    yield "data: [DONE]\n\n"
+                                    return
+                                try:
+                                    chunk = _json.loads(data_str)
+                                    choices = chunk.get("choices") or []
+                                    delta = choices[0].get("delta", {}) if choices else {}
+                                    # OpenAI-compatible format
+                                    content_text = delta.get("content", "")
+                                    # Anthropic format (content_block_delta events)
+                                    if not content_text and chunk.get("type") == "content_block_delta":
+                                        inner_delta = chunk.get("delta", {})
+                                        if inner_delta.get("type") == "text_delta":
+                                            content_text = inner_delta.get("text", "")
+                                    # Some providers send error objects
+                                    if not content_text and chunk.get("error"):
+                                        err_msg = chunk["error"] if isinstance(chunk["error"], str) else chunk["error"].get("message", str(chunk["error"]))
+                                        yield f"data: {_json.dumps({'error': err_msg})}\n\n"
+                                        return
+                                    if content_text:
+                                        yield f"data: {_json.dumps({'delta': content_text})}\n\n"
+                                except (_json.JSONDecodeError, KeyError, IndexError):
+                                    pass
+                        # If we got here, streaming succeeded — we're done
+                        return
+                except (httpx.ConnectError, httpx.TimeoutException):
+                    if attempt_model != models_to_try[-1]:
+                        _log.warning("Notebook chat model %s connection failed, trying fallback", attempt_model)
+                        continue
+                    raise
+            # All models exhausted
+            yield f"data: {_json.dumps({'error': 'All models failed'})}\n\n"
+    except httpx.ConnectError:
+        yield f"data: {_json.dumps({'error': 'Cannot connect to provider'})}\n\n"
+    except httpx.TimeoutException:
+        yield f"data: {_json.dumps({'error': 'Provider request timed out'})}\n\n"
+    except Exception as exc:
+        _log.exception("Notebook streaming chat failed")
+        yield f"data: {_json.dumps({'error': str(exc)})}\n\n"
+
+
+@app.post("/api/notebooks/{notebook_id}/chat/stream")
+async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, request: Request):
+    """Streaming version of notebook chat — returns SSE text/event-stream."""
+    _require_token(request)
+    return StreamingResponse(
+        _notebook_chat_stream_generator(
+            notebook_id, body.message, body.history or []
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# NotebookLLM — Auto-summarize endpoint
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Notebook chat history
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/notebooks/{notebook_id}/chat-history")
+async def notebook_chat_history(notebook_id: str, request: Request):
+    """Load chat history for a notebook."""
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    messages = _nb_load_chat(notebook_id, user_id=user_id)
+    return {"messages": messages}
+
+
+@app.post("/api/notebooks/{notebook_id}/chat-history")
+async def notebook_save_chat_message(notebook_id: str, request: Request):
+    """Save a single chat message to history."""
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    body = await request.json()
+    role = body.get("role", "user")
+    msg_content = body.get("content", "")
+    if not msg_content:
+        raise HTTPException(status_code=400, detail="Content required")
+    _nb_save_chat(notebook_id, role, msg_content, user_id=user_id)
+    return {"ok": True}
+
+
+@app.post("/api/notebooks/{notebook_id}/chat-history/clear")
+async def notebook_clear_chat_history(notebook_id: str, request: Request):
+    """Clear all chat history for a notebook."""
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    _nb_clear_chat(notebook_id, user_id=user_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+
+class SummarizeRequest(BaseModel):
+    source_id: Optional[str] = None  # None = summarize all sources
+
+
+@app.post("/api/notebooks/{notebook_id}/summarize")
+async def notebook_summarize(notebook_id: str, body: SummarizeRequest, request: Request):
+    """Generate AI summaries for sources that don't have one yet.
+
+    If source_id is provided, summarize just that source.
+    Otherwise, summarize all sources without summaries.
+    """
+    _require_token(request)
+
+    nb = _nb_get(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+
+    # Resolve provider (reuse same pattern)
+    cfg = load_config()
+    model_cfg = cfg.get("model") if isinstance(cfg, dict) else {}
+    if not isinstance(model_cfg, dict):
+        model_cfg = {}
+    provider_name = (model_cfg.get("provider") or "").strip().lower()
+    base_url = (model_cfg.get("base_url") or "").rstrip("/")
+    model_name = model_cfg.get("default") or model_cfg.get("name") or ""
+    if not provider_name or provider_name == "auto":
+        from anakot_cli.auth import resolve_provider
+        provider_name = resolve_provider().strip().lower()
+    _PROVIDER_ALIASES = {
+        "opencode-zen": "opencode", "zen": "opencode",
+        "google": "gemini", "x-ai": "xai", "x.ai": "xai", "grok": "xai",
+        "claude": "anthropic", "deepseek": "deepseek", "opencode": "opencode",
+    }
+    raw_provider_name = provider_name
+    provider_name = _PROVIDER_ALIASES.get(provider_name, provider_name)
+    KNOWN_BASE_URLS = {
+        "openai": "https://api.openai.com", "openrouter": "https://openrouter.ai/api",
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com",
+        "xai": "https://api.x.ai", "deepseek": "https://api.deepseek.com",
+        "opencode": "https://opencode.ai/zen/v1",
+    }
+    if not base_url:
+        base_url = os.getenv(f"{provider_name.upper()}_BASE_URL", "").rstrip("/")
+    if not base_url:
+        base_url = KNOWN_BASE_URLS.get(provider_name, "https://api.openai.com")
+    env = load_env()
+    api_key = (
+        env.get(f"{raw_provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get(f"{provider_name.upper().replace('-', '_')}_API_KEY")
+        or env.get("OPENAI_API_KEY") or env.get("OPENROUTER_API_KEY")
+        or env.get("ANTHROPIC_API_KEY") or env.get("GEMINI_API_KEY")
+    )
+    if not api_key:
+        raise HTTPException(status_code=502, detail=f"No API key for '{provider_name}'")
+
+    # Determine which sources to summarize
+    import sqlite3 as _sq
+    db_path = _nb_root() / notebook_id / "metadata.db"
+    db = _sq.connect(str(db_path))
+    db.row_factory = _sq.Row
+    if body.source_id:
+        rows = db.execute(
+            "SELECT id, filename, extracted_text, source_type FROM source "
+            "WHERE id = ? AND notebook_id = ?",
+            (body.source_id, notebook_id),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT id, filename, extracted_text, source_type FROM source "
+            "WHERE notebook_id = ? AND (summary IS NULL OR summary = '') "
+            "AND extracted_text IS NOT NULL AND extracted_text != ''",
+            (notebook_id,),
+        ).fetchall()
+
+    if not rows:
+        db.close()
+        return {"summarized": 0, "message": "No sources need summarization"}
+
+    import httpx
+    summarized = 0
+    target_url = f"{base_url.rstrip('/')}/v1/chat/completions" if not base_url.endswith("/v1") else f"{base_url}/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+
+    for row in rows:
+        text = row["extracted_text"] or ""
+        if not text.strip():
+            continue
+        # Truncate source text for summary generation
+        truncated = text[:30_000]
+        summary_prompt = (
+            f"Generate a concise 2-3 sentence summary of the following document. "
+            f"Focus on the main topic, key points, and any conclusions.\n\n"
+            f"Document: {row['filename']}\n\n{truncated}"
+        )
+        req_body = {
+            "model": model_name or "gpt-4o",
+            "messages": [{"role": "user", "content": summary_prompt}],
+            "temperature": 0.2,
+            "max_tokens": 500,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+                resp = await client.post(target_url, json=req_body, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                summary = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+                db.execute(
+                    "UPDATE source SET summary = ? WHERE id = ?",
+                    (summary, row["id"]),
+                )
+                summarized += 1
+        except Exception as e:
+            _log.warning(f"Summarize failed for {row['filename']}: {e}")
+            continue
+
+    db.commit()
+    db.close()
+    return {"summarized": summarized}
 
 
 mount_spa(app)

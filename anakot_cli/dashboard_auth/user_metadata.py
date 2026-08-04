@@ -103,8 +103,69 @@ def get_metadata(user_id: str) -> dict:
 
 
 def list_all_users() -> dict[str, dict]:
-    """Return all {user_id → metadata} for admin management UI."""
-    return dict(_load_all())
+    """Return all {user_id → metadata} for admin management UI.
+
+    Merges data from THREE persistent sources so every registered user
+    appears in the admin panel:
+      1. user-metadata.json — role, display_name, email, etc.
+      2. config.yaml auth.users — password-registered users
+      3. user-profiles.json — every onboarded user (OAuth + password)
+    """
+    import json as _json
+
+    result = dict(_load_all())
+
+    # Resolve the global ANAKOT_HOME (outside any profile)
+    try:
+        from anakot_constants import get_anakot_home as _gah
+        _home = _gah()
+        _global_home = _home.parent.parent if _home.parent.name == "profiles" else _home
+    except Exception:
+        _global_home = None
+
+    # Source 2: config.yaml auth.users (password-registered users)
+    if _global_home is not None:
+        try:
+            import yaml
+            config_path = _global_home / "config.yaml"
+            if config_path.exists():
+                raw_cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+                if isinstance(raw_cfg, dict):
+                    auth_users = raw_cfg.get("auth", {}).get("users", {})
+                    if isinstance(auth_users, dict):
+                        for uid, info in auth_users.items():
+                            if uid not in result:
+                                meta = {"role": "user"}
+                                if isinstance(info, dict):
+                                    if info.get("display_name"):
+                                        meta["display_name"] = info["display_name"]
+                                    if info.get("email"):
+                                        meta["email"] = info["email"]
+                                    if info.get("role"):
+                                        meta["role"] = info["role"]
+                                result[uid] = meta
+        except Exception:
+            pass
+
+    # Source 3: user-profiles.json — every user who onboarded (OAuth + password)
+    if _global_home is not None:
+        try:
+            profiles_path = _global_home / "user-profiles.json"
+            if profiles_path.exists():
+                raw_profiles = _json.loads(profiles_path.read_text(encoding="utf-8"))
+                if isinstance(raw_profiles, dict):
+                    for uid, entry in raw_profiles.items():
+                        if uid not in result:
+                            meta = {"role": "user"}
+                            if isinstance(entry, dict):
+                                meta["profile"] = entry.get("active", "")
+                            elif isinstance(entry, str):
+                                meta["profile"] = entry
+                            result[uid] = meta
+        except Exception:
+            pass
+
+    return result
 
 
 def set_user_disabled(user_id: str, disabled: bool) -> None:
@@ -177,3 +238,32 @@ def update_user_metadata(user_id: str, *, set_fields: dict | None = None, remove
         _save_all(all_meta)
         _CACHE = all_meta
     return dict(entry)
+
+
+def ensure_user_exists(user_id: str, *, display_name: str = "", email: str = "", provider: str = "") -> None:
+    """Ensure *user_id* has an entry in user-metadata.json.
+
+    Called on every successful login so the admin Users tab always shows
+    every registered user.  Existing fields are never overwritten — only
+    missing ones are filled in.
+    """
+    with _LOCK:
+        all_meta = _load_all()
+        meta = all_meta.get(user_id, {})
+        changed = False
+        if not meta.get("role"):
+            meta.setdefault("role", "user")
+            changed = True
+        if display_name and not meta.get("display_name"):
+            meta["display_name"] = display_name
+            changed = True
+        if email and not meta.get("email"):
+            meta["email"] = email
+            changed = True
+        if provider and not meta.get("provider"):
+            meta["provider"] = provider
+            changed = True
+        if changed:
+            all_meta[user_id] = meta
+            _save_all(all_meta)
+            _CACHE = all_meta

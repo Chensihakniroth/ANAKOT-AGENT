@@ -982,6 +982,11 @@ def _ensure_session_db_row(session: dict) -> None:
             model=_resolve_model(),
             cwd=_session_cwd(session) if session.get("explicit_cwd") else None,
         )
+        # When the user explicitly chose a folder, guarantee the DB row
+        # reflects it — even if the AIAgent's own lazy INSERT OR IGNORE
+        # raced ahead and created the row without a cwd.
+        if session.get("explicit_cwd"):
+            db.update_session_cwd(key, _session_cwd(session))
     except Exception:
         logger.debug("failed to persist desktop session row", exc_info=True)
     finally:
@@ -1046,7 +1051,16 @@ def _load_cfg() -> dict:
             with open(p, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
         else:
-            data = {}
+            # Profile has no config.yaml — fall back to root ANAKOT_HOME config
+            # so profiles without their own config inherit the global model/provider.
+            # _anakot_home is the module-level root home captured at import time,
+            # before any per-session profile override.
+            root_p = Path(_anakot_home) / "config.yaml"
+            if root_p.exists() and root_p != p:
+                with open(root_p, encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+            else:
+                data = {}
         with _cfg_lock:
             _cfg_cache = copy.deepcopy(data)
             _cfg_mtime = mtime
@@ -1857,7 +1871,11 @@ def _session_info(agent, session: dict | None = None) -> dict:
             if candidate.get("agent") is agent:
                 session = candidate
                 break
-    cwd = _session_cwd(session)
+    # Only send cwd to the frontend when the user explicitly chose a folder.
+    # Without this, the gateway's own process directory leaks into every new
+    # session, tainting "$currentCwd" and localStorage with a meaningless
+    # path.  Let the user pick their workspace instead.
+    cwd = _session_cwd(session) if session and session.get("explicit_cwd") else None
     cfg_personality = ((_load_cfg().get("display") or {}).get("personality") or "")
     personality = (session or {}).get("personality", cfg_personality)
     reasoning_config = getattr(agent, "reasoning_config", None)
@@ -2817,11 +2835,11 @@ def _init_session(sid: str, key: str, agent, history: list, cols: int = 80):
             with _sessions_lock:
                 if sid in _sessions:
                     _sessions[sid]["cwd"] = row["cwd"]
-        else:
-            try:
-                db.update_session_cwd(key, _sessions[sid]["cwd"])
-            except Exception:
-                logger.debug("failed to persist resumed session cwd", exc_info=True)
+                    _sessions[sid]["explicit_cwd"] = True
+        # When the DB row has no cwd (user never picked a folder), leave it
+        # as NULL — that's the intended "No workspace" state.  Don't persist
+        # the gateway's own process directory, which would permanently taint
+        # the session with a meaningless path like C:\Users\Niroth.
     _register_session_cwd(_sessions[sid])
     try:
         _sessions[sid]["slash_worker"] = _SlashWorker(
@@ -3276,8 +3294,11 @@ def _(rid, params: dict) -> dict:
                 "model": _resolve_model(),
                 "tools": {},
                 "skills": {},
-                "cwd": _sessions[sid]["cwd"],
-                "branch": _git_branch_for_cwd(_sessions[sid]["cwd"]),
+                # Only surface the cwd when the user explicitly chose a folder.
+                # Otherwise send None so the frontend stays in "No workspace"
+                # mode until the user picks one (matches _session_info logic).
+                "cwd": _sessions[sid]["cwd"] if explicit_cwd else None,
+                "branch": _git_branch_for_cwd(_sessions[sid]["cwd"]) if explicit_cwd else None,
                 "lazy": True,
                 "desktop_contract": DESKTOP_BACKEND_CONTRACT,
                 "profile_name": _current_profile_name(),
@@ -3406,8 +3427,40 @@ def _(rid, params: dict) -> dict:
         found = db.get_session_by_title(target)
         if found:
             target = found["id"]
-        else:
-            return _err(rid, 4007, "session not found")
+    # Fallback: when no profile was specified and the session isn't in the
+    # launch DB, scan all profile DBs.  This happens on page-reload resume
+    # before the frontend's session list (which carries the profile tag) has
+    # loaded, so the RPC arrives without a profile hint.
+    if not found and profile is None:
+        from anakot_cli import profiles as _profiles_mod
+        from anakot_state import SessionDB as _SessionDB
+
+        _profiles_root = Path(_anakot_home) / "profiles"
+        if _profiles_root.is_dir():
+            for _child in sorted(_profiles_root.iterdir()):
+                _sdb_path = _child / "state.db"
+                if not _sdb_path.exists():
+                    continue
+                try:
+                    _sdb = _SessionDB(db_path=_sdb_path)
+                    found = _sdb.get_session(target)
+                    if found:
+                        profile = _child.name
+                        profile_home = _child
+                        db = _sdb
+                        break
+                    found = _sdb.get_session_by_title(target)
+                    if found:
+                        profile = _child.name
+                        profile_home = _child
+                        db = _sdb
+                        target = found["id"]
+                        break
+                    _sdb.close()
+                except Exception:
+                    pass
+    if not found:
+        return _err(rid, 4007, "session not found")
     # Fast path: if the session is already live, reuse it under the lock.
     with _session_resume_lock:
         live = _find_live_session_by_key(target)
@@ -4998,8 +5051,19 @@ def _run_prompt_submit(rid, sid: str, session: dict, text: Any) -> None:
                     def _title_failure(task: str, exc: BaseException) -> None:
                         logger.warning("Auto-title failed for session %s: %s: %s", sid, task, exc)
 
+                    # Use the session's profile DB, not the root DB —
+                    # the session lives in the profile's state.db.
+                    _title_db = _get_db()
+                    _ph = session.get("profile_home")
+                    if _ph:
+                        try:
+                            from anakot_state import SessionDB as _SDB
+                            _title_db = _SDB(db_path=Path(_ph) / "state.db")
+                        except Exception:
+                            pass
+
                     maybe_auto_title(
-                        _get_db(),
+                        _title_db,
                         session.get("session_key") or sid,
                         text,
                         raw,
@@ -8805,34 +8869,55 @@ def _(rid, params: dict) -> dict:
 @method("pet.gallery")
 def _(rid, params: dict) -> dict:
     try:
+        local_only = False
+        if isinstance(params, dict):
+            local_only = bool(params.get("localOnly", False))
+
         home = _profile_home(params.get("profile") if isinstance(params, dict) else None)
         token = set_anakot_home_override(home) if home else None
         try:
-            pets = installed_pets()
+            installed = installed_pets()
         finally:
             if token is not None:
                 reset_anakot_home_override(token)
 
-        from agent.pet.manifest import prefetch
-
-        prefetch()
+        installed_slugs = {p.slug for p in installed}
+        cfg = anakot_pets.config()
 
         gallery = [
             {
                 "slug": p.slug,
                 "displayName": p.display_name,
+                "installed": True,
                 "generated": p.generated,
             }
-            for p in pets
+            for p in installed
         ]
-        cfg = anakot_pets.config()
+
+        if not local_only:
+            # Phase 2: merge in the full petdex catalog
+            from agent.pet.manifest import fetch_manifest, ManifestError
+
+            try:
+                entries = fetch_manifest(timeout=15)
+                for entry in entries:
+                    if entry.slug not in installed_slugs:
+                        gallery.append({
+                            "slug": entry.slug,
+                            "displayName": entry.display_name,
+                            "installed": False,
+                            "spritesheetUrl": entry.spritesheet_url,
+                        })
+            except ManifestError:
+                pass  # Keep local-only gallery on network failure
+
         return _ok(
             rid,
             {
-                "pets": gallery,
-                "activeSlug": cfg.get("slug", ""),
                 "enabled": anakot_pets.active_enabled(),
+                "active": cfg.get("slug", ""),
                 "scale": anakot_pets.active_scale(),
+                "pets": gallery,
             },
         )
     except Exception as e:

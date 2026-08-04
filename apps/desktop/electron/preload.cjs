@@ -37,6 +37,20 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
       return ''
     }
   },
+  // NotebookLLM: multipart upload + SSE chat streaming (main owns the fetch
+  // so the OAuth session cookie / session token attaches). onNotebookChatStreamData
+  // also sends an "activate" signal so main only opens the backend stream once
+  // a renderer subscriber exists (no SSE frames can be lost to a not-yet-
+  // attached listener).
+  notebookUploadSource: request => ipcRenderer.invoke('anakot:notebook:upload-source', request),
+  notebookChatStreamStart: request => ipcRenderer.invoke('anakot:notebook:chat-stream-start', request),
+  notebookChatStreamAbort: requestId => ipcRenderer.invoke('anakot:notebook:chat-stream-abort', requestId),
+  onNotebookChatStreamData: cb => {
+    const listener = (_event, payload) => cb(payload)
+    ipcRenderer.on('anakot:notebook:chat-stream:data', listener)
+    ipcRenderer.send('anakot:notebook:chat-stream:activate')
+    return () => ipcRenderer.removeListener('anakot:notebook:chat-stream:data', listener)
+  },
   normalizePreviewTarget: (target, baseDir) => ipcRenderer.invoke('anakot:normalizePreviewTarget', target, baseDir),
   watchPreviewFile: url => ipcRenderer.invoke('anakot:watchPreviewFile', url),
   stopPreviewFileWatch: id => ipcRenderer.invoke('anakot:stopPreviewFileWatch', id),

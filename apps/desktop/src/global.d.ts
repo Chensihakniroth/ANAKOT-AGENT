@@ -41,6 +41,22 @@ declare global {
       saveImageBuffer: (data: ArrayBuffer | Uint8Array, ext: string) => Promise<string>
       saveClipboardImage: () => Promise<string>
       getPathForFile: (file: File) => string
+      // NotebookLLM: multipart upload + SSE chat streaming proxied through main
+      // (OAuth session cookie / session token attach there).
+      notebookUploadSource: (request: {
+        notebookId: string
+        filePath: string
+        fileName?: string
+        profile?: string | null
+      }) => Promise<unknown>
+      notebookChatStreamStart: (request: {
+        notebookId: string
+        message: string
+        history?: Array<{ role: string; content: string }>
+        profile?: string | null
+      }) => Promise<{ requestId: string }>
+      notebookChatStreamAbort: (requestId: string) => Promise<{ ok: boolean }>
+      onNotebookChatStreamData: (cb: (event: NotebookChatStreamEvent) => void) => () => void
       normalizePreviewTarget: (target: string, baseDir?: string) => Promise<AnakotPreviewTarget | null>
       watchPreviewFile: (url: string) => Promise<AnakotPreviewWatch>
       stopPreviewFileWatch: (id: string) => Promise<boolean>
@@ -359,6 +375,12 @@ export interface AnakotTitleBarTheme {
   background: string
   foreground: string
 }
+
+/** Event forwarded from the main process for a notebook SSE chat stream. */
+export type NotebookChatStreamEvent =
+  | { requestId: string; type: 'chunk'; text: string }
+  | { requestId: string; type: 'done' }
+  | { requestId: string; type: 'error'; message?: string }
 
 export interface AnakotWindowState {
   isFullscreen: boolean

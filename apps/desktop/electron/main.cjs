@@ -5504,6 +5504,320 @@ ipcMain.handle('anakot:api', async (_event, request) => {
   })
 })
 
+// ─── NotebookLLM ────────────────────────────────────────────────────────────
+// Desktop bridge for the NotebookLLM feature. JSON CRUD travels over the
+// generic anakot:api channel above (notebook-store.ts fetchJSON); these
+// handlers cover the two transports the renderer cannot do itself:
+//   • multipart file upload — the renderer resolves a native path via
+//     webUtils, main reads the file and streams it as multipart/form-data
+//     (field name `file`, matching FastAPI's UploadFile param);
+//   • SSE chat streaming — main owns the fetch so the OAuth session cookie
+//     (or session token) attaches, and forwards decoded SSE frames to the
+//     renderer as IPC events.
+const NOTEBOOK_UPLOAD_MAX_BYTES = 50 * 1024 * 1024 // backend cap
+const NOTEBOOK_MIME_BY_EXT = {
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.py': 'text/x-python',
+  '.js': 'text/javascript',
+  '.ts': 'text/typescript',
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.log': 'text/plain'
+}
+// requestId → { requestId, connection, url, body, sender, req, started }
+const notebookStreams = new Map()
+
+function guessNotebookMime(fileName) {
+  const ext = path.extname(String(fileName || '')).toLowerCase()
+  return NOTEBOOK_MIME_BY_EXT[ext] || 'application/octet-stream'
+}
+
+function sendNotebookStreamEvent(stream, payload) {
+  try {
+    const wc = stream.sender
+    if (wc && !wc.isDestroyed()) {
+      wc.send('anakot:notebook:chat-stream:data', payload)
+    }
+  } catch {
+    // window already gone — drop the event
+  }
+}
+
+// Decode the backend's `data: {json}\n\n` SSE frames and forward them to the
+// renderer as { requestId, type: 'chunk'|'done'|'error', ... } events.
+function pumpNotebookSse(stream, res) {
+  let buffer = ''
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    notebookStreams.delete(stream.requestId)
+    stream.req = null
+  }
+  const fail = message => {
+    sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'error', message })
+    finish()
+  }
+  res.on('data', chunk => {
+    if (finished) return
+    buffer += chunk.toString('utf8').replace(/\r\n/g, '\n')
+    let sep
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep).trim()
+      buffer = buffer.slice(sep + 2)
+      if (!frame || !frame.startsWith('data:')) continue
+      const data = frame.slice(5).trim()
+      if (data === '[DONE]') {
+        sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'done' })
+        finish()
+        return
+      }
+      let parsed
+      try {
+        parsed = JSON.parse(data)
+      } catch {
+        continue
+      }
+      if (!parsed || typeof parsed !== 'object') continue
+      if (typeof parsed.delta === 'string') {
+        sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'chunk', text: parsed.delta })
+      } else if (parsed.error) {
+        fail(typeof parsed.error === 'string' ? parsed.error : 'Chat stream failed')
+        return
+      }
+    }
+  })
+  res.on('end', () => {
+    if (!finished) {
+      sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'done' })
+      finish()
+    }
+  })
+  res.on('error', err => fail(err?.message || 'Chat stream failed'))
+}
+
+function startNotebookChatStream(stream) {
+  const { connection } = stream
+  const body = stream.body
+  if (connection.authMode === 'oauth') {
+    const sess = getOauthSession()
+    if (!sess) {
+      sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'error', message: 'OAuth session partition is unavailable.' })
+      notebookStreams.delete(stream.requestId)
+      return
+    }
+    const request = electronNet.request({
+      method: 'POST',
+      url: stream.url,
+      session: sess,
+      useSessionCookies: true,
+      redirect: 'follow'
+    })
+    request.setHeader('Content-Type', 'application/json')
+    request.setHeader('Content-Length', String(Buffer.byteLength(body)))
+    request.on('response', res => pumpNotebookSse(stream, res))
+    request.on('error', err => {
+      if (stream.req === request) {
+        sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'error', message: err?.message || 'Chat stream failed' })
+        notebookStreams.delete(stream.requestId)
+        stream.req = null
+      }
+    })
+    stream.req = request
+    request.write(body)
+    request.end()
+    return
+  }
+  const parsed = new URL(stream.url)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'error', message: `Unsupported Anakot backend URL protocol: ${parsed.protocol}` })
+    notebookStreams.delete(stream.requestId)
+    return
+  }
+  const client = parsed.protocol === 'https:' ? https : http
+  const request = client.request(parsed, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': String(Buffer.byteLength(body)),
+      'X-Anakot-Session-Token': connection.token
+    }
+  }, res => pumpNotebookSse(stream, res))
+  request.on('error', err => {
+    if (stream.req === request) {
+      sendNotebookStreamEvent(stream, { requestId: stream.requestId, type: 'error', message: err?.message || 'Chat stream failed' })
+      notebookStreams.delete(stream.requestId)
+      stream.req = null
+    }
+  })
+  stream.req = request
+  request.write(body)
+  request.end()
+}
+
+function abortNotebookChatStream(stream) {
+  stream.started = true
+  notebookStreams.delete(stream.requestId)
+  if (stream.req) {
+    try {
+      if (typeof stream.req.abort === 'function') stream.req.abort()
+      else if (typeof stream.req.destroy === 'function') stream.req.destroy()
+    } catch {
+      // already finished
+    }
+    stream.req = null
+  }
+}
+
+// Multipart POST of a local file to /sources/upload. Works in both auth
+// modes (OAuth session partition vs X-Anakot-Session-Token header).
+function notebookUploadSource(connection, notebookId, filePath, fileName) {
+  return new Promise((resolve, reject) => {
+    fs.promises
+      .readFile(filePath)
+      .then(fileBytes => {
+        if (fileBytes.length > NOTEBOOK_UPLOAD_MAX_BYTES) {
+          reject(new Error(`File too large: ${(fileBytes.length / (1024 * 1024)).toFixed(1)}MB exceeds 50MB limit`))
+          return
+        }
+        const boundary = `----anakotNotebook${crypto.randomUUID().replace(/-/g, '')}`
+        const safeName = String(fileName || path.basename(filePath) || 'file').replace(/["\r\n]/g, '_')
+        // NOTE: single-line template segments — a literal newline in the source
+        // would inject an extra \n after each \r\n and break multipart framing
+        // (backend: "There was an error parsing the body").
+        const head = Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+          `Content-Type: ${guessNotebookMime(safeName)}\r\n` +
+          `\r\n`,
+          'utf8'
+        )
+        const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
+        const body = Buffer.concat([head, fileBytes, tail])
+        const url = `${connection.baseUrl}/api/notebooks/${encodeURIComponent(notebookId)}/sources/upload`
+        const handleResponse = res => {
+          const chunks = []
+          res.on('data', chunk => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8')
+            const statusCode = res.statusCode || 500
+            if (statusCode >= 400) {
+              const err = new Error(`${statusCode}: ${text || ''}`)
+              err.statusCode = statusCode
+              reject(err)
+              return
+            }
+            if (!text) {
+              reject(new Error(`Empty response from ${url}`))
+              return
+            }
+            try {
+              resolve(JSON.parse(text))
+            } catch {
+              reject(new Error(`Invalid JSON from ${url} (status ${statusCode}): ${text.slice(0, 200)}`))
+            }
+          })
+          res.on('error', reject)
+        }
+        if (connection.authMode === 'oauth') {
+          const sess = getOauthSession()
+          if (!sess) {
+            reject(new Error('OAuth session partition is unavailable.'))
+            return
+          }
+          const request = electronNet.request({
+            method: 'POST',
+            url,
+            session: sess,
+            useSessionCookies: true,
+            redirect: 'follow'
+          })
+          request.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`)
+          request.setHeader('Content-Length', String(body.length))
+          request.on('response', handleResponse)
+          request.on('error', reject)
+          request.write(body)
+          request.end()
+          return
+        }
+        const parsed = new URL(url)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          reject(new Error(`Unsupported Anakot backend URL protocol: ${parsed.protocol}`))
+          return
+        }
+        const client = parsed.protocol === 'https:' ? https : http
+        const request = client.request(parsed, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': String(body.length),
+            'X-Anakot-Session-Token': connection.token
+          }
+        }, handleResponse)
+        request.on('error', reject)
+        request.write(body)
+        request.end()
+      })
+      .catch(reject)
+  })
+}
+
+ipcMain.handle('anakot:notebook:upload-source', async (_event, request) => {
+  const { notebookId, filePath } = request || {}
+  if (!notebookId || !filePath) {
+    throw new Error('notebookId and filePath are required for notebook source upload')
+  }
+  const connection = await ensureBackend(request?.profile)
+  return notebookUploadSource(connection, notebookId, filePath, request?.fileName || path.basename(filePath))
+})
+
+// Deferred start: the store opens the stream (awaiting requestId) and THEN
+// subscribes to events. If the backend POST fired inside chat-stream-start,
+// SSE frames could reach the renderer before the ipcRenderer.on listener
+// exists and the first chunk(s) would be lost. Instead the stream is
+// registered as pending and kicked off when the renderer signals that a
+// subscriber is attached (preload sends anakot:notebook:chat-stream:activate
+// on every onNotebookChatStreamData subscription).
+ipcMain.handle('anakot:notebook:chat-stream-start', async (event, request) => {
+  const { notebookId, message } = request || {}
+  if (!notebookId || typeof message !== 'string') {
+    throw new Error('notebookId and message are required for notebook chat')
+  }
+  const connection = await ensureBackend(request?.profile)
+  const requestId = crypto.randomUUID()
+  notebookStreams.set(requestId, {
+    requestId,
+    connection,
+    url: `${connection.baseUrl}/api/notebooks/${encodeURIComponent(notebookId)}/chat/stream`,
+    body: JSON.stringify({ message, history: Array.isArray(request?.history) ? request.history : [] }),
+    sender: event.sender,
+    req: null,
+    started: false
+  })
+  return { requestId }
+})
+
+ipcMain.on('anakot:notebook:chat-stream:activate', event => {
+  for (const stream of notebookStreams.values()) {
+    if (!stream.started && stream.sender && stream.sender.id === event.sender.id) {
+      stream.started = true
+      startNotebookChatStream(stream)
+    }
+  }
+})
+
+ipcMain.handle('anakot:notebook:chat-stream-abort', async (_event, requestId) => {
+  const stream = notebookStreams.get(requestId)
+  if (!stream) return { ok: false }
+  abortNotebookChatStream(stream)
+  return { ok: true }
+})
+
+
 ipcMain.handle('anakot:notify', (_event, payload) => {
   if (!Notification.isSupported()) return false
   const prefs = loadNotificationPrefs()

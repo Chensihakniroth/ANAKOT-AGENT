@@ -21,6 +21,7 @@ import { notify } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { clearAllPrompts, setApprovalRequest, setSecretRequest, setSudoRequest } from '@/store/prompts'
 import {
+  $currentCwd,
   setCurrentBranch,
   setCurrentCwd,
   setCurrentFastMode,
@@ -657,7 +658,13 @@ export function useMessageStream({
           }
 
           if (typeof payload?.cwd === 'string') {
-            setCurrentCwd(payload.cwd)
+            // Only adopt the backend's cwd when the frontend has no folder
+            // yet — otherwise the gateway's auto-detected process directory
+            // overwrites a folder the user explicitly chose via the picker.
+            const currentCwd = $currentCwd.get()
+            if (!currentCwd) {
+              setCurrentCwd(payload.cwd)
+            }
             runtimeInfo.cwd = payload.cwd
           }
 

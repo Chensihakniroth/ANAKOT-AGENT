@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -31,9 +31,24 @@ interface UserMeta {
 }
 
 interface UsersApiData {
-  users: UserMeta[]
-  total: number
-  admin_count: number
+  users?: UserMeta[] | Record<string, unknown>
+  total?: number
+  admin_count?: number
+}
+
+/** Normalize API response — backend may return object or array. */
+function normalizeUsers(raw: UsersApiData | unknown): UserMeta[] {
+  if (!raw || typeof raw !== 'object') return []
+  const data = raw as Record<string, unknown>
+  if (Array.isArray(data.users)) return data.users as UserMeta[]
+  if (data.users && typeof data.users === 'object' && !Array.isArray(data.users)) {
+    // Object map { user_id: meta }
+    return Object.entries(data.users).map(([id, meta]: [string, unknown]) => ({
+      user_id: id,
+      ...(meta && typeof meta === 'object' ? (meta as Record<string, unknown>) : {}),
+    })) as UserMeta[]
+  }
+  return []
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -53,7 +68,7 @@ export function UsersSettings() {
     setError(null)
     try {
       const data = await api<UsersApiData>({ path: '/api/admin/users' })
-      setUsers(Array.isArray(data?.users) ? data.users : [])
+      setUsers(normalizeUsers(data))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users')
     } finally {
@@ -94,16 +109,19 @@ export function UsersSettings() {
       void loadUsers()
     } catch (err) {
       notifyError(err, 'Failed to delete user')
-      throw err
     }
   }, [deleteTarget, loadUsers])
 
-  const filtered = users.filter(
-    u =>
-      u.display_name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.user_id?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    if (!q) return users
+    return users.filter(
+      u =>
+        u.display_name?.toLowerCase().includes(q) ||
+        u.user_id?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q),
+    )
+  }, [users, search])
 
   if (loading) {
     return <LoadingState label="Loading users…" />
@@ -132,7 +150,8 @@ export function UsersSettings() {
   return (
     <SettingsContent>
       <SettingsSection>
-        <div className="mb-3 flex items-center justify-between">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Users className="size-4 text-muted-foreground" />
             <span className="text-sm font-medium">Users</span>
@@ -148,17 +167,18 @@ export function UsersSettings() {
           />
         </div>
 
-        <div className="overflow-x-auto rounded-lg border">
+        {/* Table */}
+        <div className="overflow-x-auto rounded-lg border border-border/50">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b bg-muted/30">
-                <th className="px-3 py-2 font-medium text-muted-foreground">User</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Email</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Role</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Profile</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Status</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Grants</th>
-                <th className="px-3 py-2 font-medium text-muted-foreground">Actions</th>
+              <tr className="border-b border-border/40 bg-muted/30">
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">User</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Email</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Role</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Profile</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Status</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Grants</th>
+                <th className="px-3 py-2.5 font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -170,11 +190,13 @@ export function UsersSettings() {
                   (u.metadata?.allowed_toolsets?.length ?? 0)
 
                 return (
-                  <tr key={u.user_id} className="border-b last:border-b-0 hover:bg-muted/20">
+                  <tr key={u.user_id} className="border-b border-border/30 last:border-b-0 hover:bg-muted/20 transition-colors">
                     <td className="max-w-44 truncate px-3 py-2.5">
                       <div className="flex items-center gap-2">
                         {isAdmin && <ShieldCheck className="size-3 shrink-0 text-amber-500" />}
-                        <span>{u.display_name || u.user_id}</span>
+                        <span className={isDisabled ? 'text-muted-foreground line-through' : ''}>
+                          {u.display_name || u.user_id}
+                        </span>
                       </div>
                     </td>
                     <td className="max-w-36 truncate px-3 py-2.5 text-muted-foreground">
@@ -184,7 +206,7 @@ export function UsersSettings() {
                       <span
                         className={`rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${
                           isAdmin
-                            ? 'bg-amber-500/10 text-amber-600'
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                             : 'bg-muted text-muted-foreground'
                         }`}
                       >
@@ -198,15 +220,21 @@ export function UsersSettings() {
                       <span
                         className={`rounded-full px-2 py-0.5 text-[0.65rem] font-medium ${
                           isDisabled
-                            ? 'bg-red-500/10 text-red-600'
-                            : 'bg-green-500/10 text-green-600'
+                            ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                            : 'bg-green-500/10 text-green-600 dark:text-green-400'
                         }`}
                       >
                         {isDisabled ? 'Disabled' : 'Active'}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
-                      {grantsCount > 0 ? `${grantsCount} restricted` : 'All allowed'}
+                      {grantsCount > 0 ? (
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.65rem] font-medium text-amber-600 dark:text-amber-400">
+                          {grantsCount} restricted
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/60">All allowed</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -234,12 +262,18 @@ export function UsersSettings() {
             </tbody>
           </table>
         </div>
+
+        {filtered.length === 0 && search && (
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            No users match "{search}"
+          </p>
+        )}
       </SettingsSection>
 
       {deleteTarget && (
         <ConfirmDialog
           cancelLabel="Cancel"
-          confirmLabel={deleteTarget ? 'Delete User' : ''}
+          confirmLabel="Delete User"
           description={`This will permanently delete the profile and data for "${
             deleteTarget.display_name || deleteTarget.user_id
           }". This cannot be undone.`}

@@ -529,7 +529,8 @@ export const en: Translations = {
         mcp: { label: 'MCP', hint: 'MCP tool routing' },
         title_generation: { label: 'Title gen', hint: 'Session titles' },
         curator: { label: 'Curator', hint: 'Skill-usage review' },
-        commit_gen: { label: 'Commit gen', hint: 'Commit messages' }
+        commit_gen: { label: 'Commit gen', hint: 'Commit messages' },
+        notebook_chat: { label: 'Notebook chat', hint: 'NotebookLLM conversations' }
       }
     },
     providers: {

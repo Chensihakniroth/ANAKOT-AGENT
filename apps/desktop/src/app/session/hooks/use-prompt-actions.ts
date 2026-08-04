@@ -47,6 +47,7 @@ import {
 import type {
   ClientSessionState,
   ImageAttachResponse,
+  ReloadMcpResponse,
   SessionSteerResponse,
   SessionTitleResponse,
   SlashExecResponse

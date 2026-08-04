@@ -19,10 +19,11 @@ export function useOverlayRouting() {
   const skillsOpen = currentView === 'skills'
   const messagingOpen = currentView === 'messaging'
   const artifactsOpen = currentView === 'artifacts'
+  const notebookOpen = currentView === 'notebook'
   const pluginsOpen = currentView === 'plugins'
   const pluginPageOpen = currentView === 'plugin-page'
   const chatOpen = currentView === 'chat'
-  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen || pluginsOpen || pluginPageOpen
+  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen || notebookOpen || pluginsOpen || pluginPageOpen
 
   // Overlay routes (settings/command-center/agents) stash the underlying path
   // so closing them returns there instead of bouncing to /.
@@ -72,6 +73,7 @@ export function useOverlayRouting() {
     cronOpen,
     currentView,
     messagingOpen,
+    notebookOpen,
     openAgents,
     openCommandCenterSection,
     profilesOpen,

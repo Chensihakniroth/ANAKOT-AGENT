@@ -125,6 +125,7 @@ const SkillsView = lazy(async () => ({ default: (await import('./skills')).Skill
 const PluginsView = lazy(async () => ({ default: (await import('./plugins/PluginsView')).PluginsView }))
 const PluginPageView = lazy(async () => ({ default: (await import('./plugins/PluginPageView')).PluginPageView }))
 const StarmapView = lazy(async () => ({ default: (await import('./starmap')).StarmapView }))
+const NotebookView = lazy(async () => ({ default: (await import('./notebookllm/notebook-view')).NotebookView }))
 
 // Re-export usePlugins at module scope so we can use it in the controller
 // to register plugin paths early.
@@ -281,6 +282,7 @@ export function DesktopController() {
     cronOpen,
     currentView,
     messagingOpen,
+    notebookOpen,
     openAgents,
     openCommandCenterSection,
     overlayOpen,
@@ -834,6 +836,14 @@ export function DesktopController() {
         </Suspense>
       )}
 
+      {notebookOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Notebook">
+            <NotebookView onClose={closeOverlayToPreviousRoute} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
     </>
   )
 
@@ -948,7 +958,17 @@ export function DesktopController() {
   // would sit on top of AppShell and block the entire UI.
   if (!authRequired || (isAuthenticated && !onboardingLoading && !needsOnboarding)) {
     return (
-      <>
+      <div className="animate-fade-in-app" style={{ animation: 'fadeInApp 0.5s ease-out' }}>
+        <style>{`
+          @keyframes fadeInApp {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+          }
+          @keyframes authPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
         <SplashScreen loading={showSplash} />
         <AppShell
           activityBar={<ActivityBar />}
@@ -1010,11 +1030,41 @@ export function DesktopController() {
     </AppShell>
       <GatewayOfflineDialog />
       <PreviewMobileSheet onRestartServer={restartPreviewServer} />
-    </>
+      </div>
   )
   }
 
   // Not authenticated yet → show the sign-in page.
+  // While auth is still loading, show a minimal loading overlay instead so
+  // the user never sees a flash of the sign-in form.
+  if (authLoading) {
+    return (
+      <div
+        className="fixed inset-0 z-[1500] flex items-center justify-center"
+        style={{ backgroundColor: '#011627' }}
+      >
+        <div className="flex items-center gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <span
+              key={i}
+              className="size-1.5 rounded-full bg-white/40"
+              style={{
+                animation: `authPulse 1.4s ease-in-out ${i * 0.15}s infinite`,
+              }}
+            />
+          ))}
+        </div>
+        <style>{`
+          @keyframes authPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
+  // Auth failed / session expired → show the sign-in page.
   return (
     <>
       <SignInPage

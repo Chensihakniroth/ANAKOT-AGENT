@@ -124,6 +124,7 @@ const SettingsView = lazy(async () => ({ default: (await import('./settings')).S
 const SkillsView = lazy(async () => ({ default: (await import('./skills')).SkillsView }))
 const PluginsView = lazy(async () => ({ default: (await import('./plugins/PluginsView')).PluginsView }))
 const PluginPageView = lazy(async () => ({ default: (await import('./plugins/PluginPageView')).PluginPageView }))
+const NotebookView = lazy(async () => ({ default: (await import('./notebookllm/notebook-view')).NotebookView }))
 
 // Re-export usePlugins at module scope so we can use it in the controller
 // to register plugin paths early.
@@ -195,6 +196,7 @@ export function DesktopController() {
     cronOpen,
     currentView,
     messagingOpen,
+    notebookOpen,
     openAgents,
     openCommandCenterSection,
     profilesOpen,
@@ -767,6 +769,14 @@ export function DesktopController() {
         <Suspense fallback={null}>
           <OverlayModal onClose={closeOverlayToPreviousRoute}>
             <PluginPageView onClose={closeOverlayToPreviousRoute} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {notebookOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Notebook">
+            <NotebookView onClose={closeOverlayToPreviousRoute} />
           </OverlayModal>
         </Suspense>
       )}

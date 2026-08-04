@@ -39,6 +39,7 @@ from anakot_cli.dashboard_auth import (
     list_providers,
 )
 from anakot_cli.dashboard_auth.user_metadata import (
+    ensure_user_exists as _ensure_user_exists,
     is_admin as _is_admin_user,
     list_all_users as _list_all_users_meta,
     set_user_role as _set_user_role_meta,
@@ -326,6 +327,14 @@ async def auth_callback(
         ip=_client_ip(request),
     )
 
+    # Auto-register user in metadata so admin Users tab always shows all users
+    _ensure_user_exists(
+        session.user_id,
+        display_name=session.display_name,
+        email=session.email,
+        provider=provider_name,
+    )
+
     expires_in = max(60, session.expires_at - int(time.time()))
     # Honour the ``next=`` value the gate's _unauth_response set in the
     # /login redirect URL and that /auth/login persisted into the PKCE
@@ -511,6 +520,14 @@ async def auth_password_login(request: Request, body: _PasswordLoginBody):
         email=session.email,
         org_id=session.org_id,
         ip=ip,
+    )
+
+    # Auto-register user in metadata so admin Users tab always shows all users
+    _ensure_user_exists(
+        session.user_id,
+        display_name=session.display_name,
+        email=session.email,
+        provider=body.provider,
     )
 
     expires_in = max(60, session.expires_at - int(time.time()))

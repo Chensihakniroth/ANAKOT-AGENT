@@ -3,7 +3,7 @@
   "productName": "Anakot (Web)",
   "private": true,
   "version": "0.15.1",
-  "description": "Web version of Anakot Desktop \u2014 shares the UI/UX but runs in-browser.",
+  "description": "Web version of Anakot Desktop — shares the UI/UX but runs in-browser.",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5175",
@@ -60,7 +60,6 @@
     "react-router-dom": "^7.17.0",
     "react-shiki": "^0.9.3",
     "remark-math": "^6.0.0",
-    "shiki": "^4.0.2",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.4",

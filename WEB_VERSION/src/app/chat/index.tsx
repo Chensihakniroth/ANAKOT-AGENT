@@ -318,18 +318,17 @@ export function ChatView({
   // produces (vs. attachment cards) so both surfaces behave identically.
   const onDropFiles = useCallback(
     async (candidates: DroppedFile[]) => {
-      const resolvedCandidates = isWebEnvironment()
-        ? await Promise.all(
-            candidates.map(async c => {
-              if (c.path) return c
-              if (c.file) {
-                const path = (await uploadFileToServer(c.file)) || ''
-                return { ...c, path }
-              }
-              return c
-            })
-          )
-        : candidates
+      // Upload files that lack a path (web / shim can't resolve local paths).
+      const resolvedCandidates = await Promise.all(
+        candidates.map(async c => {
+          if (c.path) return c
+          if (c.file) {
+            const path = (await uploadFileToServer(c.file)) || ''
+            return { ...c, path }
+          }
+          return c
+        })
+      )
 
       const refs = resolvedCandidates
         .map(candidate => droppedFileInlineRef(candidate, currentCwd))
