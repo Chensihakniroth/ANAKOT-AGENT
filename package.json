@@ -11,7 +11,7 @@
     "ui-tui/packages/*"
   ],
   "scripts": {
-    "postinstall": "node -e \"console.log('\\u2705 Browser tools ready. Run: python run_agent.py --help')\" && node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/shiki',{recursive:true,force:true})}catch(e){}\" && node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/@shikijs',{recursive:true,force:true})}catch(e){}\"",
+    "postinstall": "node scripts/postinstall.cjs",
     "install:root": "npm install --workspaces=false",
     "install:web": "npm install --workspace web",
     "install:tui": "npm install --workspace ui-tui",
