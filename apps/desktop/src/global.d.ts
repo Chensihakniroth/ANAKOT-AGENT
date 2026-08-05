@@ -37,6 +37,7 @@ declare global {
       readFileText: (filePath: string) => Promise<AnakotReadFileTextResult>
       selectPaths: (options?: AnakotSelectPathsOptions) => Promise<string[]>
       writeClipboard: (text: string) => Promise<boolean>
+      revealPath: (path: string) => Promise<boolean>
       saveImageFromUrl: (url: string) => Promise<boolean>
       saveImageBuffer: (data: ArrayBuffer | Uint8Array, ext: string) => Promise<string>
       saveClipboardImage: () => Promise<string>
@@ -94,6 +95,45 @@ declare global {
       gitCheckoutNewBranch?: (cwd: string, branch: string) => Promise<{ ok: boolean; error?: string }>
       gitSubscribe?: (cwd: string) => Promise<{ ok: boolean; root?: string; error?: string }>
       gitUnsubscribe?: (cwd: string) => Promise<{ ok: boolean; error?: string }>
+      gitWorktreeList?: (repoPath: string) => Promise<{
+        ok: boolean
+        worktrees: Array<{ path: string; branch: string | null; isMain: boolean; detached: boolean; locked: boolean }>
+        error?: string
+      }>
+      gitWorktreeAdd?: (
+        repoPath: string,
+        options?: { name?: string; branch?: string; base?: string; existingBranch?: string }
+      ) => Promise<{
+        ok: boolean
+        path?: string
+        branch?: string
+        error?: string
+      }>
+      gitWorktreeRemove?: (repoPath: string, worktreePath: string, options?: { force?: boolean }) => Promise<{
+        ok: boolean
+        removed?: boolean
+        error?: string
+      }>
+      gitBranchSwitch?: (repoPath: string, branch: string) => Promise<{ ok: boolean; switched?: boolean; error?: string }>
+      gitBranchList?: (
+        repoPath: string
+      ) => Promise<{
+        ok: boolean
+        branches: Array<{ name: string; checkedOut: boolean; isDefault: boolean; worktreePath: null | string }>
+        error?: string
+      }>
+      gitBaseBranchList?: (
+        repoPath: string
+      ) => Promise<{
+        ok: boolean
+        branches: Array<{ name: string; isRemote: boolean; isDefault: boolean }>
+        error?: string
+      }>
+      gitScanRepos?: (roots: string[], options?: { enabled?: boolean; maxDepth?: number; excludePaths?: string[] }) => Promise<{
+        ok: boolean
+        repos: Array<{ root: string; label: string }>
+        error?: string
+      }>
       onGitChanged?: (callback: (data: { root: string }) => void) => () => void
       onFileChanged?: (callback: (data: { path: string; root: string }) => void) => () => void
       terminal: {
@@ -251,6 +291,46 @@ declare global {
           | { type: 'toggle-app' }
           | { type: 'scale'; scale: number }
         ) => void) => () => void
+      }
+
+      // Quick Entry — global-hotkey mini composer. The quick window pushes
+      // state to the primary renderer and submits text through the same
+      // prompt-submit path the normal composer uses.
+      quickEntry?: {
+        getSettings: () => Promise<{
+          enabled: boolean
+          shortcut: string
+          registered: boolean
+          error: 'invalid' | 'taken' | null
+        }>
+        setSettings: (settings: { enabled?: boolean; shortcut?: string }) => Promise<{
+          enabled: boolean
+          shortcut: string
+          registered: boolean
+          error: 'invalid' | 'taken' | null
+        }>
+        pushState: (state: {
+          connected: boolean
+          busy?: boolean
+          activeSessionId?: string | null
+          sessions?: Array<{
+            id: string
+            title: string
+          }>
+        }) => void
+        submit: (payload: { text: string; targetSessionId?: string | null }) => void
+        close: () => void
+        onState: (callback: (state: {
+          connected: boolean
+          busy: boolean
+          activeSessionId?: string | null
+          sessions?: Array<{
+            id: string
+            title: string
+          }>
+        }) => void) => () => void
+        onSubmit: (callback: (payload: { text: string; targetSessionId?: string | null }) => void) => () => void
+        onShown: (callback: () => void) => () => void
       }
     }
   }

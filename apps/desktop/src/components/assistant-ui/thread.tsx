@@ -55,6 +55,8 @@ import { VirtualizedThread } from '@/components/assistant-ui/thread-virtualizer'
 import { HoistedTodoPanel, todosFromMessageContent } from '@/components/assistant-ui/todo-tool'
 import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool-fallback'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
+import { ReactionBadge, ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
+import { useMessageReactions, useTapbackDoubleClick } from '@/components/assistant-ui/thread/use-message-reactions'
 import { UserMessageText } from '@/components/assistant-ui/user-message-text'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
@@ -78,7 +80,7 @@ import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
-import { GitBranchIcon, Loader2Icon, Volume2Icon, VolumeXIcon } from '@/lib/icons'
+import { GitBranchIcon, Loader2Icon, SmilePlusIcon, Volume2Icon, VolumeXIcon } from '@/lib/icons'
 import { extractPreviewTargets } from '@/lib/preview-targets'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
@@ -206,6 +208,8 @@ const CenteredThreadSpinner: FC = () => {
 }
 
 const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> = ({ onBranchInNewChat }) => {
+  const { t } = useI18n()
+  const copy = t.assistant.thread
   const messageId = useAuiState(s => s.message.id)
   const content = useAuiState(s => s.message.content)
   const messageText = messageContentText(content)
@@ -222,6 +226,16 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
   const messageStatus = useAuiState(s => s.message.status?.type)
   const isPlaceholder = messageStatus === 'running' && content.length === 0
   const enterRef = useEnterAnimation(messageStatus === 'running', `assistant-message:${messageId}`)
+  const { enabled: reactionsEnabled, react, reactions: shownReactions } = useMessageReactions(messageId, 'assistant')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickEmoji = useCallback(
+    (emoji: string) => {
+      setPickerOpen(false)
+      react(emoji)
+    },
+    [react]
+  )
+  const onDoubleClick = useTapbackDoubleClick(messageId, 'assistant')
 
   if (isPlaceholder) {
     return null
@@ -233,6 +247,7 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
       data-role="assistant"
       data-slot="aui_assistant-message-root"
       data-streaming={messageStatus === 'running' ? 'true' : undefined}
+      onDoubleClick={onDoubleClick}
       ref={enterRef}
     >
       <div
@@ -261,6 +276,39 @@ const AssistantMessage: FC<{ onBranchInNewChat?: (messageId: string) => void }> 
       </div>
       {messageText.trim().length > 0 && (
         <AssistantFooter messageId={messageId} messageText={messageText} onBranchInNewChat={onBranchInNewChat} />
+      )}
+      {/* ONE slot, Slack-style: the picker trigger and the landed reaction are
+          the same element, so reacting never shifts layout. Empty → ☺, hidden
+          until hover like its action-bar neighbors. Reacted → the emoji itself,
+          always visible at full strength, and clicking it reopens the picker to
+          switch or retract. */}
+      {(reactionsEnabled || shownReactions.length > 0) && (
+        <ReactionPicker
+          onOpenChange={setPickerOpen}
+          onSelect={pickEmoji}
+          open={pickerOpen}
+          selected={shownReactions.find(reaction => reaction.author === 'user')?.emoji}
+        >
+          <TooltipIconButton
+            data-reacted={shownReactions.length > 0 || undefined}
+            data-slot="aui_msg-reactions"
+            data-state={pickerOpen ? 'open' : undefined}
+            onClick={reactionsEnabled ? () => setPickerOpen(open => !open) : undefined}
+            tooltip={copy.react}
+          >
+            {shownReactions.length > 0 ? (
+              <span className="flex items-center gap-0.5 text-[0.8125rem] leading-none">
+                {shownReactions.map(reaction => (
+                  <span className="reaction-pop" key={`${reaction.author}-${reaction.emoji}`}>
+                    {reaction.emoji}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <SmilePlusIcon className="size-3.5" />
+            )}
+          </TooltipIconButton>
+        </ReactionPicker>
       )}
     </MessagePrimitive.Root>
   )
@@ -782,6 +830,16 @@ const UserMessage: FC<{
   const isLatestUser = messageId === latestUserId
   const showStop = isLatestUser && threadRunning && Boolean(onCancel)
   const showRestore = !isLatestUser && !threadRunning
+  const { enabled: reactionsEnabled, react, reactions: shownReactions } = useMessageReactions(messageId, 'user')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickEmoji = useCallback(
+    (emoji: string) => {
+      setPickerOpen(false)
+      react(emoji)
+    },
+    [react]
+  )
+  const onDoubleClick = useTapbackDoubleClick(messageId, 'user')
 
   const bubbleClassName = cn(
     USER_BUBBLE_BASE_CLASS,
@@ -812,9 +870,36 @@ const UserMessage: FC<{
   return (
     <MessagePrimitive.Root asChild>
       <StickyHumanMessageContainer>
-        <ActionBarPrimitive.Root className="relative w-full max-w-full" data-slot="aui_user-bubble-actions">
+        <ActionBarPrimitive.Root
+          className="relative w-full max-w-full"
+          data-slot="aui_user-bubble-actions"
+          onDoubleClick={onDoubleClick}
+        >
           <div className="human-message-with-todos-wrapper flex w-full flex-col gap-0">
-            <div className="relative w-full">
+            <ReactionPicker
+              onOpenChange={setPickerOpen}
+              onSelect={pickEmoji}
+              open={pickerOpen}
+              selected={shownReactions.find(reaction => reaction.author === 'user')?.emoji}
+            >
+              <div
+                className="relative w-full"
+                onContextMenu={
+                  // Right-click is the desktop stand-in for iOS touch-and-hold —
+                  // but only when there's nothing selected. A live highlight
+                  // keeps the native Copy menu (and ⌘C) instead of the picker.
+                  !reactionsEnabled
+                    ? undefined
+                    : event => {
+                        if (window.getSelection()?.toString()) {
+                          return
+                        }
+
+                        event.preventDefault()
+                        setPickerOpen(true)
+                      }
+                }
+              >
               {threadRunning ? (
                 <div className={bubbleClassName}>{bubbleContent}</div>
               ) : (
@@ -857,7 +942,8 @@ const UserMessage: FC<{
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            </ReactionPicker>
             <BranchPickerPrimitive.Root
               className="checkpoint-container flex items-center gap-1 pb-0 pt-1 pl-1.5 text-[0.75rem] leading-none text-(--ui-text-tertiary)"
               hideWhenSingleBranch
@@ -879,6 +965,14 @@ const UserMessage: FC<{
                 {copy.goForward}
               </BranchPickerPrimitive.Next>
             </BranchPickerPrimitive.Root>
+            {/* Below the bubble, same register as the assistant action row:
+                same emoji size, same vertical padding, right-aligned to the
+                sent bubble. Overlaying the corner read badly in practice. */}
+            <ReactionBadge
+              className="justify-end gap-1.5 py-1.5 pr-1.5"
+              onRetract={() => react(null)}
+              reactions={shownReactions}
+            />
           </div>
         </ActionBarPrimitive.Root>
       </StickyHumanMessageContainer>

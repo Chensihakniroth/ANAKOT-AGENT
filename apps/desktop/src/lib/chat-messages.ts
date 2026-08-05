@@ -6,6 +6,13 @@ import type { SessionMessage, UsageStats } from '@/types/anakot'
 
 export type ChatMessagePart = Exclude<ThreadMessageLike['content'], string>[number]
 
+/** One tapback-style reaction on a message (iMessage Tapback semantics). */
+export type MessageReaction = {
+  author: string
+  emoji: string
+  at: number
+}
+
 export type ChatMessage = {
   id: string
   role: SessionMessage['role']
@@ -15,6 +22,10 @@ export type ChatMessage = {
   error?: string
   branchGroupId?: string
   hidden?: boolean
+  /** Durable DB row id — the backend's `message.react` targets this, not the ephemeral renderer id. */
+  rowId?: number
+  /** Reactions painted on this message (user + agent, merged from persisted + local + live). */
+  reactions?: MessageReaction[]
   /** Composer attachment ref strings (`@file:...`, `@image:...`) sent with this user message. */
   attachmentRefs?: string[]
 }
@@ -61,6 +72,10 @@ export type GatewayEventPayload = {
   // secret.request (skill credential capture)
   env_var?: string
   prompt?: string
+  // message.reaction (react_to_message tool — desktop-gated)
+  row_id?: number
+  reactions?: MessageReaction[]
+  role?: string
 }
 
 export function textPart(text: string): ChatMessagePart {
@@ -797,7 +812,9 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       id: `${message.timestamp || Date.now()}-${index}-${message.role}`,
       role: message.role,
       parts,
-      timestamp: message.timestamp
+      timestamp: message.timestamp,
+      ...(message.row_id === undefined ? {} : { rowId: message.row_id }),
+      ...(message.reactions?.length ? { reactions: message.reactions } : {})
     })
 
     activeAssistantIndex = message.role === 'assistant' ? result.length - 1 : null

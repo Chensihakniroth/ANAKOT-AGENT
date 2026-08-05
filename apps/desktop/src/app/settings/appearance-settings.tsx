@@ -11,6 +11,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { Check, Download, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
+import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
 import { useTheme } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
 import { VscodeThemeBrowser } from '@/themes/vscode-theme-browser'
@@ -398,6 +399,7 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
   const { t, isSavingLocale } = useI18n()
   const { themeName, mode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
+  const reactionsEnabled = useStore($reactionsEnabled)
   const a = t.settings.appearance
 
   // Persist theme to config.yaml so it survives app restarts (localStorage may be cleared in dev)
@@ -536,6 +538,24 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
             }
             description={a.toolViewDesc}
             title={a.toolViewTitle}
+          />
+
+          <ListRow
+            action={
+              <SegmentedControl
+                onChange={id => {
+                  triggerHaptic('selection')
+                  setReactionsEnabled(id === 'on')
+                }}
+                options={[
+                  { id: 'off', label: t.common.off },
+                  { id: 'on', label: t.common.on }
+                ]}
+                value={reactionsEnabled ? 'on' : 'off'}
+              />
+            }
+            description={a.reactionsDesc}
+            title={a.reactionsTitle}
           />
 
           {/* Window Translucency */}

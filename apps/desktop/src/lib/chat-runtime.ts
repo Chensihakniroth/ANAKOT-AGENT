@@ -297,7 +297,13 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
       content: message.parts.filter((part): part is Extract<ChatMessagePart, { type: 'text' }> => part.type === 'text'),
       attachments: [],
       createdAt,
-      metadata: { custom: { attachmentRefs: message.attachmentRefs ?? [] } }
+      metadata: {
+        custom: {
+          attachmentRefs: message.attachmentRefs ?? [],
+          ...(message.reactions ? { reactions: message.reactions } : {}),
+          ...(message.rowId === undefined ? {} : { rowId: message.rowId })
+        }
+      }
     } as ThreadMessage
   }
 
@@ -309,7 +315,12 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
       role,
       content: [textPart(text)],
       createdAt,
-      metadata: { custom: {} }
+      metadata: {
+        custom: {
+          ...(message.reactions ? { reactions: message.reactions } : {}),
+          ...(message.rowId === undefined ? {} : { rowId: message.rowId })
+        }
+      }
     } as ThreadMessage
   }
 
@@ -328,7 +339,10 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
       unstable_annotations: [],
       unstable_data: [],
       steps: [],
-      custom: {}
+      custom: {
+        ...(message.reactions ? { reactions: message.reactions } : {}),
+        ...(message.rowId === undefined ? {} : { rowId: message.rowId })
+      }
     }
   } as ThreadMessage
 }

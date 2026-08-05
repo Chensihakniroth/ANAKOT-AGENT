@@ -25,6 +25,8 @@ exposePluginSDK()
 
 if (new URLSearchParams(window.location.search).get('win') === 'overlay') {
   import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
+} else if (new URLSearchParams(window.location.search).get('win') === 'quick') {
+  import('./app/quick-entry/quick-entry-root').then(({ mountQuickEntry }) => mountQuickEntry())
 } else {
   createRoot(document.getElementById('root')!).render(
     <ErrorBoundary label="root">

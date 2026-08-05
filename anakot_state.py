@@ -226,6 +226,24 @@ def _log_wal_fallback_once(db_label: str, exc: Exception) -> None:
         exc,
     )
 
+
+def _scrub_surrogates(value: Any) -> Any:
+    """Replace lone surrogates when *value* is text; pass anything else through.
+
+    sqlite3 encodes bound ``str`` parameters as UTF-8 and raises
+    ``UnicodeEncodeError`` on lone surrogates (U+D800..U+DFFF), so a single
+    such code point anywhere in a message aborts the whole write. No-op for
+    well-formed text.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        value.encode("utf-8")
+        return value
+    except UnicodeEncodeError:
+        return value.encode("utf-8", "replace").decode("utf-8")
+
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -250,6 +268,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     cache_write_tokens INTEGER DEFAULT 0,
     reasoning_tokens INTEGER DEFAULT 0,
     cwd TEXT,
+    git_branch TEXT,
+    git_repo_root TEXT,
     billing_provider TEXT,
     billing_base_url TEXT,
     billing_mode TEXT,
@@ -286,7 +306,8 @@ CREATE TABLE IF NOT EXISTS messages (
     codex_message_items TEXT,
     platform_message_id TEXT,
     observed INTEGER DEFAULT 0,
-    active INTEGER NOT NULL DEFAULT 1
+    active INTEGER NOT NULL DEFAULT 1,
+    display_metadata TEXT
 );
 
 CREATE TABLE IF NOT EXISTS state_meta (
@@ -1006,6 +1027,71 @@ class SessionDB:
 
         def _do(conn):
             conn.execute("UPDATE sessions SET cwd = ? WHERE id = ?", (cwd, session_id))
+
+        self._execute_write(_do)
+
+    def update_session_git_repo_root(self, session_id: str, repo_root: str) -> None:
+        """Persist the resolved common git repo root for a session.
+
+        Set only when known; a missing/empty root leaves the previous value.
+        Used by the gateway when it resolves a session's cwd to a repo.
+        """
+        if not session_id:
+            return
+        if not repo_root:
+            return
+
+        def _do(conn):
+            conn.execute(
+                "UPDATE sessions SET git_repo_root = ? WHERE id = ?",
+                (repo_root, session_id),
+            )
+
+        self._execute_write(_do)
+
+    def distinct_session_cwds(self, include_archived: bool = False) -> List[Dict[str, Any]]:
+        """Distinct non-empty session cwds with usage stats, for repo discovery.
+
+        Aggregates across ALL session history (not a single page), so the desktop
+        can surface every git repo the user has worked in — not just the repos
+        that happen to be in the currently-loaded recents. Children/branches
+        count: a worktree session is still a real workspace signal.
+        """
+        where = "cwd IS NOT NULL AND TRIM(cwd) != ''"
+        if not include_archived:
+            where += " AND archived = 0"
+        rows = self._conn.execute(
+            "SELECT cwd AS cwd, COUNT(*) AS sessions, "
+            "MAX(COALESCE(ended_at, started_at, 0)) AS last_active "
+            f"FROM sessions WHERE {where} GROUP BY cwd"
+        ).fetchall()
+        return [
+            {
+                "cwd": r["cwd"],
+                "sessions": int(r["sessions"] or 0),
+                "last_active": float(r["last_active"] or 0),
+            }
+            for r in rows
+        ]
+
+    def backfill_repo_roots(self, cwd_to_root: Dict[str, str]) -> None:
+        """Persist resolved git repo roots for cwds that don't have one yet.
+
+        Backfills history so projects light up for sessions created before the
+        column existed, without clobbering an already-recorded root. Only
+        non-empty roots are written (a non-git cwd stays NULL).
+        """
+        pairs = [(root, cwd) for cwd, root in cwd_to_root.items() if root and cwd]
+        if not pairs:
+            return
+
+        def _do(conn):
+            for root, cwd in pairs:
+                conn.execute(
+                    "UPDATE sessions SET git_repo_root = ? "
+                    "WHERE cwd = ? AND COALESCE(git_repo_root, '') = ''",
+                    (root, cwd),
+                )
 
         self._execute_write(_do)
     # ──────────────────────────────────────────────────────────────────────
@@ -2412,6 +2498,7 @@ class SessionDB:
         session_id: str,
         include_ancestors: bool = False,
         include_inactive: bool = False,
+        include_row_ids: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Load messages in the OpenAI conversation format (role + content dicts).
@@ -2420,6 +2507,12 @@ class SessionDB:
         By default only active messages are returned. Pass
         ``include_inactive=True`` to load soft-deleted (rewound) rows
         as well. See :meth:`rewind_to_message`.
+
+        ``include_row_ids=True`` also attaches the durable DB ``id`` and the
+        decoded ``display_metadata`` (reactions) to each dict. The display
+        path (desktop resume) needs them; the LLM context path must NOT get
+        them — extra keys on message dicts can be rejected by strict
+        provider adapters, and they are not part of the conversation shape.
         """
         session_ids = [session_id]
         if include_ancestors:
@@ -2429,9 +2522,10 @@ class SessionDB:
         with self._lock:
             placeholders = ",".join("?" for _ in session_ids)
             rows = self._conn.execute(
-                "SELECT role, content, tool_call_id, tool_calls, tool_name, "
+                "SELECT id, role, content, tool_call_id, tool_calls, tool_name, "
                 "finish_reason, reasoning, reasoning_content, reasoning_details, "
-                "codex_reasoning_items, codex_message_items, platform_message_id, observed "
+                "codex_reasoning_items, codex_message_items, platform_message_id, observed, "
+                "display_metadata "
                 f"FROM messages WHERE session_id IN ({placeholders})"
                 f"{active_clause} ORDER BY id",
                 tuple(session_ids),
@@ -2443,6 +2537,15 @@ class SessionDB:
             if row["role"] in {"user", "assistant"} and isinstance(content, str):
                 content = sanitize_context(content).strip()
             msg = {"role": row["role"], "content": content}
+            # Durable row id + display metadata ride along ONLY for the display
+            # path (see include_row_ids docstring) — the LLM context path must
+            # not carry extra keys.
+            if include_row_ids:
+                msg["id"] = row["id"]
+                if row["display_metadata"]:
+                    meta = self._decode_display_metadata(row["display_metadata"])
+                    if meta:
+                        msg["display_metadata"] = meta
             if row["tool_call_id"]:
                 msg["tool_call_id"] = row["tool_call_id"]
             if row["tool_name"]:
@@ -2494,6 +2597,168 @@ class SessionDB:
                 continue
             messages.append(msg)
         return messages
+
+    #: Key under which message reactions live inside ``display_metadata``.
+    #: Reactions share the existing per-message JSON column rather than a side
+    #: table so they survive rewind/compaction row rewrites with the row itself.
+    REACTIONS_METADATA_KEY = "reactions"
+
+    def set_message_reaction(
+        self,
+        session_id: str,
+        message_row_id: int,
+        emoji: Optional[str],
+        *,
+        author: str = "user",
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Set (or with ``emoji=None`` clear) *author*'s reaction on one message.
+
+        iOS Tapback semantics: one reaction per author per message. Re-sending
+        the same emoji clears it, a different emoji replaces it. Returns the
+        message's full reaction list after the write, or ``None`` when the row
+        doesn't exist or isn't part of *session_id*.
+        """
+        if not session_id or message_row_id is None:
+            return None
+
+        def _do(conn: sqlite3.Connection):
+            row = conn.execute(
+                "SELECT display_metadata FROM messages WHERE id = ? AND session_id = ?",
+                (message_row_id, session_id),
+            ).fetchone()
+            if row is None:
+                return None
+
+            meta = self._decode_display_metadata(row["display_metadata"])
+            existing = meta.get(self.REACTIONS_METADATA_KEY)
+            reactions = [
+                r
+                for r in (existing if isinstance(existing, list) else [])
+                if isinstance(r, dict) and r.get("author") != author
+            ]
+            previous = next(
+                (
+                    r
+                    for r in (existing if isinstance(existing, list) else [])
+                    if isinstance(r, dict) and r.get("author") == author
+                ),
+                None,
+            )
+            # Tapping the live reaction again retracts it.
+            toggling_off = (
+                emoji is not None and previous is not None and previous.get("emoji") == emoji
+            )
+            if emoji and not toggling_off:
+                reactions.append(
+                    {
+                        "emoji": _scrub_surrogates(emoji),
+                        "author": author,
+                        "at": time.time(),
+                    }
+                )
+
+            if reactions:
+                meta[self.REACTIONS_METADATA_KEY] = reactions
+            else:
+                meta.pop(self.REACTIONS_METADATA_KEY, None)
+
+            conn.execute(
+                "UPDATE messages SET display_metadata = ? WHERE id = ?",
+                (
+                    self._encode_display_metadata(meta) if meta else None,
+                    message_row_id,
+                ),
+            )
+            return reactions
+
+        return self._execute_write(_do)
+
+    def get_message_reactions(
+        self, session_id: str, message_row_id: int
+    ) -> List[Dict[str, Any]]:
+        """Return the reaction list persisted on one message row (never ``None``)."""
+        if not session_id or message_row_id is None:
+            return []
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT display_metadata FROM messages WHERE id = ? AND session_id = ?",
+                (message_row_id, session_id),
+            ).fetchone()
+
+        if row is None:
+            return []
+
+        meta = self._decode_display_metadata(row["display_metadata"])
+        reactions = meta.get(self.REACTIONS_METADATA_KEY)
+        if isinstance(reactions, list):
+            return [r for r in reactions if isinstance(r, dict)]
+
+        return []
+
+    def latest_message_row_id(
+        self, session_id: str, *, role: Optional[str] = None, offset: int = 0
+    ) -> Optional[int]:
+        """Return the newest message row id in *session_id*, optionally filtered by role.
+
+        The desktop uses this as the fallback target for a reaction when a live
+        message hasn't round-tripped through a resume yet (no durable row id).
+        ``offset`` steps backwards from the newest (1 = the one before, etc.)
+        so a tool can target an earlier message without exposing row ids.
+        """
+        if not session_id:
+            return None
+
+        with self._lock:
+            if role:
+                row = self._conn.execute(
+                    "SELECT id FROM messages WHERE session_id = ? AND role = ? "
+                    "AND active = 1 ORDER BY id DESC LIMIT 1 OFFSET ?",
+                    (session_id, role, max(0, int(offset))),
+                ).fetchone()
+            else:
+                row = self._conn.execute(
+                    "SELECT id FROM messages WHERE session_id = ? AND active = 1 "
+                    "ORDER BY id DESC LIMIT 1 OFFSET ?",
+                    (session_id, max(0, int(offset))),
+                ).fetchone()
+
+        return row["id"] if row is not None else None
+
+    def get_message_role(self, session_id: str, row_id: int) -> Optional[str]:
+        """Return the role ('user'/'assistant') of a message row, or None if it
+        does not belong to *session_id* (or doesn't exist)."""
+        if not session_id:
+            return None
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT role FROM messages WHERE session_id = ? AND id = ?",
+                (session_id, row_id),
+            ).fetchone()
+
+        return row["role"] if row is not None else None
+
+    def _decode_display_metadata(self, raw: Optional[str]) -> Dict[str, Any]:
+        """Decode a message's ``display_metadata`` JSON blob, tolerating legacy rows."""
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        try:
+            decoded = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+
+    def _encode_display_metadata(self, meta: Dict[str, Any]) -> Optional[str]:
+        """Encode a message's ``display_metadata`` dict for storage, or ``None`` when empty."""
+        if not meta:
+            return None
+        try:
+            return json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            return None
 
     def _session_lineage_root_to_tip(self, session_id: str) -> List[str]:
         if not session_id:

@@ -96,6 +96,7 @@ import { useModelControls } from './session/hooks/use-model-controls'
 import { usePreviewRouting } from './session/hooks/use-preview-routing'
 import { usePromptActions } from './session/hooks/use-prompt-actions'
 import { useRouteResume } from './session/hooks/use-route-resume'
+import { useQuickEntryBridge } from './session/hooks/use-quick-entry-bridge'
 import { useSessionActions } from './session/hooks/use-session-actions'
 import { useSessionStateCache } from './session/hooks/use-session-state-cache'
 import { AppShell } from './shell/app-shell'
@@ -621,6 +622,8 @@ export function DesktopController() {
     selectedStoredSessionIdRef,
     startFreshSessionDraft
   })
+
+  useQuickEntryBridge({ resumeSession, startFreshSessionDraft, submitText })
 
   const { leftStatusbarItems, statusbarItems } = useStatusbarItems({
     agentsOpen,

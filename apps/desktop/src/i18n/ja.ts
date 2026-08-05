@@ -220,7 +220,9 @@ export const ja = defineLocale({
       technical: 'テクニカル',
       technicalDesc: '生のツール引数、結果、低レベルの詳細を含めます。',
       themeTitle: 'テーマ',
-      themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。'
+      themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。',
+      reactionsTitle: 'メッセージリアクション',
+      reactionsDesc: 'iMessage風のタップバック: メッセージにリアクションでき、エージェントもあなたのメッセージにリアクションできます。',
     },
     discordRpc: {
       title: 'Discord プレゼンス',
@@ -449,6 +451,15 @@ export const ja = defineLocale({
       autosaveFailed: '自動保存に失敗しました',
       imported: '設定をインポートしました',
       invalidJson: '設定 JSON が無効です'
+    },
+    quickEntry: {
+      enabledTitle: 'クイック入力',
+      enabledDesc: 'グローバルショートカットでどこからでもミニ入力欄を呼び出せます。',
+      shortcutTitle: 'ショートカット',
+      shortcutDesc: 'Electron アクセラレータ形式で入力（例: CommandOrControl+Shift+Space）。',
+      takenBy: 'このショートカットは別のアプリケーションによって使用されています。',
+      invalidShortcut: '無効なショートカットです — 少なくとも修飾キー1つとキーが必要です（例: CommandOrControl+Shift+Space）。',
+      active: '有効'
     },
     credentials: {
       pasteKey: 'キーを貼り付け',
@@ -1750,7 +1761,8 @@ export const ja = defineLocale({
       restoreCheckpoint: 'チェックポイントを復元',
       restoreNext: '次のチェックポイントに戻す',
       goForward: '進む',
-      sendEdited: '編集済みメッセージを送信'
+      sendEdited: '編集済みメッセージを送信',
+      react: 'リアクション'
     },
     approval: {
       gatewayDisconnected: 'Anakot ゲートウェイが接続されていません',

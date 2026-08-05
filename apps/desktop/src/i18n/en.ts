@@ -300,6 +300,8 @@ export const en: Translations = {
       technicalDesc: 'Include raw tool args/results and low-level details.',
       themeTitle: 'Theme',
       themeDesc: 'Desktop palettes only. The selected mode is applied on top.',
+      reactionsTitle: 'Message Reactions',
+      reactionsDesc: 'iMessage-style tapbacks: react to messages and let the agent react to yours.',
       pet: {
         title: 'Desktop Pets',
         intro: 'Browse and adopt animated pets from the petdex gallery, or generate your own with AI.',
@@ -406,6 +408,15 @@ export const en: Translations = {
       autosaveFailed: 'Autosave failed',
       imported: 'Config imported',
       invalidJson: 'Invalid config JSON'
+    },
+    quickEntry: {
+      enabledTitle: 'Quick Entry',
+      enabledDesc: 'Summon a mini composer from anywhere with a global shortcut.',
+      shortcutTitle: 'Shortcut',
+      shortcutDesc: 'Press the keys you want, or type an Electron accelerator (e.g. CommandOrControl+Shift+Space).',
+      takenBy: 'This shortcut is already registered by another application.',
+      invalidShortcut: 'Not a valid shortcut — use at least one modifier plus a key (e.g. CommandOrControl+Shift+Space).',
+      active: 'Active'
     },
     credentials: {
       pasteKey: 'Paste key',
@@ -1168,17 +1179,85 @@ export const en: Translations = {
     sessions: 'Sessions',
     groupAriaGrouped: 'Show sessions as a single list',
     groupAriaUngrouped: 'Group sessions by workspace',
+    showProjects: 'Show projects',
+    showSessions: 'Show sessions',
     groupTitleGrouped: 'Ungroup sessions',
     groupTitleUngrouped: 'Group by workspace',
     allPinned: 'Everything here is pinned. Unpin a chat to show it in recents.',
     shiftClickHint: 'Shift-click a chat to pin',
     noWorkspace: 'No workspace',
+    projectEmpty: 'No sessions yet',
     newSessionIn: label => `New session in ${label}`,
     reorderWorkspace: label => `Reorder workspace ${label}`,
     showMoreIn: (count, label) => `Show ${count} more in ${label}`,
     loading: 'Loading…',
     loadMore: 'Load more',
     loadCount: step => `Load ${step} more`,
+    noSessions: 'No sessions yet',
+    projects: {
+      sectionLabel: 'Projects',
+      home: 'Home',
+      newButton: 'New project',
+      createTitle: 'New project',
+      createDesc: 'Name a workspace and add one or more folders.',
+      renameTitle: 'Rename project',
+      addFolderTitle: 'Add folder',
+      namePlaceholder: 'e.g. Skunkworks',
+      foldersLabel: 'Folders',
+      ideaLabel: 'Idea',
+      ideaPlaceholder: "What's this project about? (saved to IDEA.md)",
+      ideaGenerate: 'Generate idea',
+      ideaGenerating: 'Generating…',
+      ideaShuffle: 'Shuffle templates',
+      noFolders: 'No folders added yet.',
+      addFolder: 'Add folder',
+      primaryBadge: 'primary',
+      removeFolder: 'Remove',
+      create: 'Create',
+      menu: 'Actions',
+      menuRename: 'Rename',
+      menuAppearance: 'Appearance',
+      noColor: 'No color',
+      menuAddFolder: 'Add folder',
+      menuSetActive: 'Set active',
+      menuDelete: 'Delete',
+      reveal: 'Reveal in folder',
+      copyPath: 'Copy path',
+      removeFromSidebar: 'Hide from sidebar',
+      createFailed: 'Could not create project',
+      staleBackend:
+        'Update the Anakot backend to create projects — your backend is older than this desktop app (Settings → Updates → Backend).',
+      deleteConfirm: 'This removes the saved project from Anakot. Files, git repos, and worktrees stay untouched.',
+      startWork: 'New worktree',
+      newWorktreeTitle: 'New worktree',
+      newWorktreeDesc: 'Name the branch for this worktree.',
+      branchPlaceholder: 'e.g. my-feature',
+      branchOff: () => ({ after: '', before: 'branch off ' }),
+      baseBranchPlaceholder: 'Search branches…',
+      baseBranchNone: 'No branches found',
+      startWorkFailed: 'Could not create worktree',
+      convertBranch: 'Convert a branch…',
+      convertBranchTitle: 'Convert a branch',
+      convertBranchDesc: 'Open checked-out branches, or create a worktree for a free branch.',
+      convertBranchPlaceholder: 'Search branches…',
+      convertBranchInstead: 'Convert an existing branch',
+      branchOpenExisting: 'open',
+      branchSwitchHome: 'switch home',
+      branchCreateWorktree: 'new worktree',
+      branchesLoading: 'Loading branches…',
+      noBranches: 'No branches found',
+      removeWorktree: 'Remove worktree',
+      removeWorktreeFailed: 'Could not remove worktree (uncommitted changes?)',
+      removeWorktreeConfirm:
+        'Remove it from git (deletes the worktree directory; the branch stays), or just hide the lane from the sidebar and leave the worktree on disk.',
+      removeWorktreeDirty:
+        'This worktree has uncommitted changes. Force-remove it (discards those changes), or just hide the lane and keep it on disk.',
+      forceRemove: 'Force remove',
+      enter: label => `Open ${label}`,
+      reorder: label => `Reorder ${label}`,
+      toggle: (label, open) => `${open ? 'Show' : 'Hide'} ${label} sessions`,
+      back: 'All projects'
+    },
     row: {
       pin: 'Pin',
       unpin: 'Unpin',
@@ -1335,6 +1414,12 @@ export const en: Translations = {
     },
     autoReadAloud: 'Auto-read aloud',
     autoReadAloudDesc: 'Automatically read assistant replies aloud via text-to-speech'
+  },
+
+  statusStack: {
+    coding: {
+      switchFailed: branch => `Could not switch to ${branch}`
+    }
   },
 
   updates: {
@@ -1735,7 +1820,8 @@ export const en: Translations = {
       restoreCheckpoint: 'Restore checkpoint',
       restoreNext: 'Restore next checkpoint',
       goForward: 'Go forward',
-      sendEdited: 'Send edited message'
+      sendEdited: 'Send edited message',
+      react: 'React'
     },
     approval: {
       gatewayDisconnected: 'Anakot gateway is not connected',

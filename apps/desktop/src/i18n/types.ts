@@ -224,6 +224,8 @@ export interface Translations {
       technicalDesc: string
       themeTitle: string
       themeDesc: string
+      reactionsTitle: string
+      reactionsDesc: string
       pet: {
         title: string
         intro: string
@@ -329,6 +331,15 @@ export interface Translations {
       autosaveFailed: string
       imported: string
       invalidJson: string
+    }
+    quickEntry: {
+      enabledTitle: string
+      enabledDesc: string
+      shortcutTitle: string
+      shortcutDesc: string
+      takenBy: string
+      invalidShortcut: string
+      active: string
     }
     credentials: {
       pasteKey: string
@@ -921,17 +932,82 @@ export interface Translations {
     sessions: string
     groupAriaGrouped: string
     groupAriaUngrouped: string
+    showProjects: string
+    showSessions: string
     groupTitleGrouped: string
     groupTitleUngrouped: string
     allPinned: string
     shiftClickHint: string
     noWorkspace: string
+    projectEmpty: string
     newSessionIn: (label: string) => string
     reorderWorkspace: (label: string) => string
     showMoreIn: (count: number, label: string) => string
     loading: string
     loadMore: string
     loadCount: (step: number) => string
+    noSessions: string
+    projects: {
+      sectionLabel: string
+      home: string
+      newButton: string
+      createTitle: string
+      createDesc: string
+      renameTitle: string
+      addFolderTitle: string
+      namePlaceholder: string
+      foldersLabel: string
+      ideaLabel: string
+      ideaPlaceholder: string
+      ideaGenerate: string
+      ideaGenerating: string
+      ideaShuffle: string
+      noFolders: string
+      addFolder: string
+      primaryBadge: string
+      removeFolder: string
+      create: string
+      menu: string
+      menuRename: string
+      menuAppearance: string
+      noColor: string
+      menuAddFolder: string
+      menuSetActive: string
+      menuDelete: string
+      reveal: string
+      copyPath: string
+      removeFromSidebar: string
+      createFailed: string
+      staleBackend: string
+      deleteConfirm: string
+      startWork: string
+      newWorktreeTitle: string
+      newWorktreeDesc: string
+      branchPlaceholder: string
+      branchOff: () => { after: string; before: string }
+      baseBranchPlaceholder: string
+      baseBranchNone: string
+      startWorkFailed: string
+      convertBranch: string
+      convertBranchTitle: string
+      convertBranchDesc: string
+      convertBranchPlaceholder: string
+      convertBranchInstead: string
+      branchOpenExisting: string
+      branchSwitchHome: string
+      branchCreateWorktree: string
+      branchesLoading: string
+      noBranches: string
+      removeWorktree: string
+      removeWorktreeFailed: string
+      removeWorktreeConfirm: string
+      removeWorktreeDirty: string
+      forceRemove: string
+      enter: (label: string) => string
+      reorder: (label: string) => string
+      toggle: (label: string, open: boolean) => string
+      back: string
+    }
     row: {
       pin: string
       unpin: string
@@ -1040,6 +1116,12 @@ export interface Translations {
     noModel: string
     noModelsAvailable: string
     loading: string
+  }
+
+  statusStack: {
+    coding: {
+      switchFailed: (branch: string) => string
+    }
   }
 
   updates: {
@@ -1402,6 +1484,7 @@ export interface Translations {
       restoreNext: string
       goForward: string
       sendEdited: string
+      react: string
     }
     approval: {
       gatewayDisconnected: string

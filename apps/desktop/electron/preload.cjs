@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   readFileText: filePath => ipcRenderer.invoke('anakot:readFileText', filePath),
   selectPaths: options => ipcRenderer.invoke('anakot:selectPaths', options),
   writeClipboard: text => ipcRenderer.invoke('anakot:writeClipboard', text),
+  revealPath: path => ipcRenderer.invoke('anakot:revealPath', path),
   saveImageFromUrl: url => ipcRenderer.invoke('anakot:saveImageFromUrl', url),
   saveImageBuffer: (data, ext) => ipcRenderer.invoke('anakot:saveImageBuffer', { data, ext }),
   saveClipboardImage: () => ipcRenderer.invoke('anakot:saveClipboardImage'),
@@ -88,6 +89,14 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   gitCheckoutNewBranch: (cwd, branch) => ipcRenderer.invoke('anakot:git:checkout-new-branch', { cwd, branch }),
   gitSubscribe: cwd => ipcRenderer.invoke('anakot:git:subscribe', cwd),
   gitUnsubscribe: cwd => ipcRenderer.invoke('anakot:git:unsubscribe', cwd),
+  gitWorktreeList: repoPath => ipcRenderer.invoke('anakot:git:worktreeList', repoPath),
+  gitWorktreeAdd: (repoPath, options) => ipcRenderer.invoke('anakot:git:worktreeAdd', repoPath, options),
+  gitWorktreeRemove: (repoPath, worktreePath, options) =>
+    ipcRenderer.invoke('anakot:git:worktreeRemove', repoPath, worktreePath, options),
+  gitBranchSwitch: (repoPath, branch) => ipcRenderer.invoke('anakot:git:branchSwitch', repoPath, branch),
+  gitBranchList: repoPath => ipcRenderer.invoke('anakot:git:branchList', repoPath),
+  gitBaseBranchList: repoPath => ipcRenderer.invoke('anakot:git:baseBranchList', repoPath),
+  gitScanRepos: (roots, options) => ipcRenderer.invoke('anakot:git:scanRepos', roots, options),
   onGitChanged: callback => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('anakot:git:changed', listener)
@@ -233,6 +242,31 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
       const listener = (_event, action) => cb(action)
       ipcRenderer.on('anakot:pet-overlay:control', listener)
       return () => ipcRenderer.removeListener('anakot:pet-overlay:control', listener)
+    }
+  },
+
+  // Quick Entry — global-hotkey mini composer. The quick window itself is a
+  // dumb capture surface; the primary renderer owns the submit path.
+  quickEntry: {
+    getSettings: () => ipcRenderer.invoke('anakot:quick-entry:get-settings'),
+    setSettings: settings => ipcRenderer.invoke('anakot:quick-entry:set-settings', settings),
+    pushState: state => ipcRenderer.send('anakot:quick-entry:state', state),
+    submit: payload => ipcRenderer.send('anakot:quick-entry:submit', payload),
+    close: () => ipcRenderer.send('anakot:quick-entry:close'),
+    onState: cb => {
+      const listener = (_event, state) => cb(state)
+      ipcRenderer.on('anakot:quick-entry:state', listener)
+      return () => ipcRenderer.removeListener('anakot:quick-entry:state', listener)
+    },
+    onSubmit: cb => {
+      const listener = (_event, payload) => cb(payload)
+      ipcRenderer.on('anakot:quick-entry:submit', listener)
+      return () => ipcRenderer.removeListener('anakot:quick-entry:submit', listener)
+    },
+    onShown: cb => {
+      const listener = () => cb()
+      ipcRenderer.on('anakot:quick-entry:shown', listener)
+      return () => ipcRenderer.removeListener('anakot:quick-entry:shown', listener)
     }
   },
 })

@@ -772,6 +772,21 @@ def _start_agent_build(sid: str, session: dict) -> None:
             except Exception:
                 pass
 
+            # Renderer-event bridge for desktop-gated tools (reactions, panes).
+            # Tools call desktop_ui.emit(event, payload); the gateway routes by
+            # session key → the window that owns the turn. No-op everywhere else.
+            try:
+                from tools.desktop_ui import set_emitter as _set_ui_emitter
+
+                def _ui_emit(session_key: str, event: str, payload: dict) -> None:
+                    found = _find_live_session_by_key(session_key)
+                    if found is not None:
+                        _emit(event, found[0], payload)
+
+                _set_ui_emitter(_ui_emit)
+            except Exception:
+                pass
+
             _wire_callbacks(sid)
             # Hydrate credits notices at session OPEN (not just on the first
             # message), so depletion / usage-band warnings show at "ready". Runs
@@ -3094,6 +3109,20 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
             ):
                 if key in m and m.get(key) is not None:
                     msg[key] = m.get(key)
+        # Durable row id + persisted reactions ride along so the desktop can
+        # react to (and render tapbacks on) the exact DB row, not an ephemeral
+        # renderer id. get_messages_as_conversation forwards both.
+        if m.get("id") is not None:
+            msg["row_id"] = m["id"]
+        _dm = m.get("display_metadata")
+        if _dm:
+            try:
+                _parsed = json.loads(_dm) if isinstance(_dm, str) else _dm
+                _reactions = _parsed.get("reactions") if isinstance(_parsed, dict) else None
+                if _reactions:
+                    msg["reactions"] = _reactions
+            except (json.JSONDecodeError, TypeError):
+                pass
         messages.append(msg)
 
     return messages
@@ -3489,7 +3518,7 @@ def _(rid, params: dict) -> dict:
         db.reopen_session(target)
         history = db.get_messages_as_conversation(target)
         display_history = db.get_messages_as_conversation(
-            target, include_ancestors=True
+            target, include_ancestors=True, include_row_ids=True
         )
         display_history_prefix = display_history[
             : max(0, len(display_history) - len(history))
@@ -3847,6 +3876,77 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 4022, str(e))
     except Exception as e:
         return _err(rid, 5007, str(e))
+
+
+@method("message.react")
+def _(rid, params: dict) -> dict:
+    """Set or clear one author's emoji reaction on a persisted message.
+
+    iOS Tapback semantics, enforced in the DB layer: one reaction per author
+    per message, re-sending the same emoji retracts it. ``emoji: null`` clears
+    unconditionally. ``row_id`` is the durable ``messages.id`` forwarded by
+    ``_history_to_messages`` — the renderer's own message ids are ephemeral.
+    """
+    session, err = _sess_nowait(params, rid)
+    if err:
+        return err
+
+    # A live message hasn't round-tripped through a resume, so the desktop has
+    # no durable row id for it yet. It can instead name the ROLE whose newest
+    # row it means — which is the message the user just reacted to.
+    newest_role = str(params.get("newest_role") or "").strip()
+    row_id = params.get("row_id")
+    if row_id is None and newest_role not in {"user", "assistant"}:
+        return _err(rid, 4023, "row_id or newest_role required")
+
+    emoji = params.get("emoji")
+    if emoji is not None:
+        emoji = str(emoji).strip()
+        if not emoji:
+            return _err(rid, 4024, "emoji must be a non-empty string or null")
+
+    author = str(params.get("author") or "user").strip()
+    if author not in {"user", "agent"}:
+        return _err(rid, 4025, "author must be 'user' or 'agent'")
+
+    # Route to the session's own profile db (global remote mode), not the
+    # launch profile's — same rule as session.resume: the row lives in the
+    # profile state.db the session belongs to.
+    profile_home = session.get("profile_home")
+    if profile_home:
+        from anakot_state import SessionDB
+
+        try:
+            db = SessionDB(db_path=Path(profile_home) / "state.db")
+        except Exception:
+            return _db_unavailable_error(rid, code=5007)
+        close_db = True
+    else:
+        db = _get_db()
+        close_db = False
+    if db is None:
+        return _db_unavailable_error(rid, code=5007)
+    try:
+        if row_id is None:
+            row_id = db.latest_message_row_id(session["session_key"], role=newest_role)
+            if row_id is None:
+                return _err(rid, 4040, "no message to react to yet")
+        reactions = db.set_message_reaction(
+            session["session_key"], int(row_id), emoji, author=author
+        )
+    except Exception as e:
+        return _err(rid, 5007, str(e))
+    finally:
+        if close_db:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+    if reactions is None:
+        return _err(rid, 4040, "message not found in this session")
+
+    return _ok(rid, {"row_id": int(row_id), "reactions": reactions})
 
 
 @method("session.usage")
@@ -9301,3 +9401,616 @@ def _(rid, params: dict) -> dict:
 
     logger.info("pet.cancel: cancelled session %r", token[:8])
     return _ok(rid, {"cancelled": True})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Projects sidebar RPCs (Hermes parity: discover_repos / record_repos / tree
+# / project_sessions). The authoritative grouping lives in project_tree.py;
+# these handlers wire it to the session DB, the per-profile projects.db, and
+# the desktop repo-scan policy.
+# ─────────────────────────────────────────────────────────────────────────
+
+def _is_repo_junk(root: str) -> bool:
+    """A git root we never auto-surface as a project: the bare home dir or
+    anything under ANAKOT_HOME — config/sessions/skills, not a workspace.
+    User-created projects pointing there are still honored."""
+    if not root:
+        return True
+
+    from anakot_constants import get_anakot_home
+
+    real = os.path.realpath(root)
+    home = os.path.realpath(os.path.expanduser("~"))
+    anakot_home = os.path.realpath(str(get_anakot_home()))
+
+    return real == home or real == anakot_home or real.startswith(anakot_home + os.sep)
+
+
+def _is_session_cwd_junk(cwd: str) -> bool:
+    """A non-git cwd that should stay in flat Recents rather than auto-group."""
+    if not cwd:
+        return True
+
+    from anakot_constants import get_anakot_home
+
+    real = os.path.normcase(os.path.realpath(cwd))
+    home = os.path.normcase(os.path.realpath(os.path.expanduser("~")))
+    anakot_home = os.path.normcase(os.path.realpath(str(get_anakot_home())))
+    return real == home or real == anakot_home
+
+
+def _repo_discovery_policy(raw: dict | None = None) -> dict:
+    """Return the effective, profile-local Desktop repository scan policy."""
+    from anakot_cli.config import DEFAULT_CONFIG
+
+    defaults = DEFAULT_CONFIG["desktop"]
+    source = raw if isinstance(raw, dict) else (_load_cfg().get("desktop") or {})
+    if not isinstance(source, dict):
+        source = {}
+
+    enabled = source.get("enabled", source.get("repo_scan_enabled", defaults["repo_scan_enabled"]))
+    roots = source.get("roots", source.get("repo_scan_roots", defaults["repo_scan_roots"]))
+    excludes = source.get(
+        "exclude_paths",
+        source.get("repo_scan_exclude_paths", defaults["repo_scan_exclude_paths"]),
+    )
+
+    return {
+        "enabled": enabled if isinstance(enabled, bool) else defaults["repo_scan_enabled"],
+        "roots": [value.strip() for value in roots if isinstance(value, str) and value.strip()]
+        if isinstance(roots, list)
+        else list(defaults["repo_scan_roots"]),
+        "exclude_paths": [
+            value.strip()
+            for value in excludes
+            if isinstance(value, str) and value.strip()
+        ]
+        if isinstance(excludes, list)
+        else list(defaults["repo_scan_exclude_paths"]),
+    }
+
+
+def _repo_discovery_policy_key(policy: dict) -> str:
+    def _paths(values: list[str]) -> list[str]:
+        normalized = set()
+        home = os.path.expanduser("~")
+        for value in values:
+            expanded = os.path.expanduser(value)
+            if not os.path.isabs(expanded):
+                expanded = os.path.join(home, expanded)
+            normalized.add(os.path.normcase(os.path.abspath(expanded)))
+        return sorted(normalized)
+
+    canonical = {
+        "enabled": bool(policy["enabled"]),
+        "roots": _paths(policy["roots"]),
+        "exclude_paths": _paths(policy["exclude_paths"]),
+    }
+    return json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+
+
+def _repo_discovery_policy_is_default(policy: dict) -> bool:
+    from anakot_cli.config import DEFAULT_CONFIG
+
+    return _repo_discovery_policy_key(policy) == _repo_discovery_policy_key(
+        _repo_discovery_policy(DEFAULT_CONFIG["desktop"])
+    )
+
+
+def _git_common_repo_root_for_cwd(cwd: str) -> str:
+    """The COMMON (main) repo root for a cwd, folding linked worktrees.
+
+    Served from the shared git_probe cache; returns ``""`` for non-git or
+    unprobeable cwds (e.g. a remote backend with no local git).
+    """
+    if not cwd:
+        return ""
+    try:
+        from tui_gateway import git_probe
+
+        info = git_probe.resolve(cwd)
+        if info and info.get("repo_root"):
+            return str(info["repo_root"])
+    except Exception:
+        pass
+    return ""
+
+
+def _discover_repos_payload(
+    db, *, conn=None, backfill: bool = True, include_cached: bool = True
+) -> list[dict]:
+    """Merge filesystem-scanned repos (cached) with session-derived repo roots.
+
+    ``conn`` reuses an already-open projects.db connection (the tree path holds
+    one); ``backfill`` persists resolved roots back onto session rows — kept off
+    the per-turn tree path (grouping uses the live git resolver regardless) and
+    done only on the explicit discover/record refresh.
+    """
+    _is_junk = _is_repo_junk
+    repos: dict[str, dict] = {}
+
+    def _agg(root: str) -> dict:
+        return repos.setdefault(root, {"root": root, "label": "", "sessions": 0, "last_active": 0.0})
+
+    cwd_rows = list(db.distinct_session_cwds())
+    try:
+        from tui_gateway import git_probe
+
+        git_probe.warm_roots(str(r.get("cwd") or "") for r in cwd_rows)
+    except Exception:
+        pass
+    cwd_to_root: dict[str, str] = {}
+    for row in cwd_rows:
+        cwd = str(row.get("cwd") or "")
+        root = _git_common_repo_root_for_cwd(cwd)
+        if not root:
+            continue
+        cwd_to_root[cwd] = root
+        if _is_junk(root):
+            continue
+        agg = _agg(root)
+        agg["sessions"] += int(row.get("sessions") or 0)
+        agg["last_active"] = max(agg["last_active"], float(row.get("last_active") or 0))
+
+    if backfill:
+        try:
+            db.backfill_repo_roots(cwd_to_root)
+        except Exception:
+            logger.debug("failed to backfill repo roots", exc_info=True)
+
+    if not include_cached:
+        out = sorted(repos.values(), key=lambda repo: repo["last_active"], reverse=True)
+        for repo in out:
+            repo["label"] = (
+                repo["label"]
+                or os.path.basename(repo["root"].rstrip("/\\"))
+                or repo["root"]
+            )
+        return out
+
+    try:
+        from anakot_cli import projects_db as pdb
+
+        def _read(c) -> None:
+            for entry in pdb.list_discovered_repos(c):
+                root = str(entry.get("root") or "")
+                if not root or _is_junk(root):
+                    continue
+                agg = _agg(root)
+                if entry.get("label"):
+                    agg["label"] = entry["label"]
+
+        if conn is not None:
+            _read(conn)
+        else:
+            with pdb.connect_closing() as own:
+                _read(own)
+    except Exception:
+        logger.debug("failed to read discovered repo cache", exc_info=True)
+
+    out = sorted(repos.values(), key=lambda r: r["last_active"], reverse=True)
+    for r in out:
+        r["label"] = r["label"] or os.path.basename(r["root"].rstrip("/\\")) or r["root"]
+    return out
+
+
+# Sources excluded from the project tree: cron runs are not user conversations;
+# they have their own section in the UI.
+_PROJECT_TREE_EXCLUDED_SOURCES = ["cron", "kanban"]
+
+
+def _project_tree_row(r: dict) -> dict:
+    """Project a SessionDB row to the minimal shape the sidebar renders."""
+    return {
+        "id": r.get("id"),
+        "_lineage_root_id": r.get("_lineage_root_id"),
+        "parent_session_id": r.get("parent_session_id"),
+        "title": r.get("title"),
+        "preview": r.get("preview"),
+        "started_at": r.get("started_at") or 0,
+        "ended_at": r.get("ended_at"),
+        "last_active": r.get("last_active") or r.get("started_at") or 0,
+        "source": r.get("source"),
+        "archived": bool(r.get("archived")),
+        "message_count": r.get("message_count") or 0,
+        "tool_call_count": r.get("tool_call_count") or 0,
+        "input_tokens": r.get("input_tokens") or 0,
+        "output_tokens": r.get("output_tokens") or 0,
+        "model": r.get("model"),
+        "is_active": False,
+        "cwd": r.get("cwd"),
+        "git_branch": r.get("git_branch"),
+        "git_repo_root": r.get("git_repo_root"),
+    }
+
+
+def _project_tree_inputs(
+    db, session_limit: int, *, include_discovered: bool
+) -> tuple[list[dict], list[dict], list[dict], str | None]:
+    """Gather (sessions, projects, discovered_repos, active_id) for build_tree."""
+    rows = db.list_sessions_rich(
+        limit=session_limit,
+        offset=0,
+        order_by_last_active=True,
+        min_message_count=1,
+        include_children=False,
+        exclude_sources=_PROJECT_TREE_EXCLUDED_SOURCES,
+        include_archived=False,
+    )
+    sessions = [_project_tree_row(r) for r in rows]
+    try:
+        from tui_gateway import git_probe
+
+        git_probe.warm_roots(s["cwd"] for s in sessions if s.get("cwd"))
+    except Exception:
+        pass
+
+    from anakot_cli import projects_db as pdb
+
+    policy = _repo_discovery_policy()
+    policy_key = _repo_discovery_policy_key(policy)
+    with pdb.connect_closing() as conn:
+        if include_discovered:
+            pdb.reconcile_discovered_repos_policy(
+                conn,
+                policy_key,
+                preserve_unversioned=_repo_discovery_policy_is_default(policy),
+            )
+        projects = [p.to_dict() for p in pdb.list_projects(conn)]
+        active_id = pdb.get_active_id(conn)
+        discovered = (
+            _discover_repos_payload(
+                db,
+                conn=conn,
+                backfill=False,
+                include_cached=policy["enabled"],
+            )
+            if include_discovered
+            else []
+        )
+
+    return sessions, projects, discovered, active_id
+
+
+# Per-build memo for `_dir_exists_cached`. Cleared at the top of every
+# `_build_project_tree`, so a dir created or deleted between sidebar refreshes
+# is seen on the next one.
+_DIR_EXISTS_CACHE: dict[str, bool] = {}
+
+
+def _dir_exists_cached(path: str) -> bool:
+    """``os.path.isdir`` for the project tree, memoized per build."""
+    hit = _DIR_EXISTS_CACHE.get(path)
+    if hit is None:
+        hit = os.path.isdir(path)
+        _DIR_EXISTS_CACHE[path] = hit
+    return hit
+
+
+def _build_project_tree(
+    db, *, preview_limit: int, hydrate: bool, session_limit: int, include_discovered: bool
+) -> tuple[dict, str | None]:
+    """Gather inputs and run the one authoritative builder. Returns (tree, active_id)."""
+    from tui_gateway import project_tree
+
+    _DIR_EXISTS_CACHE.clear()
+    sessions, projects, discovered, active_id = _project_tree_inputs(
+        db, session_limit, include_discovered=include_discovered
+    )
+    tree = project_tree.build_tree(
+        projects,
+        sessions,
+        discovered,
+        _lazy_resolve_cwd_git,
+        preview_limit=preview_limit,
+        hydrate=hydrate,
+        is_junk_root=_is_repo_junk,
+        is_junk_cwd=_is_session_cwd_junk,
+        exists=_dir_exists_cached,
+    )
+    return tree, active_id
+
+
+def _lazy_resolve_cwd_git(cwd: str) -> dict | None:
+    """Resolve a cwd to its common git repo identity, cached by git_probe."""
+    try:
+        from tui_gateway import git_probe
+
+        return git_probe.resolve(cwd)
+    except Exception:
+        return None
+
+
+@method("projects.discover_repos")
+def _(rid, params: dict) -> dict:
+    """Repos for the desktop overview: scanned-from-disk (cached) ∪ session-derived."""
+    try:
+        db = _get_db()
+        if db is None:
+            return _ok(rid, {"repos": []})
+        from anakot_cli import projects_db as pdb
+
+        policy = _repo_discovery_policy()
+        policy_key = _repo_discovery_policy_key(policy)
+        with pdb.connect_closing() as conn:
+            pdb.reconcile_discovered_repos_policy(
+                conn,
+                policy_key,
+                preserve_unversioned=_repo_discovery_policy_is_default(policy),
+            )
+            repos = _discover_repos_payload(
+                db, conn=conn, include_cached=policy["enabled"]
+            )
+        return _ok(rid, {"repos": repos, "discovery_policy": policy})
+    except Exception as e:
+        return _err(rid, 5061, str(e))
+
+
+@method("projects.record_repos")
+def _(rid, params: dict) -> dict:
+    """Persist git repo roots found by the client's filesystem scan, then return
+    the merged repo list. The native crawl runs on the desktop (local fs); this
+    caches the result so later reads are instant instead of re-walking disk."""
+    try:
+        from anakot_cli import projects_db as pdb
+
+        policy = _repo_discovery_policy()
+        policy_key = _repo_discovery_policy_key(policy)
+        incoming_raw = params.get("discovery_policy")
+        incoming_policy = (
+            _repo_discovery_policy(incoming_raw)
+            if isinstance(incoming_raw, dict)
+            else None
+        )
+        incoming_matches = (
+            incoming_policy is not None
+            and _repo_discovery_policy_key(incoming_policy) == policy_key
+        )
+        accept_legacy_default = (
+            incoming_policy is None and _repo_discovery_policy_is_default(policy)
+        )
+
+        pairs: list[tuple[str, str | None]] = []
+        for item in params.get("repos") or []:
+            if isinstance(item, str):
+                pairs.append((item, None))
+            elif isinstance(item, dict) and item.get("root"):
+                pairs.append((str(item["root"]), item.get("label")))
+
+        with pdb.connect_closing() as conn:
+            pdb.reconcile_discovered_repos_policy(
+                conn,
+                policy_key,
+                preserve_unversioned=_repo_discovery_policy_is_default(policy),
+            )
+            accepted = bool(
+                policy["enabled"] and (incoming_matches or accept_legacy_default)
+            )
+            if accepted:
+                pdb.record_discovered_repos(
+                    conn, pairs, replace=True, policy_key=policy_key
+                )
+            elif not policy["enabled"]:
+                pdb.clear_discovered_repos(conn, policy_key=policy_key)
+
+        db = _get_db()
+        return _ok(
+            rid,
+            {
+                "repos": _discover_repos_payload(
+                    db, include_cached=policy["enabled"]
+                )
+                if db is not None
+                else [],
+                "accepted": accepted,
+                "discovery_policy": policy,
+            },
+        )
+    except Exception as e:
+        return _err(rid, 5061, str(e))
+
+
+@method("projects.tree")
+def _(rid, params: dict) -> dict:
+    """Authoritative project overview: project -> repo -> lane structure with
+    counts + a few preview sessions per project, plus the flat set of session
+    ids claimed by any project (so the desktop excludes them from flat Recents).
+    Lanes carry no session rows here; drill-in uses ``projects.project_sessions``.
+    """
+    try:
+        db = _get_db()
+        if db is None:
+            return _ok(rid, {"projects": [], "active_id": None, "scoped_session_ids": []})
+
+        tree, active_id = _build_project_tree(
+            db,
+            preview_limit=int(params.get("preview_limit") or 3),
+            hydrate=False,
+            session_limit=int(params.get("session_limit") or 2000),
+            include_discovered=True,
+        )
+        return _ok(
+            rid,
+            {"projects": tree["projects"], "active_id": active_id, "scoped_session_ids": tree["scoped_session_ids"]},
+        )
+    except Exception as e:
+        return _err(rid, 5061, str(e))
+
+
+@method("projects.project_sessions")
+def _(rid, params: dict) -> dict:
+    """Fully hydrated lanes (repo -> lane -> session rows) for one project,
+    built from the same authoritative grouping as ``projects.tree`` so ids and
+    membership match exactly. Used when the user enters a project."""
+    try:
+        project_id = str(params.get("project_id") or "")
+        if not project_id:
+            return _err(rid, 5063, "project_id required")
+
+        db = _get_db()
+        if db is None:
+            return _ok(rid, {"project": None})
+
+        tree, _active = _build_project_tree(
+            db, preview_limit=0, hydrate=True, session_limit=int(params.get("session_limit") or 5000),
+            include_discovered=False,
+        )
+        proj = next((p for p in tree["projects"] if p["id"] == project_id), None)
+        return _ok(rid, {"project": proj})
+    except Exception as e:
+        return _err(rid, 5061, str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Projects CRUD RPCs (Hermes parity: list / get / create / update / add_folder
+# / remove_folder / set_primary / archive / delete / set_active / for_cwd).
+# Each handler opens the per-profile projects DB and maps failures to stable
+# error codes so the sidebar can distinguish missing-project (5062) from bad
+# args (5063) from generic (5061).
+# ─────────────────────────────────────────────────────────────────────────
+
+class _NoProject(Exception):
+    pass
+
+
+_E_NO_PROJECT = 5062
+_E_PROJECT_ARG = 5063
+_E_PROJECTS = 5061
+
+
+def _projects_payload(conn) -> dict:
+    from anakot_cli import projects_db as pdb
+
+    return {
+        "projects": [p.to_dict() for p in pdb.list_projects(conn, include_archived=True)],
+        "active_id": pdb.get_active_id(conn),
+    }
+
+
+def _projects_method(name: str):
+    """Register a projects RPC, injecting (pdb, conn) and unifying error mapping."""
+
+    def decorator(fn):
+        @method(name)
+        def handler(rid, params: dict) -> dict:
+            try:
+                from anakot_cli import projects_db as pdb
+
+                with pdb.connect_closing() as conn:
+                    return fn(rid, params, pdb, conn)
+            except _NoProject:
+                return _err(rid, _E_NO_PROJECT, "no such project")
+            except ValueError as e:
+                return _err(rid, _E_PROJECT_ARG, str(e))
+            except Exception as e:
+                return _err(rid, _E_PROJECTS, str(e))
+
+        return handler
+
+    return decorator
+
+
+def _require_project(pdb, conn, params: dict):
+    """The project named by ``params['id']`` (or raise ``_NoProject``)."""
+    proj = pdb.get_project(conn, str(params.get("id") or ""))
+    if proj is None:
+        raise _NoProject
+    return proj
+
+
+@_projects_method("projects.list")
+def _(rid, params, pdb, conn) -> dict:
+    return _ok(rid, _projects_payload(conn))
+
+
+@_projects_method("projects.get")
+def _(rid, params, pdb, conn) -> dict:
+    return _ok(rid, {"project": _require_project(pdb, conn, params).to_dict()})
+
+
+@_projects_method("projects.create")
+def _(rid, params, pdb, conn) -> dict:
+    pid = pdb.create_project(
+        conn,
+        name=str(params.get("name") or ""),
+        slug=params.get("slug"),
+        folders=params.get("folders") or [],
+        primary_path=params.get("primary_path"),
+        description=params.get("description"),
+        icon=params.get("icon"),
+        color=params.get("color"),
+        board_slug=params.get("board_slug"),
+    )
+    if params.get("use"):
+        pdb.set_active(conn, pid)
+    proj = pdb.get_project(conn, pid)
+    return _ok(rid, {"project": proj.to_dict() if proj else None})
+
+
+@_projects_method("projects.update")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    pdb.update_project(
+        conn,
+        proj.id,
+        name=params.get("name"),
+        description=params.get("description"),
+        icon=params.get("icon"),
+        color=params.get("color"),
+        board_slug=params.get("board_slug"),
+    )
+    return _ok(rid, {"project": pdb.get_project(conn, proj.id).to_dict()})
+
+
+@_projects_method("projects.add_folder")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    pdb.add_folder(
+        conn,
+        proj.id,
+        str(params.get("path") or ""),
+        label=params.get("label"),
+        is_primary=bool(params.get("is_primary")),
+    )
+    return _ok(rid, {"project": pdb.get_project(conn, proj.id).to_dict()})
+
+
+@_projects_method("projects.remove_folder")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    pdb.remove_folder(conn, proj.id, str(params.get("path") or ""))
+    return _ok(rid, {"project": pdb.get_project(conn, proj.id).to_dict()})
+
+
+@_projects_method("projects.set_primary")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    pdb.set_primary(conn, proj.id, str(params.get("path") or ""))
+    return _ok(rid, {"project": pdb.get_project(conn, proj.id).to_dict()})
+
+
+@_projects_method("projects.archive")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    (pdb.restore_project if params.get("restore") else pdb.archive_project)(conn, proj.id)
+    return _ok(rid, _projects_payload(conn))
+
+
+@_projects_method("projects.delete")
+def _(rid, params, pdb, conn) -> dict:
+    proj = _require_project(pdb, conn, params)
+    pdb.delete_project(conn, proj.id)
+    return _ok(rid, _projects_payload(conn))
+
+
+@_projects_method("projects.set_active")
+def _(rid, params, pdb, conn) -> dict:
+    pdb.set_active(conn, _require_project(pdb, conn, params).id if params.get("id") else None)
+    return _ok(rid, {"active_id": pdb.get_active_id(conn)})
+
+
+@_projects_method("projects.for_cwd")
+def _(rid, params, pdb, conn) -> dict:
+    cwd = _completion_cwd({"cwd": str(params.get("cwd") or "").strip()} if params.get("cwd") else {})
+    proj = pdb.project_for_path(conn, cwd)
+    return _ok(rid, {"project": proj.to_dict() if proj else None, "cwd": cwd, "branch": _git_branch_for_cwd(cwd)})

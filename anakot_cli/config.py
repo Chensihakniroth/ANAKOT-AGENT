@@ -2425,6 +2425,16 @@ DEFAULT_CONFIG = {
         "vault_path": "",
     },
 
+    # Desktop (Electron app) launch options. These only affect the desktop app;
+    # they do not touch the CLI/gateway.
+    "desktop": {
+        # Git repository discovery for the Desktop Projects sidebar. Empty
+        # roots preserve the historical bounded scan of the user's home.
+        "repo_scan_enabled": True,
+        "repo_scan_roots": [],
+        "repo_scan_exclude_paths": [],
+    },
+
     # Config schema version - bump this when adding new required fields
     "_config_version": 27,
 }

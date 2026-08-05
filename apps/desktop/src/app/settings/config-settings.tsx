@@ -23,6 +23,7 @@ import { fieldCopyForSchemaKey } from './field-copy'
 import { enumOptionsFor, getNested, prettyName, setNested } from './helpers'
 import { ModelSettings } from './model-settings'
 import { EmptyState, ListRow, LoadingState, SettingsContent } from './primitives'
+import { QuickEntrySettings } from './quick-entry-settings'
 
 function ConfigField({
   schemaKey,
@@ -459,6 +460,11 @@ export function ConfigSettings({
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
             Enter the full path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory.
           </p>
+        </div>
+      )}
+      {activeSectionId === 'advanced' && (
+        <div className="mb-6 rounded-lg border border-[var(--color-border)] p-4">
+          <QuickEntrySettings />
         </div>
       )}
       {fields.length === 0 ? (

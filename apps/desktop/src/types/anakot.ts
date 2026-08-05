@@ -281,6 +281,10 @@ export interface SessionCreateResponse {
 export interface SessionInfo {
   archived?: boolean
   cwd?: null | string
+  /** Recorded git branch when the session's cwd was inside a checkout. */
+  git_branch?: null | string
+  /** Recorded repo root when the session's cwd was inside a checkout. */
+  git_repo_root?: null | string
   ended_at: null | number
   id: string
   /** Original root id of a compression chain, when this entry is a projected
@@ -306,6 +310,68 @@ export interface SessionInfo {
   is_default_profile?: boolean
 }
 
+/** A linked worktree as reported by `git worktree list` (Electron bridge). */
+export interface AnakotGitWorktree {
+  path: string
+  branch: null | string
+  isMain: boolean
+  detached: boolean
+  locked: boolean
+}
+
+/** A local branch as offered by the worktree pickers. */
+export interface AnakotGitBranch {
+  name: string
+  /** Currently checked out in this repo/worktree. */
+  checkedOut: boolean
+  /** The repo's default branch (main/master/…). */
+  isDefault: boolean
+  /** Worktree path if this branch is checked out in a non-primary worktree. */
+  worktreePath: null | string
+}
+
+/** A base/trunk branch candidate (the repo's integration branch). */
+export interface AnakotGitBaseBranch {
+  name: string
+  /** Remote-tracking branch (origin/…) vs a local branch. */
+  isRemote: boolean
+  /** The repo's default branch (origin/HEAD or local main/master). */
+  isDefault: boolean
+}
+
+/** A discovered git repo root on disk (repo scan). */
+export interface AnakotDiscoveredRepo {
+  root: string
+  label: string
+}
+
+/** A folder bound to a project (multi-folder workspace). */
+export interface ProjectFolder {
+  path: string
+  label: null | string
+  is_primary: boolean
+  added_at: number
+}
+
+/** A first-class named project (multi-folder workspace). */
+export interface ProjectInfo {
+  id: string
+  slug: string
+  name: string
+  description: null | string
+  icon: null | string
+  color: null | string
+  board_slug: null | string
+  primary_path: null | string
+  archived: boolean
+  created_at: number
+  folders: ProjectFolder[]
+}
+
+export interface ProjectsPayload {
+  projects: ProjectInfo[]
+}
+
 export interface SessionMessage {
   codex_reasoning_items?: unknown
   content: unknown
@@ -320,6 +386,10 @@ export interface SessionMessage {
   tool_call_id?: null | string
   tool_calls?: unknown
   tool_name?: string
+  /** Durable DB row id — `message.react` targets this. */
+  row_id?: number
+  /** Persisted tapback reactions on this message. */
+  reactions?: Array<{ author: string; emoji: string; at: number }>
 }
 
 export interface SessionMessagesResponse {

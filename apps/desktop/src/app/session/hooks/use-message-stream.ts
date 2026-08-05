@@ -31,9 +31,11 @@ import {
   setCurrentReasoningEffort,
   setCurrentServiceTier,
   setCurrentUsage,
+  setMessages,
   setTurnStartedAt,
   setYoloActive
 } from '@/store/session'
+import { recordAgentReaction } from '@/store/reactions-local'
 import { clearSessionSubagents, pruneDelegateFallbackSubagents, upsertSubagent } from '@/store/subagents'
 import { recordToolDiff } from '@/store/tool-diffs'
 import type { RpcEvent } from '@/types/anakot'
@@ -924,6 +926,53 @@ export function useMessageStream({
           if (sessionId) {
             updateSessionState(sessionId, state => ({ ...state, needsInput: true }))
           }
+        }
+      } else if (event.type === 'message.reaction') {
+        // The agent reacted to a message via the desktop-gated
+        // react_to_message tool. Already persisted — this only paints it now
+        // instead of at the next resume. Fresh ChatMessage object per change:
+        // the runtime repository caches normalized ThreadMessages in a WeakMap
+        // keyed by ChatMessage identity.
+        const reactedRowId = payload?.row_id
+
+        if (typeof reactedRowId === 'number') {
+          const nextReactions = Array.isArray(payload?.reactions) ? payload.reactions : []
+          const reactedRole = payload?.role === 'assistant' ? 'assistant' : 'user'
+
+          setMessages(messages => {
+            // Preferred leg: the message already knows its durable row id
+            // (rehydrated transcript, or a live row that has round-tripped).
+            const byRowId = messages.find(message => message.rowId === reactedRowId)
+
+            if (byRowId) {
+              // Overlay survives the end-of-turn resume, which rebuilds from
+              // in-memory history that doesn't carry this mid-turn DB write.
+              recordAgentReaction(reactedRowId, nextReactions)
+
+              return messages.map(message =>
+                message.rowId === reactedRowId ? { ...message, reactions: nextReactions } : message
+              )
+            }
+
+            // Live leg: the targeted message is still optimistic (no rowId —
+            // it hasn't round-tripped through a resume). The agent's default
+            // target is the newest message of that role, so stamp the reaction
+            // AND the now-known row id onto it. Without this the event matches
+            // nothing and the reaction only appears after a reload.
+            const lastIndex = messages.findLastIndex(
+              message => message.role === reactedRole && message.rowId === undefined
+            )
+
+            if (lastIndex === -1) {
+              return messages
+            }
+
+            recordAgentReaction(reactedRowId, nextReactions)
+
+            return messages.map((message, index) =>
+              index === lastIndex ? { ...message, rowId: reactedRowId, reactions: nextReactions } : message
+            )
+          })
         }
       } else if (event.type === 'error') {
         const errorMessage = payload?.message || 'Anakot reported an error'

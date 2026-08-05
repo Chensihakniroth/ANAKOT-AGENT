@@ -213,7 +213,9 @@ export const zhHant = defineLocale({
       technical: '技術',
       technicalDesc: '包含原始工具參數、結果與底層細節。',
       themeTitle: '主題',
-      themeDesc: '僅限桌面端的調色盤。所選模式會套用在其上。'
+      themeDesc: '僅限桌面端的調色盤。所選模式會套用在其上。',
+      reactionsTitle: '訊息回應',
+      reactionsDesc: 'iMessage 風格輕點回應：可為訊息新增回應，也可讓代理回應你的訊息。',
     },
     discordRpc: {
       title: 'Discord 狀態',
@@ -442,6 +444,15 @@ export const zhHant = defineLocale({
       autosaveFailed: '自動儲存失敗',
       imported: '設定已匯入',
       invalidJson: '設定 JSON 無效'
+    },
+    quickEntry: {
+      enabledTitle: '快捷輸入',
+      enabledDesc: '使用全域快捷鍵隨時隨地喚出迷你輸入框。',
+      shortcutTitle: '快捷鍵',
+      shortcutDesc: '輸入 Electron 快捷鍵格式（例如 CommandOrControl+Shift+Space）。',
+      takenBy: '此快捷鍵已被其他應用程式佔用。',
+      invalidShortcut: '快捷鍵無效 — 至少需要一個修飾鍵加一個按鍵（例如 CommandOrControl+Shift+Space）。',
+      active: '已啟用'
     },
     credentials: {
       pasteKey: '貼上金鑰',
@@ -1710,7 +1721,8 @@ export const zhHant = defineLocale({
       restoreCheckpoint: '還原檢查點',
       restoreNext: '還原至下一個檢查點',
       goForward: '前進',
-      sendEdited: '傳送編輯後的訊息'
+      sendEdited: '傳送編輯後的訊息',
+      react: '回應'
     },
     approval: {
       gatewayDisconnected: 'Anakot 閘道未連線',

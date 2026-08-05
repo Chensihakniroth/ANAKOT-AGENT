@@ -5,6 +5,7 @@ const {
   Notification,
   clipboard,
   dialog,
+  globalShortcut,
   ipcMain,
   nativeImage,
   nativeTheme,
@@ -12,6 +13,7 @@ const {
   powerMonitor,
   protocol,
   safeStorage,
+  screen,
   session,
   shell,
   systemPreferences
@@ -30,6 +32,20 @@ const { canImportAnakotCli, verifyAnakotCli } = require('./backend-probes.cjs')
 const { readLiveUpdateMarker, writeUpdateMarker } = require('./update-marker.cjs')
 const { probeGatewayWebSocket } = require('./gateway-ws-probe.cjs')
 const { serializeJsonBody, setJsonRequestHeaders } = require('./oauth-net-request.cjs')
+const {
+  createQuickEntryShortcut,
+  quickEntryWindowBounds,
+  sanitizeQuickEntrySettings
+} = require('./quick-entry.cjs')
+const {
+  listWorktrees,
+  addWorktree,
+  removeWorktree,
+  scanGitRepos,
+  listBranches,
+  listBaseBranches,
+  switchBranch
+} = require('./git-projects.cjs')
 const {
   buildPosixCleanupScript,
   buildWindowsCleanupScript,
@@ -5088,6 +5104,203 @@ function closePetOverlay() {
   petOverlayWindow = null
 }
 
+// --- Quick Entry (global-hotkey mini composer) -----------------------------
+// A frameless always-on-top window a global shortcut summons from anywhere. It
+// carries NO gateway connection of its own: the text is forwarded to the
+// primary renderer, which submits it through the SAME prompt-submit path the
+// normal composer uses (see store/quick-entry + the bridge hook in
+// desktop-controller). Pure accelerator/bounds logic lives in quick-entry.cjs.
+const QUICK_ENTRY_CONFIG_PATH = path.join(app.getPath('userData'), 'quick-entry.json')
+
+let quickEntryWindow = null
+
+// Latest state push from the primary renderer (connection + recent sessions),
+// replayed to a quick window that spawns after the push happened.
+let quickEntryLastState = null
+
+function readQuickEntrySettings() {
+  try {
+    return sanitizeQuickEntrySettings(JSON.parse(fs.readFileSync(QUICK_ENTRY_CONFIG_PATH, 'utf8')))
+  } catch {
+    // Missing / unreadable / malformed → shipped defaults (enabled, default chord).
+    return sanitizeQuickEntrySettings(undefined)
+  }
+}
+
+function writeQuickEntrySettings(settings) {
+  try {
+    fs.mkdirSync(path.dirname(QUICK_ENTRY_CONFIG_PATH), { recursive: true })
+    fs.writeFileSync(QUICK_ENTRY_CONFIG_PATH, JSON.stringify(settings, null, 2), 'utf8')
+  } catch (error) {
+    rememberLog(`[quick-entry] write failed: ${error.message}`)
+  }
+}
+
+function quickEntryUrl() {
+  if (DEV_SERVER) {
+    return `${DEV_SERVER.endsWith('/') ? DEV_SERVER.slice(0, -1) : DEV_SERVER}/index.html?win=quick#/`
+  }
+
+  return `${RENDERER_PROTOCOL}://localhost/index.html?win=quick#/`
+}
+
+function spawnQuickEntryWindow() {
+  const cursor = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursor)
+  const bounds = quickEntryWindowBounds(display?.workArea)
+
+  const win = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    // On Windows/Linux keep the helper out of the taskbar/alt-tab list; on
+    // macOS use an NSPanel so the frameless capture window never becomes the
+    // app's cmd-tab anchor.
+    skipTaskbar: !IS_MAC,
+    hasShadow: true,
+    alwaysOnTop: true,
+    type: IS_MAC ? 'panel' : undefined,
+    hiddenInMissionControl: IS_MAC,
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      devTools: true
+    }
+  })
+
+  win.setAlwaysOnTop(true, IS_MAC ? 'floating' : 'screen-saver')
+  win.setHiddenInMissionControl?.(true)
+
+  try {
+    win.setVisibleOnAllWorkspaces(
+      true,
+      IS_MAC ? { visibleOnFullScreen: true, skipTransformProcessType: true } : undefined
+    )
+  } catch {
+    // Not supported everywhere — best effort.
+  }
+
+  wireCommonWindowHandlers(win)
+
+  // Hide on blur. The window must never hold the user's focus captive — losing
+  // focus is the cheapest, least surprising dismiss (matches Spotlight).
+  win.on('blur', () => {
+    if (!win.isDestroyed()) {
+      win.hide()
+    }
+  })
+
+  win.on('closed', () => {
+    if (quickEntryWindow === win) {
+      quickEntryWindow = null
+    }
+  })
+
+  // Replay the last known gateway state as soon as the page can hear it — a
+  // freshly spawned quick window must not sit "disconnected" when the primary
+  // renderer already reported a live gateway.
+  win.webContents.on('did-finish-load', () => {
+    if (!win.isDestroyed() && quickEntryLastState) {
+      win.webContents.send('anakot:quick-entry:state', quickEntryLastState)
+    }
+  })
+
+  win.loadURL(quickEntryUrl())
+
+  return win
+}
+
+// Move the (already-open) window to the display the cursor is on, so the chord
+// summons it where the user is looking rather than where they last were.
+function repositionQuickEntryWindow(win) {
+  try {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    win.setBounds(quickEntryWindowBounds(display?.workArea))
+  } catch (error) {
+    rememberLog(`[quick-entry] reposition failed: ${error.message}`)
+  }
+}
+
+function showQuickEntryWindow() {
+  if (!quickEntryWindow || quickEntryWindow.isDestroyed()) {
+    quickEntryWindow = spawnQuickEntryWindow()
+    quickEntryWindow.once('ready-to-show', () => {
+      if (!quickEntryWindow?.isDestroyed()) {
+        quickEntryWindow.show()
+        quickEntryWindow.focus()
+      }
+    })
+
+    return
+  }
+
+  repositionQuickEntryWindow(quickEntryWindow)
+  quickEntryWindow.show()
+  quickEntryWindow.focus()
+  // Re-summoned: tell the renderer to clear any stale draft and refocus.
+  quickEntryWindow.webContents.send('anakot:quick-entry:shown')
+}
+
+function hideQuickEntryWindow() {
+  if (quickEntryWindow && !quickEntryWindow.isDestroyed()) {
+    quickEntryWindow.hide()
+  }
+}
+
+// The chord toggles: pressing it while the composer is up puts it away, so one
+// gesture does exactly one thing in both directions.
+function toggleQuickEntryWindow() {
+  if (quickEntryWindow && !quickEntryWindow.isDestroyed() && quickEntryWindow.isVisible()) {
+    hideQuickEntryWindow()
+
+    return
+  }
+
+  showQuickEntryWindow()
+}
+
+const quickEntryShortcut = createQuickEntryShortcut(globalShortcut, toggleQuickEntryWindow)
+
+function applyQuickEntrySettings(settings) {
+  const state = quickEntryShortcut.apply(settings)
+
+  if (!settings.enabled) {
+    // Turning the feature off must not leave an orphan always-on-top window.
+    if (quickEntryWindow && !quickEntryWindow.isDestroyed()) {
+      quickEntryWindow.close()
+    }
+
+    quickEntryWindow = null
+  }
+
+  if (state.error === 'taken') {
+    rememberLog(`[quick-entry] shortcut ${state.shortcut} is already taken by another application`)
+  } else if (state.error === 'invalid') {
+    rememberLog(`[quick-entry] shortcut ${state.shortcut} is not a valid accelerator`)
+  }
+
+  return { ...state, enabled: settings.enabled }
+}
+
+function closeQuickEntryWindow() {
+  quickEntryShortcut.dispose()
+
+  if (quickEntryWindow && !quickEntryWindow.isDestroyed()) {
+    quickEntryWindow.close()
+  }
+
+  quickEntryWindow = null
+}
+
 function createWindow() {
   const icon = getAppIconPath()
   const savedState = loadWindowState()
@@ -5955,6 +6168,19 @@ ipcMain.handle('anakot:writeClipboard', (_event, text) => {
   return true
 })
 
+ipcMain.handle('anakot:revealPath', (_event, path) => {
+  const target = String(path || '').trim()
+
+  if (!target) return false
+
+  try {
+    shell.showItemInFolder(target)
+    return true
+  } catch {
+    return false
+  }
+})
+
 ipcMain.handle('anakot:saveImageFromUrl', (_event, url) => saveImageFromUrl(String(url || '')))
 
 ipcMain.handle('anakot:saveImageBuffer', async (_event, payload) => {
@@ -6788,6 +7014,85 @@ ipcMain.handle('anakot:git:checkout-new-branch', async (_event, { cwd, branch })
   }
 })
 
+// ── Git worktree management (Projects "Start work" flow) ──────────────────
+// Errors surface to the renderer as rejected promises so it can toast.
+ipcMain.handle('anakot:git:worktreeList', async (_event, repoPath) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error, worktrees: [] }
+    const worktrees = await listWorktrees(validated.root, resolveGitBinary())
+    return { ok: true, worktrees }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git worktree list failed', worktrees: [] }
+  }
+})
+
+ipcMain.handle('anakot:git:worktreeAdd', async (_event, repoPath, options) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await addWorktree(validated.root, options || {}, resolveGitBinary())
+    return { ok: true, ...result }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git worktree add failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await removeWorktree(validated.root, worktreePath, options || {}, resolveGitBinary())
+    return { ok: true, ...result }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git worktree remove failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:branchSwitch', async (_event, repoPath, branch) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error }
+    const result = await switchBranch(validated.root, branch, resolveGitBinary())
+    return { ok: true, ...result }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git checkout failed' }
+  }
+})
+
+ipcMain.handle('anakot:git:branchList', async (_event, repoPath) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error, branches: [] }
+    const branches = await listBranches(validated.root, resolveGitBinary())
+    return { ok: true, branches }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git branch list failed', branches: [] }
+  }
+})
+
+ipcMain.handle('anakot:git:baseBranchList', async (_event, repoPath) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error, branches: [] }
+    const branches = await listBaseBranches(validated.root, resolveGitBinary())
+    return { ok: true, branches }
+  } catch (error) {
+    return { ok: false, error: error?.message || 'git base branch list failed', branches: [] }
+  }
+})
+
+// Repo-first project discovery: scan bounded roots for git repos (pure fs walk,
+// no native addon). Never throws to the renderer — failures yield an empty list.
+ipcMain.handle('anakot:git:scanRepos', async (_event, roots, options) => {
+  try {
+    const repos = await scanGitRepos(roots || [], options || {})
+    return { ok: true, repos }
+  } catch {
+    return { ok: true, repos: [] }
+  }
+})
+
 // ── Git diff stats (churn data) ────────────────────────────────────────────
 
 ipcMain.handle('anakot:git:diff-stats', async (_event, { cwd }) => {
@@ -7477,6 +7782,42 @@ ipcMain.on('anakot:pet-overlay:control', (_event, payload) => {
   mainWindow.webContents.send('anakot:pet-overlay:control', payload)
 })
 
+// Quick Entry IPC — the quick window is a dumb capture surface. All it needs is
+// (1) the latest gateway state so it knows what "send" means, (2) a way to
+// dismiss itself, and (3) a one-way submit path to the primary renderer.
+ipcMain.on('anakot:quick-entry:state', (_event, payload) => {
+  quickEntryLastState = payload
+
+  if (quickEntryWindow && !quickEntryWindow.isDestroyed()) {
+    quickEntryWindow.webContents.send('anakot:quick-entry:state', payload)
+  }
+})
+
+// Overlay → primary renderer: forward the quick-window's submit; the renderer
+// routes it through the normal prompt-submit path and tells the quick window to
+// hide when the send lands.
+ipcMain.on('anakot:quick-entry:submit', (_event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  mainWindow.webContents.send('anakot:quick-entry:submit', payload)
+})
+
+ipcMain.on('anakot:quick-entry:close', () => {
+  hideQuickEntryWindow()
+})
+
+ipcMain.handle('anakot:quick-entry:get-settings', () => readQuickEntrySettings())
+
+ipcMain.handle('anakot:quick-entry:set-settings', (_event, settings) => {
+  const sanitized = sanitizeQuickEntrySettings(settings)
+  writeQuickEntrySettings(sanitized)
+  applyQuickEntrySettings(sanitized)
+
+  return applyQuickEntrySettings(sanitized)
+})
+
 
 app.whenReady().then(() => {
   if (IS_MAC) {
@@ -7498,6 +7839,10 @@ app.whenReady().then(() => {
   discordRpc.initRpc(app.getPath('userData')).catch(e => {
     console.warn('[discord-rpc] deferred init failed:', e.message)
   })
+
+  // Quick Entry — register the global chord as soon as the app is up. The
+  // feature defaults to ON, so this must not wait for the renderer.
+  applyQuickEntrySettings(readQuickEntrySettings())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -7544,6 +7889,7 @@ app.on('before-quit', () => {
   flushDesktopLogBufferSync()
   closePreviewWatchers()
   closePetOverlay()
+  closeQuickEntryWindow()
   discordRpc.destroyRpc()
   stopAllLsp()
 
