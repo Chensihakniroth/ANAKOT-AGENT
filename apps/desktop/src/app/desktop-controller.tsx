@@ -71,6 +71,7 @@ import { WelcomeView } from '@/components/workbench/WelcomeView'
 
 import { openRecentFile, setActiveFilePath, closeEditorTab, setActiveEditorTab, $editorTabs, $activeEditorTabId } from '@/store/workbench'
 import { ChatView } from './chat'
+import { ChatSidebar } from './chat/sidebar'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
 import {
   ChatPreviewRail,
@@ -642,21 +643,21 @@ export function DesktopController() {
     toggleCommandCenter
   })
 
-  // The ChatSidebar (session history) is now rendered inside the Chat panel.
-  // The Explorer panel has its own file tree.
-  // We no longer pass `sidebar` into SidebarHost.
-  // Chat panel: compact session list + active chat conversation
+  // The ChatSidebar (session history + Projects & Worktrees) is rendered
+  // inside the workbench chat panel. `embedded` hides the legacy nav rail
+  // (the ActivityBar already provides navigation) and the titlebar offset.
   const chatPanel = (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {/* Compact session list */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <SessionList
-          onSelectSession={(sessionId) => { navigate(sessionRoute(sessionId)) }}
-          onNewSession={() => startFreshSessionDraft()}
-          onNewSessionInWorkspace={startSessionInWorkspace}
-        />
-      </div>
-    </div>
+    <ChatSidebar
+      embedded
+      currentView={currentView}
+      onArchiveSession={sessionId => void archiveSession(sessionId)}
+      onDeleteSession={sessionId => void removeSession(sessionId)}
+      onLoadMoreProfileSessions={loadMoreSessionsForProfile}
+      onLoadMoreSessions={loadMoreSessions}
+      onNavigate={selectSidebarItem}
+      onNewSessionInWorkspace={startSessionInWorkspace}
+      onResumeSession={sessionId => navigate(sessionRoute(sessionId))}
+    />
   )
 
   const explorerPanel = (

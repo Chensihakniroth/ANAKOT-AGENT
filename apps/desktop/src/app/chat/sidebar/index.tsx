@@ -264,7 +264,7 @@ function useSortableBindings(id: string) {
 }
 
 interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  currentView: AppView
+  currentView: AppView | 'plugin-page'
   onNavigate: (item: SidebarNavItem) => void
   onLoadMoreSessions: () => void
   onLoadMoreProfileSessions?: (profile: string) => Promise<void> | void
@@ -272,6 +272,8 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDeleteSession: (sessionId: string) => void
   onArchiveSession: (sessionId: string) => void
   onNewSessionInWorkspace: (path: null | string) => void
+  /** Mounted inside the workbench chat panel: hide the old nav rail + titlebar offset. */
+  embedded?: boolean
 }
 
 export function ChatSidebar({
@@ -282,7 +284,8 @@ export function ChatSidebar({
   onResumeSession,
   onDeleteSession,
   onArchiveSession,
-  onNewSessionInWorkspace
+  onNewSessionInWorkspace,
+  embedded = false
 }: ChatSidebarProps) {
   const { t } = useI18n()
   const s = t.sidebar
@@ -755,10 +758,11 @@ export function ChatSidebar({
       collapsible="none"
     >
       <SidebarContent className="gap-0 overflow-hidden bg-transparent px-2.5">
-        <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-px">
-              {SIDEBAR_NAV.map(item => {
+        {!embedded && (
+          <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-px">
+                {SIDEBAR_NAV.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
 
                 const active =
@@ -811,9 +815,10 @@ export function ChatSidebar({
                   </SidebarMenuItem>
                 )
               })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {sidebarOpen && showSessionSections && (
           <div className="shrink-0 px-2 pb-1 pt-1">
