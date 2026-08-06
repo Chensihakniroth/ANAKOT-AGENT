@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
-import { $sessions, $sessionsLoading, $selectedStoredSessionId, $workingSessionIds } from '@/store/session'
+import { $sessions, $sessionsLoading, $selectedStoredSessionId, $workingSessionIds, sessionPinId } from '@/store/session'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { SearchField } from '@/components/ui/search-field'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
@@ -54,7 +54,7 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
   const workingIds = useStore($workingSessionIds)
   const [query, setQuery] = useState('')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
-  const [contextMenu, setContextMenu] = useState<{ sessionId: string; x: number; y: number } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ session: SessionInfo; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -90,8 +90,8 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
     ? sessions.filter(s => sessionMatchesSearch(s, trimmedQuery)).slice(0, 20)
     : sessions
 
-  const pinnedSessions = filtered.filter(s => pinnedIds.includes(s.id))
-  const unpinnedSessions = filtered.filter(s => !pinnedIds.includes(s.id))
+  const pinnedSessions = filtered.filter(s => pinnedIds.includes(sessionPinId(s)))
+  const unpinnedSessions = filtered.filter(s => !pinnedIds.includes(sessionPinId(s)))
 
   const workspaceGroups = useMemo(
     () => groupSessionsByWorkspace(unpinnedSessions, t.sidebar?.noWorkspace || 'No workspace'),
@@ -115,29 +115,32 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
     })
   }
 
-  const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
+  const handleContextMenu = (e: React.MouseEvent, session: SessionInfo) => {
     e.preventDefault()
     e.stopPropagation()
-    setContextMenu({ sessionId, x: e.clientX, y: e.clientY })
+    setContextMenu({ session, x: e.clientX, y: e.clientY })
   }
 
-  const handlePinSession = (sessionId: string) => {
-    if (pinnedIds.includes(sessionId)) {
-      unpinSession(sessionId)
+  const handlePinSession = useCallback((session: SessionInfo) => {
+    const pinId = sessionPinId(session)
+    if (pinnedIds.includes(pinId)) {
+      unpinSession(pinId)
       notify({ durationMs: 2_000, kind: 'success', message: 'Session unpinned' })
     } else {
-      pinSession(sessionId)
+      pinSession(pinId)
       notify({ durationMs: 2_000, kind: 'success', message: 'Session pinned' })
     }
     setContextMenu(null)
-  }
+  }, [pinnedIds])
 
-  const handleArchiveSession = useCallback(async (sessionId: string) => {
+  const handleArchiveSession = useCallback(async (session: SessionInfo) => {
     setContextMenu(null)
     try {
-      const res = await setSessionArchived(sessionId, true)
+      const res = await setSessionArchived(session.id, true, session.profile)
       if (res?.ok !== false) {
-        setSessions(prev => prev.filter(s => s.id !== sessionId))
+        const pinId = sessionPinId(session)
+        unpinSession(pinId)
+        setSessions(prev => prev.filter(s => s.id !== session.id))
         notify({ durationMs: 2_000, kind: 'success', message: 'Session archived' })
       } else {
         notify({ durationMs: 3_000, kind: 'error', message: 'Failed to archive session' })
@@ -147,20 +150,27 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
     }
   }, [])
 
-  const handleDeleteSession = useCallback(async (sessionId: string) => {
+  const handleDeleteSession = useCallback(async (session: SessionInfo) => {
     setContextMenu(null)
     try {
-      const res = await deleteSession(sessionId)
-      if (res?.ok) {
-        setSessions(prev => prev.filter(s => s.id !== sessionId))
+      const res = await deleteSession(session.id, session.profile)
+      // web_server returns { ok: true }; api_server returns { object: "anakot.session.deleted", deleted: true }
+      const success = res?.ok || (res as unknown as { deleted?: boolean })?.deleted || (res as unknown as { object?: string })?.object === 'anakot.session.deleted'
+      if (success) {
+        const pinId = sessionPinId(session)
+        unpinSession(pinId)
+        setSessions(prev => prev.filter(s => s.id !== session.id))
         notify({ durationMs: 2_000, kind: 'success', message: 'Session deleted' })
+        if (selectedId === session.id) {
+          onNewSession()
+        }
       } else {
         notify({ durationMs: 3_000, kind: 'error', message: 'Failed to delete session' })
       }
     } catch (err) {
       notifyError(err, 'Failed to delete session')
     }
-  }, [])
+  }, [selectedId, onNewSession])
 
   const handleDoubleClick = useCallback((sessionId: string, currentTitle: string) => {
     setRenamingId(sessionId)
@@ -251,6 +261,7 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
                     renameRef={renameRef}
                     onSelect={onSelectSession}
                     onContextMenu={handleContextMenu}
+                    onPinToggle={handlePinSession}
                     onDoubleClick={handleDoubleClick}
                     onRenameCommit={commitRename}
                     onRenameCancel={cancelRename}
@@ -298,13 +309,14 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
                       key={session.id}
                       session={session}
                       isActive={session.id === selectedId}
-                      isPinned={pinnedIds.includes(session.id)}
+                      isPinned={pinnedIds.includes(sessionPinId(session))}
                       isWorking={workingIds.includes(session.id)}
                       isRenaming={renamingId === session.id}
                       renameValue={renameValue}
                       renameRef={renameRef}
                       onSelect={onSelectSession}
                       onContextMenu={handleContextMenu}
+                      onPinToggle={handlePinSession}
                       onDoubleClick={handleDoubleClick}
                       onRenameCommit={commitRename}
                       onRenameCancel={cancelRename}
@@ -328,15 +340,15 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
         >
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-            onClick={() => handlePinSession(contextMenu.sessionId)}
+            onClick={() => handlePinSession(contextMenu.session)}
             type="button"
           >
-            <Codicon name={pinnedIds.includes(contextMenu.sessionId) ? 'pinned' : 'pin'} size="0.875rem" />
-            {pinnedIds.includes(contextMenu.sessionId) ? 'Unpin session' : 'Pin session'}
+            <Codicon name={pinnedIds.includes(sessionPinId(contextMenu.session)) ? 'pinned' : 'pin'} size="0.875rem" />
+            {pinnedIds.includes(sessionPinId(contextMenu.session)) ? 'Unpin session' : 'Pin session'}
           </button>
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-foreground"
-            onClick={() => handleArchiveSession(contextMenu.sessionId)}
+            onClick={() => handleArchiveSession(contextMenu.session)}
             type="button"
           >
             <Codicon name="archive" size="0.875rem" />
@@ -345,7 +357,7 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
           <div className="mx-3 my-0.5 h-px bg-(--ui-stroke-tertiary)" />
           <button
             className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-destructive hover:bg-(--ui-control-hover-background)"
-            onClick={() => handleDeleteSession(contextMenu.sessionId)}
+            onClick={() => handleDeleteSession(contextMenu.session)}
             type="button"
           >
             <Codicon name="trash" size="0.875rem" />
@@ -357,8 +369,8 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
   )
 }
 
-function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, renameValue, renameRef, onSelect, onContextMenu, onDoubleClick, onRenameCommit, onRenameCancel, onRenameChange }: {
-  session: { id: string; title: string | null; preview?: string | null }
+function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, renameValue, renameRef, onSelect, onContextMenu, onPinToggle, onDoubleClick, onRenameCommit, onRenameCancel, onRenameChange }: {
+  session: SessionInfo
   isActive: boolean
   isPinned: boolean
   isWorking: boolean
@@ -366,7 +378,8 @@ function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, rename
   renameValue: string
   renameRef: React.RefObject<HTMLInputElement | null>
   onSelect: (id: string) => void
-  onContextMenu: (e: React.MouseEvent, sessionId: string) => void
+  onContextMenu: (e: React.MouseEvent, session: SessionInfo) => void
+  onPinToggle: (session: SessionInfo) => void
   onDoubleClick: (sessionId: string, currentTitle: string) => void
   onRenameCommit: () => void
   onRenameCancel: () => void
@@ -390,38 +403,53 @@ function SessionRow({ session, isActive, isPinned, isWorking, isRenaming, rename
     )
   }
 
+  const title = session.title?.trim() || session.preview?.trim() || 'Untitled'
+
   return (
-    <button
+    <div
       className={cn(
-        'group flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
+        'group flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer select-none',
         isActive
           ? 'bg-(--ui-control-active-background) text-foreground'
           : 'text-muted-foreground hover:bg-(--ui-control-hover-background) hover:text-(--ui-text-secondary)'
       )}
       onClick={() => onSelect(session.id)}
-      onContextMenu={e => onContextMenu(e, session.id)}
+      onContextMenu={e => onContextMenu(e, session)}
       onDoubleClick={e => {
         e.preventDefault()
-        onDoubleClick(session.id, session.title?.trim() || session.preview?.trim() || 'Untitled')
+        onDoubleClick(session.id, title)
       }}
-      type="button"
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect(session.id)
+        }
+      }}
     >
       <Codicon name="symbol-file" size="0.625rem" className="shrink-0" />
-      <span className="truncate">{session.title?.trim() || session.preview?.trim() || 'Untitled'}</span>
-      {session.preview != null && session.preview !== '' && (
-        <p className="mt-0.5 line-clamp-2 text-[0.6rem] leading-tight text-muted-foreground/60">
-          {session.preview}
-        </p>
-      )}
+      <span className="truncate flex-1">{title}</span>
       {isWorking && (
         <span className="relative ml-auto flex h-1.5 w-1.5 shrink-0">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
         </span>
       )}
-      {isPinned && !isWorking && (
-        <Codicon name="pinned" size="0.5rem" className="ml-auto shrink-0 text-muted-foreground/50" />
-      )}
-    </button>
+      <button
+        type="button"
+        className={cn(
+          'shrink-0 p-0.5 rounded hover:bg-muted/80 transition-opacity',
+          isWorking ? 'hidden' : isPinned ? 'ml-1 opacity-100 text-primary' : 'ml-auto opacity-0 group-hover:opacity-100 text-muted-foreground/60 hover:text-foreground'
+        )}
+        title={isPinned ? 'Unpin session' : 'Pin session'}
+        onClick={e => {
+          e.stopPropagation()
+          onPinToggle(session)
+        }}
+      >
+        <Codicon name={isPinned ? 'pinned' : 'pin'} size="0.625rem" />
+      </button>
+    </div>
   )
 }

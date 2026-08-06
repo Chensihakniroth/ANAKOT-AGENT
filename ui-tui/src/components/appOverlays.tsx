@@ -2,7 +2,7 @@ import { Box, Text } from '@anakot/ink'
 import { useStore } from '@nanostores/react'
 
 import { useGateway } from '../app/gatewayContext.js'
-import type { AppOverlaysProps } from '../app/interfaces.js'
+import type { AppLayoutProps, AppOverlaysProps } from '../app/interfaces.js'
 import { $overlayState, patchOverlayState } from '../app/overlayStore.js'
 import { $uiSessionId, $uiTheme } from '../app/uiStore.js'
 
@@ -189,7 +189,7 @@ export function OverlaysInline({
       {!!completions.length && (
         <FloatBox color={theme.color.primary}>
           <Box flexDirection="column" width={Math.max(28, cols - 6)}>
-            {completions.slice(start, start + viewportSize).map((item, i) => {
+            {completions.slice(start, start + viewportSize).map((item: { text: string; display: string; meta?: string }, i: number) => {
               const active = start + i === compIdx
 
               return (

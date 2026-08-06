@@ -21,6 +21,7 @@
     "audit:tui": "npm audit --workspace ui-tui",
     "audit:fix:root": "npm audit fix --workspaces=false",
     "audit:fix:web": "npm audit fix --workspace web",
+    "type-check": "npm run type-check --workspaces --if-present",
     "audit:fix:tui": "npm audit fix --workspace ui-tui",
     "dedupe-shiki": "node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/shiki',{recursive:true,force:true})}catch(e){}\" && node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/@shikijs',{recursive:true,force:true})}catch(e){}\""
   },

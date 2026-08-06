@@ -693,7 +693,7 @@ class TurnController {
     this.pulseReasoningStreaming()
   }
 
-  recordReasoningDelta(text: string, force = boolean) {
+  recordReasoningDelta(text: string, force = false) {
     if (this.interrupted || (!force && !getUiState().showReasoning)) {
       return
     }

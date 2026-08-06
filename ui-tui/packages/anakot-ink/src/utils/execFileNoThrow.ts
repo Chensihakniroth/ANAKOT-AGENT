@@ -32,9 +32,9 @@ export function execFileNoThrow(
     // doesn't inherit those pipe FDs — prevents handle leaks that can
     // keep the parent process alive. No output data is collected in
     // this mode; both stdout and stderr will be empty strings.
-    const stdioConfig = options.resolveOnExit
-      ? ['pipe', 'ignore', 'ignore'] as const
-      : 'pipe' as const
+    const stdioConfig: import('child_process').StdioOptions = options.resolveOnExit
+      ? ['pipe', 'ignore', 'ignore']
+      : 'pipe'
 
     const child = spawn(file, args, {
       cwd: options.useCwd ? process.cwd() : undefined,
