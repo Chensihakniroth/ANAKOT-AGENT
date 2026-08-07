@@ -223,6 +223,14 @@ export const ja = defineLocale({
       themeDesc: 'デスクトップ専用のパレットです。選択したモードの上に適用されます。',
       reactionsTitle: 'メッセージリアクション',
       reactionsDesc: 'iMessage風のタップバック: メッセージにリアクションでき、エージェントもあなたのメッセージにリアクションできます。',
+      embedsTitle: 'インライン埋め込み',
+      embedsDesc:
+        'リッチプレビューは第三者サイト（YouTube、X など）から読み込まれます。確認は許可するまでプレースホルダーを表示し、常には自動で読み込み、オフはリンクのままにします。',
+      embedsAsk: '確認',
+      embedsAlways: '常に',
+      embedsOff: 'オフ',
+      embedsReset: count => `許可済み ${count} 件をリセット${count === 1 ? '' : ''}`,
+
     },
     discordRpc: {
       title: 'Discord プレゼンス',
@@ -1368,7 +1376,11 @@ export const ja = defineLocale({
         description: '選択したコードがどのように機能するかを説明し、主要なファイルにリンクします。',
         text: 'これがどのように機能するか説明し、主要なファイルを教えてください。'
       }
-    }
+    },
+    wakeWord: 'ウェイクワード（"hey casca"）— 常時待機',
+    wakeWordActive: 'ウェイクワード有効 — クリックで停止',
+    wakeWordUnavailable: 'ウェイクワード利用不可 — マイク・STT・TTS設定を確認',
+    wakeWordBusy: 'ウェイクワード…'
   },
 
   updates: {

@@ -113,6 +113,13 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
         "numpy==2.4.3",
     ),
 
+    # ─── Wake-word detection ───────────────────────────────────────────────
+    # openWakeWord — on-device hotword ("hey hermes") detection. openwakeword
+    # itself is the only hard dep: onnxruntime/numpy/sounddevice already ship
+    # via the core deps and the stt.faster_whisper feature. Keep the pin in
+    # sync with the `wake` extra in pyproject.toml.
+    "wake.openwakeword": ("openwakeword==0.6.0",),
+
     # ─── Image generation backends ─────────────────────────────────────────
     "image.fal": ("fal-client==0.13.1",),
 

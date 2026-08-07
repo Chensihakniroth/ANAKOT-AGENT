@@ -42,6 +42,14 @@ import {
 } from '@/store/composer-queue'
 import { $gatewayState, $messages } from '@/store/session'
 import { $threadScrolledUp } from '@/store/thread-scroll'
+import {
+  $wakeFired,
+  armWake,
+  initWakeWord,
+  pauseWake,
+  refreshWakeStatus,
+  resumeWake
+} from '@/store/wake-word'
 
 import { extractDroppedFiles, ANAKOT_PATHS_MIME } from '../hooks/use-composer-actions'
 
@@ -160,6 +168,35 @@ export function ChatBar({
   const dragDepthRef = useRef(0)
   const composingRef = useRef(false) // true during IME composition (CJK input)
   const lastSpokenIdRef = useRef<string | null>(null)
+
+  // Wake-word ("hey casca") integration: refresh status on mount, auto-arm
+  // when the master switch is on, and open the voice conversation when the
+  // backend detects the phrase. The fired event is consumed immediately so a
+  // stale wake can never re-trigger when a conversation ends later.
+  const wakeFired = useStore($wakeFired)
+
+  useEffect(() => {
+    initWakeWord()
+    void (async () => {
+      const status = await refreshWakeStatus()
+      if (status?.enabled && !status.listening) {
+        void armWake()
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!wakeFired) {
+      return
+    }
+    $wakeFired.set(null) // consume — a wake that lands while busy is dropped
+    if (busy || voiceConversationActive) {
+      return
+    }
+    void pauseWake() // free the backend mic for the renderer's capture
+    setVoiceConversationActive(true)
+  }, [busy, voiceConversationActive, wakeFired])
 
   const narrow = useMediaQuery('(max-width: 30rem)')
 
@@ -1354,8 +1391,12 @@ export function ChatBar({
         onEnd: () => {
           setVoiceConversationActive(false)
           void conversation.end()
+          void resumeWake() // re-arm the wake listener once the mic is free
         },
-        onStart: () => setVoiceConversationActive(true),
+        onStart: () => {
+          void pauseWake() // free the backend mic while the renderer captures
+          setVoiceConversationActive(true)
+        },
         onStopTurn: conversation.stopTurn,
         onToggleMute: conversation.toggleMute,
         status: conversation.status

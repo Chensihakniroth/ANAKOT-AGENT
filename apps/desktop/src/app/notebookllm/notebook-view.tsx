@@ -27,6 +27,7 @@ import {
   reorderSources,
   renameSource,
   duplicateNotebook,
+  openNotebookChatStream,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
@@ -595,28 +596,13 @@ ${src.summary}
     chatStreamAbortRef.current = controller;
 
     try {
-      const token = (window as unknown as Record<string, unknown>).__ANAKOT_SESSION_TOKEN__ as string | undefined;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["X-Anakot-Session-Token"] = token;
+      const reader = await openNotebookChatStream(
+        currentNotebook.id,
+        question,
+        updatedMessages.slice(0, -1).slice(-20),
+        controller.signal
+      );
 
-      const res = await fetch(`/api/notebooks/${currentNotebook.id}/chat/stream`, {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({ message: question, history: updatedMessages.slice(0, -1).slice(-20) }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({ detail: "Request failed" }));
-        throw new Error(errBody.detail || `HTTP ${res.status}`);
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response stream");
-
-      const decoder = new TextDecoder();
-      let buffer = "";
       let accumulated = "";
 
       // Add empty assistant message that we'll update progressively
@@ -625,43 +611,13 @@ ${src.summary}
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process SSE lines
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") break;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.error) {
-                // Backend sent an error (e.g. no API key, provider error)
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = { role: "assistant", content: "" };
-                  return next;
-                });
-                throw new Error(parsed.error);
-              }
-              if (parsed.delta) {
-                accumulated += parsed.delta;
-                const snap = accumulated;
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  next[next.length - 1] = { role: "assistant", content: snap };
-                  return next;
-                });
-              }
-            } catch (e) {
-              if (e instanceof Error && e.message && !e.message.includes("JSON")) {
-                throw e; // Re-throw real errors (not JSON parse errors)
-              }
-            }
-          }
-        }
+        accumulated += value;
+        const snap = accumulated;
+        setChatMessages((prev) => {
+          const next = [...prev];
+          next[next.length - 1] = { role: "assistant", content: snap };
+          return next;
+        });
       }
 
       // Persist final accumulated response

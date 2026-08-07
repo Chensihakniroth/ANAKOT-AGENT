@@ -302,6 +302,14 @@ export const en: Translations = {
       themeDesc: 'Desktop palettes only. The selected mode is applied on top.',
       reactionsTitle: 'Message Reactions',
       reactionsDesc: 'iMessage-style tapbacks: react to messages and let the agent react to yours.',
+      embedsTitle: 'Inline Embeds',
+      embedsDesc:
+        'Rich previews load from third-party sites (YouTube, X, …). Ask shows a placeholder until you allow each one; Always loads them automatically; Off keeps plain links.',
+      embedsAsk: 'Ask',
+      embedsAlways: 'Always',
+      embedsOff: 'Off',
+      embedsReset: count => `Reset ${count} allowed ${count === 1 ? 'service' : 'services'}`,
+
       pet: {
         title: 'Desktop Pets',
         intro: 'Browse and adopt animated pets from the petdex gallery, or generate your own with AI.',
@@ -562,7 +570,8 @@ export const en: Translations = {
         mcp: { label: 'MCP', hint: 'MCP tool routing' },
         title_generation: { label: 'Title gen', hint: 'Session titles' },
         curator: { label: 'Curator', hint: 'Skill-usage review' },
-        commit_gen: { label: 'Commit gen', hint: 'Commit messages' }
+        commit_gen: { label: 'Commit gen', hint: 'Commit messages' },
+        notebook_chat: { label: 'Notebook chat', hint: 'NotebookLLM conversations' }
       }
     },
     providers: {
@@ -1413,7 +1422,11 @@ export const en: Translations = {
       }
     },
     autoReadAloud: 'Auto-read aloud',
-    autoReadAloudDesc: 'Automatically read assistant replies aloud via text-to-speech'
+    autoReadAloudDesc: 'Automatically read assistant replies aloud via text-to-speech',
+    wakeWord: 'Wake word ("hey casca") — always-on listening',
+    wakeWordActive: 'Wake word active — click to stop listening',
+    wakeWordUnavailable: 'Wake word unavailable — check mic, STT and TTS settings',
+    wakeWordBusy: 'Wake word…'
   },
 
   statusStack: {

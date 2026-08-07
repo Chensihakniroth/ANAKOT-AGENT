@@ -295,6 +295,14 @@ export const zh: Translations = {
       themeDesc: '仅桌面端调色板。所选模式叠加其上。',
       reactionsTitle: '消息回应',
       reactionsDesc: 'iMessage 式轻点回应：可为消息添加回应，也可让代理回应你的消息。',
+      embedsTitle: '内嵌预览',
+      embedsDesc:
+        '富预览会从第三方网站（YouTube、X 等）加载。询问会在你允许前显示占位符；总是会自动加载；关闭则保留纯链接。',
+      embedsAsk: '询问',
+      embedsAlways: '总是',
+      embedsOff: '关闭',
+      embedsReset: count => `重置 ${count} 个已允许的${count === 1 ? '服务' : '服务'}`,
+
       pet: {
         title: '桌面宠物',
         intro: '从 petdex 图库浏览并领养动画宠物，或使用 AI 生成你自己的宠物。',
@@ -717,7 +725,8 @@ export const zh: Translations = {
         mcp: { label: 'MCP', hint: 'MCP 工具路由' },
         title_generation: { label: '标题生成', hint: '会话标题' },
         curator: { label: '维护器', hint: '技能使用审查' },
-        commit_gen: { label: '提交生成', hint: '提交信息' }
+        commit_gen: { label: '提交生成', hint: '提交信息' },
+        notebook_chat: { label: '笔记本对话', hint: 'NotebookLLM 对话' }
       }
     },
     providers: {
@@ -1552,6 +1561,10 @@ export const zh: Translations = {
     },
     autoReadAloud: '自动朗读',
     autoReadAloudDesc: '通过文字转语音自动朗读助手回复',
+    wakeWord: '唤醒词（"hey casca"）— 始终聆听',
+    wakeWordActive: '唤醒词已启用 — 点击停止聆听',
+    wakeWordUnavailable: '唤醒词不可用 — 请检查麦克风、STT 和 TTS 设置',
+    wakeWordBusy: '唤醒词…',
     selectModel: '选择模型',
     noModel: '无模型',
     noModelsAvailable: '没有可用模型',

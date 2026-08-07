@@ -216,6 +216,14 @@ export const zhHant = defineLocale({
       themeDesc: '僅限桌面端的調色盤。所選模式會套用在其上。',
       reactionsTitle: '訊息回應',
       reactionsDesc: 'iMessage 風格輕點回應：可為訊息新增回應，也可讓代理回應你的訊息。',
+      embedsTitle: '內嵌預覽',
+      embedsDesc:
+        '豐富預覽會從第三方網站（YouTube、X 等）載入。詢問會在你允許前顯示佔位符；一律會自動載入；關閉則保留純連結。',
+      embedsAsk: '詢問',
+      embedsAlways: '一律',
+      embedsOff: '關閉',
+      embedsReset: count => `重置 ${count} 個已允許的${count === 1 ? '服務' : '服務'}`,
+
     },
     discordRpc: {
       title: 'Discord 狀態',
@@ -1333,7 +1341,11 @@ export const zhHant = defineLocale({
         description: '說明所選程式碼的運作方式，並連結到關鍵檔案。',
         text: '請解釋這是如何運作的，並告訴我關鍵檔案在哪裡。'
       }
-    }
+    },
+    wakeWord: '喚醒詞（"hey casca"）— 常時待機',
+    wakeWordActive: '喚醒詞已啟用 — 點擊停止',
+    wakeWordUnavailable: '喚醒詞不可用 — 請檢查麥克風、STT 與 TTS 設定',
+    wakeWordBusy: '喚醒詞…'
   },
 
   updates: {

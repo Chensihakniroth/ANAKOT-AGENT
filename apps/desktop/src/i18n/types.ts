@@ -226,6 +226,12 @@ export interface Translations {
       themeDesc: string
       reactionsTitle: string
       reactionsDesc: string
+      embedsTitle: string
+      embedsDesc: string
+      embedsAsk: string
+      embedsAlways: string
+      embedsOff: string
+      embedsReset: (count: number) => string
       pet: {
         title: string
         intro: string
@@ -1112,6 +1118,10 @@ export interface Translations {
     dropSession: string
     autoReadAloud: string
     autoReadAloudDesc: string
+    wakeWord: string
+    wakeWordActive: string
+    wakeWordUnavailable: string
+    wakeWordBusy: string
     selectModel: string
     noModel: string
     noModelsAvailable: string

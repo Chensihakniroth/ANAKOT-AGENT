@@ -573,6 +573,33 @@ _SCHEMA_OVERRIDES: Dict[str, Dict[str, Any]] = {
         ),
         "options": ["stash", "discard"],
     },
+    "wake_word.capture": {
+        "type": "select",
+        "description": (
+            "Where the wake-word mic audio is captured. 'local' = the backend "
+            "process opens the mic directly (default on this machine); 'client' "
+            "= the chat app streams PCM frames to the backend (headless/remote "
+            "setups); 'auto' = pick based on mic availability."
+        ),
+        "options": ["auto", "local", "client"],
+    },
+    "wake_word.surface": {
+        "type": "select",
+        "description": (
+            "Which surface may host the wake-word listener: 'auto' (any), "
+            "'cli'/'tui' (terminal), or 'gui' (desktop app)."
+        ),
+        "options": ["auto", "cli", "tui", "gui"],
+    },
+    "wake_word.openwakeword.inference_framework": {
+        "type": "select",
+        "description": (
+            "Inference runtime for the openWakeWord model. 'onnx' is the "
+            "Windows/Linux default; 'tflite' targets macOS ARM64 and is "
+            "silently downgraded to onnx when the tflite runtime is absent."
+        ),
+        "options": ["onnx", "tflite"],
+    },
 }
 
 # Categories with fewer fields get merged into "general" to avoid tab sprawl.
@@ -594,6 +621,8 @@ _CATEGORY_MERGE: Dict[str, str] = {
     # with the other messaging-platform config (discord) so it isn't an
     # orphan tab of one field.
     "telegram": "discord",
+    # Wake-word fields belong next to the rest of the voice config.
+    "wake_word": "voice",
 }
 
 # Display order for tabs — unlisted categories sort alphabetically after these.
@@ -11071,9 +11100,12 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     }
 
     # Forward to provider
-    if base_url.endswith("/v1"):
-        base_url = base_url[:-3]
-    target_url = f"{base_url}/v1/chat/completions"
+    if provider_name in ("gemini", "google"):
+        target_url = f"{base_url}/v1beta/openai/chat/completions"
+    else:
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        target_url = f"{base_url}/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -11104,17 +11136,19 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
 # NotebookLLM — Streaming chat endpoint (SSE)
 # ---------------------------------------------------------------------------
 
-async def _notebook_chat_stream_generator(notebook_id: str, message: str, history: list):
+async def _notebook_chat_stream_generator(
+    notebook_id: str, message: str, history: list, user_id: str | None = None
+):
     """Generator that yields SSE chunks for notebook chat."""
     import json as _json
 
-    nb = _nb_get(notebook_id)
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         yield f"data: {_json.dumps({'error': 'Notebook not found'})}\n\n"
         return
 
     # Build context from all sources
-    context_text = _nb_get_all_text(notebook_id)
+    context_text = _nb_get_all_text(notebook_id, user_id=user_id)
     if not context_text.strip():
         yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
         return
@@ -11226,18 +11260,22 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
         "stream": True,
     }
 
-    if base_url.endswith("/v1"):
-        base_url = base_url[:-3]
-    target_url = f"{base_url}/v1/chat/completions"
+    if provider_name in ("gemini", "google"):
+        target_url = f"{base_url}/v1beta/openai/chat/completions"
+    else:
+        if base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        target_url = f"{base_url}/v1/chat/completions"
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
     }
 
     import httpx
-    # Fallback models if primary fails (e.g. opencode-zen big-pickle)
+    # Fallback models only when using openai/openrouter providers
     fallback_models = []
-    if model_name and model_name not in ("gpt-4o", "gpt-4o-mini"):
+    if provider_name in ("openai", "openrouter") and model_name and model_name not in ("gpt-4o", "gpt-4o-mini"):
         fallback_models = ["gpt-4o-mini", "gpt-4o"]
 
     try:
@@ -11311,9 +11349,10 @@ async def _notebook_chat_stream_generator(notebook_id: str, message: str, histor
 async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, request: Request):
     """Streaming version of notebook chat — returns SSE text/event-stream."""
     _require_token(request)
+    user_id = _get_session_user_id(request)
     return StreamingResponse(
         _notebook_chat_stream_generator(
-            notebook_id, body.message, body.history or []
+            notebook_id, body.message, body.history or [], user_id=user_id
         ),
         media_type="text/event-stream",
         headers={

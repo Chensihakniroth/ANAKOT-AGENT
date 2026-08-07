@@ -13,6 +13,7 @@ import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { normalizeExternalUrl, openExternalLink, PrettyLink } from '@/lib/external-link'
+import { detectEmbed, extractAlert, MarkdownAlert, RichCodeBlock, UrlEmbed } from './embeds'
 import { createMemoizedMathPlugin } from '@/lib/katex-memo'
 import { preprocessMarkdown } from '@/lib/markdown-preprocess'
 import {
@@ -201,6 +202,17 @@ function MarkdownLink({ children, className, href, ...props }: ComponentProps<'a
   }
 
   const text = childrenToText(children)
+
+  // Bare autolink → inline rich embed when a provider matches. Labeled links
+  // (`[watch](url)`) stay plain. Desktop only (iframe / widget renderers).
+  if (window.anakotDesktop && text && normalizeExternalUrl(text) === target) {
+    const embed = detectEmbed(target)
+
+    if (embed) {
+      return <UrlEmbed descriptor={embed} />
+    }
+  }
+
   const fallbackLabel = text && normalizeExternalUrl(text) !== target ? text : undefined
 
   return (
@@ -398,12 +410,20 @@ function MarkdownTextSurface({ containerClassName, containerProps }: MarkdownTex
         a: MarkdownLink,
         // `---` as quiet spacing, not a heavy full-width rule.
         hr: (_props: ComponentProps<'hr'>) => <div aria-hidden className="my-3" />,
-        blockquote: ({ className, ...props }: ComponentProps<'blockquote'>) => (
-          <blockquote
-            className={cn('border-l-2 border-border pl-3 text-muted-foreground italic', className)}
-            {...props}
-          />
-        ),
+        blockquote: ({ className, ...props }: ComponentProps<'blockquote'>) => {
+          const alert = extractAlert(props.children)
+
+          if (alert) {
+            return <MarkdownAlert type={alert.type}>{alert.body}</MarkdownAlert>
+          }
+
+          return (
+            <blockquote
+              className={cn('border-l-2 border-border pl-3 text-muted-foreground italic', className)}
+              {...props}
+            />
+          )
+        },
         ul: ({ className, ...props }: ComponentProps<'ul'>) => (
           <ul className={cn('my-1 gap-0', className)} {...props} />
         ),
@@ -440,7 +460,14 @@ function MarkdownTextSurface({ containerClassName, containerProps }: MarkdownTex
           <td className={cn('px-2.5 py-1.5 align-top text-[0.8125rem] leading-snug', className)} {...props} />
         ),
         img: MarkdownImage,
-        SyntaxHighlighter: (props: SyntaxHighlighterProps) => <SyntaxHighlighter {...props} defer={isStreaming} />
+        SyntaxHighlighter: (props: SyntaxHighlighterProps) => (
+          <RichCodeBlock
+            code={props.code}
+            fallback={<SyntaxHighlighter {...props} defer={isStreaming} />}
+            language={props.language}
+            streaming={isStreaming}
+          />
+        )
       }) as StreamdownTextComponents,
     [isStreaming]
   )

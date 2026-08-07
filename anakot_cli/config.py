@@ -1327,6 +1327,14 @@ DEFAULT_CONFIG = {
             "timeout": 600,
             "extra_body": {},
         },
+        "notebook_chat": {
+            "provider": "auto",
+            "model": "",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 120,
+            "extra_body": {},
+        },
     },
     
     "display": {
@@ -1617,6 +1625,26 @@ DEFAULT_CONFIG = {
         "beep_enabled": True,         # Play record start/stop beeps in CLI voice mode
         "silence_threshold": 200,     # RMS below this = silence (0-32767)
         "silence_duration": 3.0,      # Seconds of silence before auto-stop
+    },
+
+    # Wake word ("hey casca") — hands-free session trigger, the Siri pattern.
+    # On-device detection via openWakeWord (free, no API key, no audio leaves
+    # the machine). Requires STT + TTS configured (same stack as voice mode).
+    "wake_word": {
+        "enabled": False,          # Master switch. When False, no surface arms the listener.
+        "surface": "auto",         # "auto" | "cli" | "tui" | "gui" — which surface may host it
+        "capture": "auto",         # "auto" | "local" (backend mic) | "client" (desktop streams PCM)
+        "input_device": None,      # PortAudio input selector (index, name, or None = default)
+        "provider": "openwakeword",
+        "phrase": "hey casca",    # Cosmetic label only; the engine's model keys detection
+        "sensitivity": 0.6,        # 0-1 threshold; higher = stricter (fewer false fires)
+        "confirmation_frames": 3,  # Consecutive over-threshold frames required to fire (1-10);
+                                   # ambient-speech rejection — a real phrase holds several frames
+        "start_new_session": True, # Open a fresh session on wake (vs. reusing the current one)
+        "openwakeword": {
+            "model": "hey_casca",   # Bundled model (hey_casca|hey_hermes) | built-in name (hey_jarvis, alexa...) | path to .onnx
+            "inference_framework": "onnx",  # "onnx" (Windows/Linux default) | "tflite" (macOS ARM64)
+        },
     },
     
     "human_delay": {

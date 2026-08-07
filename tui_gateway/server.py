@@ -6076,6 +6076,93 @@ def _(rid, params: dict) -> dict:
         except Exception as e:
             return _err(rid, 5001, str(e))
 
+    if key == "wake_word" or key.startswith("wake_word."):
+        # Wake-word ("hey casca") config — whitelisted fields only. Values are
+        # coerced so both the JSON-RPC desktop/web settings (native types) and
+        # TUI slash commands (strings) can write them safely.
+        try:
+            from tools.wake_word import is_listening, stop_listening
+        except Exception as e:
+            return _err(rid, 5001, f"wake_word unavailable: {e}")
+
+        sub = key[len("wake_word."):] if key.startswith("wake_word.") else ""
+        if not sub:
+            return _err(rid, 4002, "wake_word requires a field (e.g. wake_word.enabled)")
+        if sub in ("enabled", "start_new_session"):
+            if isinstance(value, bool):
+                nv = value
+            else:
+                raw = str(value or "").strip().lower()
+                if raw in {"1", "true", "yes", "on"}:
+                    nv = True
+                elif raw in {"0", "false", "no", "off"}:
+                    nv = False
+                else:
+                    return _err(rid, 4002, f"invalid boolean for {key}: {value!r}")
+            _write_config_key(key, nv)
+            # Privacy invariant: flipping the master switch OFF releases the
+            # mic immediately. Flipping ON only persists — arming is explicit
+            # (composer button) or happens on next launch (auto-arm).
+            if sub == "enabled" and not nv and is_listening():
+                try:
+                    stop_listening(owner=_WAKE_OWNER)
+                except Exception as e:
+                    return _err(rid, 5001, f"wake_word disabled but stop failed: {e}")
+            return _ok(rid, {"key": key, "value": nv})
+        if sub == "sensitivity":
+            try:
+                nv = float(value)
+            except (TypeError, ValueError):
+                return _err(rid, 4002, f"invalid sensitivity: {value!r}")
+            nv = max(0.0, min(1.0, nv))
+            _write_config_key(key, nv)
+            return _ok(rid, {"key": key, "value": nv})
+        if sub == "confirmation_frames":
+            try:
+                nv = int(value)
+            except (TypeError, ValueError):
+                return _err(rid, 4002, f"invalid confirmation_frames: {value!r}")
+            nv = max(1, min(10, nv))
+            _write_config_key(key, nv)
+            return _ok(rid, {"key": key, "value": nv})
+        if sub == "surface":
+            if value not in ("auto", "cli", "tui", "gui"):
+                return _err(rid, 4002, f"invalid surface: {value!r} (auto|cli|tui|gui)")
+            _write_config_key(key, value)
+            return _ok(rid, {"key": key, "value": value})
+        if sub == "capture":
+            if value not in ("auto", "local", "client"):
+                return _err(rid, 4002, f"invalid capture: {value!r} (auto|local|client)")
+            _write_config_key(key, value)
+            return _ok(rid, {"key": key, "value": value})
+        if sub == "provider":
+            if value != "openwakeword":
+                return _err(rid, 4002, f"invalid provider: {value!r} (openwakeword)")
+            _write_config_key(key, value)
+            return _ok(rid, {"key": key, "value": value})
+        if sub == "phrase":
+            raw = str(value or "").strip()
+            if not raw:
+                return _err(rid, 4002, "wake_word.phrase must be non-empty")
+            _write_config_key(key, raw)
+            return _ok(rid, {"key": key, "value": raw})
+        if sub == "input_device":
+            nv = None if value in (None, "", "none", "default") else str(value).strip()
+            _write_config_key(key, nv)
+            return _ok(rid, {"key": key, "value": nv})
+        if sub == "openwakeword.model":
+            raw = str(value or "").strip()
+            if not raw:
+                return _err(rid, 4002, "wake_word.openwakeword.model must be non-empty")
+            _write_config_key(key, raw)
+            return _ok(rid, {"key": key, "value": raw})
+        if sub == "openwakeword.inference_framework":
+            if value not in ("onnx", "tflite"):
+                return _err(rid, 4002, f"invalid inference_framework: {value!r} (onnx|tflite)")
+            _write_config_key(key, value)
+            return _ok(rid, {"key": key, "value": value})
+        return _err(rid, 4002, f"unknown wake_word field: {sub}")
+
     return _err(rid, 4002, f"unknown config key: {key}")
 
 
@@ -8028,6 +8115,210 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5026, "voice module not available")
     except Exception as e:
         return _err(rid, 5026, str(e))
+
+
+# ── Methods: wake word ("hey casca") ──────────────────────────────────
+#
+# Hands-free session trigger — the Siri pattern. The gateway is the single
+# in-process owner of the wake-word mic lease (``_WAKE_OWNER``); every
+# surface (TUI, desktop) drives the listener through these RPC methods, so
+# there is never more than one claimant. The backend owns the microphone:
+# local mode = the renderer never touches the mic, so the composer toggle is
+# a thin RPC call here. On fire we push ``wake.detected`` to the session that
+# armed us; the renderer (which owns the session UI) drives the voice flow.
+
+_wake_sid_lock = threading.Lock()
+_wake_event_sid: str = ""
+# Set by wake.start so wake.status can distinguish "never armed" from
+# "armed but the listener died".
+_wake_started = False
+_wake_start_lock = threading.Lock()
+_WAKE_OWNER = object()
+
+
+def _wake_emit(event: str, payload: dict | None = None) -> None:
+    """Emit a wake event toward the session that most recently armed us.
+
+    Wake is process-global (one microphone), so there's only ever one sid to
+    target; the TUI handler treats an empty sid as "active session". Same
+    convention as _voice_emit.
+    """
+    with _wake_sid_lock:
+        sid = _wake_event_sid
+    _emit(event, sid, payload)
+
+
+def _wake_cfg_dict() -> dict:
+    """Shape-safe accessor for the ``wake_word:`` block in config.yaml."""
+    cfg = _load_cfg()
+    wake_cfg = cfg.get("wake_word") if isinstance(cfg, dict) else None
+    return wake_cfg if isinstance(wake_cfg, dict) else {}
+
+
+def _on_wake_fired() -> None:
+    """Backend half of a wake fire: emit to the armed session.
+
+    Runs on the detector's callback thread — must never block on the mic or
+    start a voice turn itself (the detector holds the stream; the renderer
+    calls wake.pause before capturing and wake.resume after).
+    """
+    try:
+        from tools.wake_word import wake_phrase
+    except Exception:
+        wake_phrase = lambda: "hey casca"
+    _wake_emit("wake.detected", {"phrase": wake_phrase()})
+
+
+@method("wake.start")
+def _(rid, params: dict) -> dict:
+    """Arm the wake-word listener. Idempotent for the gateway owner.
+
+    Requires ``wake_word.enabled: true`` in config (the master switch) and
+    STT + TTS availability — a wake without either is a mic that hears you
+    and then does nothing perceivable.
+    """
+    with _wake_sid_lock:
+        global _wake_event_sid
+        _wake_event_sid = params.get("session_id") or _wake_event_sid
+
+    cfg = _wake_cfg_dict()
+    if not cfg.get("enabled"):
+        return _err(
+            rid, 4031,
+            "wake word is disabled in config — set wake_word.enabled: true",
+        )
+    try:
+        from tools.wake_word import (
+            WakeWordInUse,
+            check_wake_word_requirements,
+            resolve_capture_mode,
+            start_listening,
+        )
+    except ImportError as e:
+        return _err(rid, 4032, f"wake_word module not available: {e}")
+
+    reqs = check_wake_word_requirements(cfg)
+    if not reqs.get("available"):
+        return _err(rid, 4032, reqs.get("hint") or "wake word requirements not met")
+    try:
+        capture = resolve_capture_mode(cfg, prefer_client=True)
+        start_listening(
+            on_wake=_on_wake_fired,
+            owner=_WAKE_OWNER,
+            config=cfg,
+            external_audio=(capture == "client"),
+        )
+    except WakeWordInUse:
+        return _err(rid, 4033, "wake-word microphone already owned by another process")
+    except Exception as e:
+        return _err(rid, 4034, str(e))
+
+    with _wake_start_lock:
+        global _wake_started
+        _wake_started = True
+    return _ok(rid, {"status": "listening", "capture": capture})
+
+
+@method("wake.stop")
+def _(rid, params: dict) -> dict:
+    """Fully stop the listener and release the mic lease."""
+    with _wake_start_lock:
+        global _wake_started
+        _wake_started = False
+    try:
+        from tools.wake_word import stop_listening
+    except ImportError:
+        return _ok(rid, {"stopped": False})
+    return _ok(rid, {"stopped": stop_listening(owner=_WAKE_OWNER)})
+
+
+@method("wake.pause")
+def _(rid, params: dict) -> dict:
+    """Release the mic for a voice turn (detector stays warm)."""
+    try:
+        from tools.wake_word import pause_listening
+    except ImportError:
+        return _ok(rid, {"paused": False})
+    return _ok(rid, {"paused": pause_listening(owner=_WAKE_OWNER)})
+
+
+@method("wake.resume")
+def _(rid, params: dict) -> dict:
+    """Re-arm the mic after a voice turn."""
+    try:
+        from tools.wake_word import resume_listening
+    except ImportError:
+        return _ok(rid, {"resumed": False})
+    return _ok(rid, {"resumed": resume_listening(owner=_WAKE_OWNER)})
+
+
+@method("wake.status")
+def _(rid, params: dict) -> dict:
+    """Full wake-word status for settings/toggle UIs."""
+    cfg = _wake_cfg_dict()
+    try:
+        from tools.wake_word import (
+            audio_is_silent,
+            check_wake_word_requirements,
+            detector_frame_info,
+            get_input_device_status,
+            is_listening,
+        )
+
+        reqs = check_wake_word_requirements(cfg)
+        listening = is_listening()
+        silent = audio_is_silent()
+        device = get_input_device_status(cfg)
+        frame = detector_frame_info()
+    except ImportError as e:
+        reqs = {"available": False, "hint": f"wake_word module not available: {e}"}
+        listening = silent = False
+        device = {}
+        frame = {}
+    with _wake_start_lock:
+        started = _wake_started
+    return _ok(
+        rid,
+        {
+            "enabled": bool(cfg.get("enabled")),
+            "listening": listening,
+            "started": started,
+            "silent": silent,
+            "requirements": reqs,
+            "device": device,
+            "frame": frame,
+        },
+    )
+
+
+@method("wake.feed")
+def _(rid, params: dict) -> dict:
+    """Push client-captured PCM frames (client capture mode only).
+
+    ``pcm`` is base64-encoded int16 mono audio at 16 kHz. Frames are split or
+    zero-padded to the engine's frame length (1280 samples / 80 ms) by the
+    detector. Returns ``accepted: false`` when no listener is armed for the
+    gateway (local mode, stopped, or another owner).
+    """
+    raw = params.get("pcm")
+    if raw is None:
+        return _err(rid, 4035, "pcm required (base64 int16 mono at 16 kHz)")
+    try:
+        if isinstance(raw, str):
+            import base64
+
+            data = base64.b64decode(raw)
+        elif isinstance(raw, (bytes, bytearray)):
+            data = bytes(raw)
+        else:
+            return _err(rid, 4035, "pcm must be a base64 string or bytes")
+    except Exception as e:
+        return _err(rid, 4035, f"pcm decode failed: {e}")
+    try:
+        from tools.wake_word import feed_audio
+    except ImportError:
+        return _ok(rid, {"accepted": False})
+    return _ok(rid, {"accepted": feed_audio(owner=_WAKE_OWNER, pcm_int16=data)})
 
 
 # ── Methods: insights ────────────────────────────────────────────────

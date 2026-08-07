@@ -8,6 +8,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, Layers3, Loader2, Square, SteeringWheel, Volume2Icon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $autoReadAloud, toggleAutoReadAloud } from '@/store/auto-read-aloud'
+import { armWake, disarmWake, $wakeWord } from '@/store/wake-word'
 
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import type { ChatBarState, VoiceStatus } from './types'
@@ -75,6 +76,7 @@ export function ComposerControls({
   return (
     <div className="ml-auto flex shrink-0 items-center gap-(--composer-control-gap)">
       <AutoReadAloudToggle />
+      <WakeWordButton disabled={disabled} />
       <DictationButton disabled={disabled} onToggle={onDictate} state={state.voice} status={voiceStatus} />
       {canSteer && (
         <Tip label={c.steer}>
@@ -258,6 +260,57 @@ function AutoReadAloudToggle() {
         variant="ghost"
       >
         <Volume2Icon className={cn('size-4', !enabled && 'opacity-50')} />
+      </Button>
+    </Tip>
+  )
+}
+
+function WakeWordButton({ disabled }: { disabled: boolean }) {
+  const { t } = useI18n()
+  const c = t.composer
+  const wake = useStore($wakeWord)
+  const listening = Boolean(wake.status?.listening)
+  const available = Boolean(wake.status?.requirements?.available)
+  const busy = wake.busy || wake.refreshing
+  const silenced = Boolean(wake.status?.silent)
+
+  const label = busy
+    ? c.wakeWordBusy
+    : listening
+      ? c.wakeWordActive
+      : available
+        ? c.wakeWord
+        : c.wakeWordUnavailable
+
+  return (
+    <Tip label={label}>
+      <Button
+        aria-label={label}
+        aria-pressed={listening}
+        className={cn(
+          GHOST_ICON_BTN,
+          'p-0',
+          'data-[active=true]:bg-accent data-[active=true]:text-foreground',
+          listening && !silenced && 'text-primary data-[active=true]:text-primary',
+          silenced && 'text-destructive data-[active=true]:text-destructive',
+          !available && 'opacity-40'
+        )}
+        data-active={listening}
+        disabled={disabled || busy || !available}
+        onClick={() => {
+          triggerHaptic(listening ? 'close' : 'open')
+          if (listening) {
+            void disarmWake()
+          } else {
+            void armWake()
+          }
+        }}
+        size="icon"
+        title={wake.error || undefined}
+        type="button"
+        variant="ghost"
+      >
+        {busy ? <Loader2 className="animate-spin" size={16} /> : <AudioLines className={cn('size-4', !listening && 'opacity-60')} size={16} />}
       </Button>
     </Tip>
   )

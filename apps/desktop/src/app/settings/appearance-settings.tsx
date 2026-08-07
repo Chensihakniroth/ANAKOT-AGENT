@@ -19,6 +19,7 @@ import {
   type NativeNotificationKind
 } from '@/store/native-notifications'
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
+import { $embedAllowed, $embedMode, clearEmbedAllowed, setEmbedMode, type EmbedMode } from '@/store/embed-consent'
 import { useTheme } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
 import { VscodeThemeBrowser } from '@/themes/vscode-theme-browser'
@@ -407,6 +408,8 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
   const { themeName, mode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
   const reactionsEnabled = useStore($reactionsEnabled)
+  const embedMode = useStore($embedMode)
+  const embedAllowed = useStore($embedAllowed)
   const a = t.settings.appearance
 
   // Persist theme to config.yaml so it survives app restarts (localStorage may be cleared in dev)
@@ -563,6 +566,39 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
             }
             description={a.reactionsDesc}
             title={a.reactionsTitle}
+          />
+
+          <ListRow
+            action={
+              <div className="flex flex-col items-end gap-1.5">
+                <SegmentedControl
+                  onChange={id => {
+                    triggerHaptic('selection')
+                    setEmbedMode(id as EmbedMode)
+                  }}
+                  options={[
+                    { id: 'ask', label: a.embedsAsk },
+                    { id: 'always', label: a.embedsAlways },
+                    { id: 'off', label: a.embedsOff }
+                  ]}
+                  value={embedMode}
+                />
+                {embedAllowed.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      triggerHaptic('selection')
+                      clearEmbedAllowed()
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    {a.embedsReset(embedAllowed.length)}
+                  </Button>
+                )}
+              </div>
+            }
+            description={a.embedsDesc}
+            title={a.embedsTitle}
           />
 
           {/* Window Translucency */}

@@ -45,6 +45,7 @@ const AUX_TASKS: readonly AuxTaskMeta[] = [
   { key: 'title_generation' },
   { key: 'curator' },
   { key: 'commit_gen' },
+  { key: 'notebook_chat' },
 ]
 
 const NO_PROVIDERS: readonly ModelOptionProvider[] = [{ name: '—', slug: '', models: [] }]

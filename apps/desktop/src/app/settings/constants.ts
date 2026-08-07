@@ -303,6 +303,14 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
     maxRecordingSeconds: 'Max Recording Length',
     autoTts: 'Read Responses Aloud'
   },
+  wakeWord: {
+    enabled: 'Wake Word',
+    phrase: 'Wake Phrase',
+    sensitivity: 'Wake Sensitivity',
+    confirmationFrames: 'Confirmation Frames',
+    capture: 'Mic Capture Mode',
+    inputDevice: 'Input Device'
+  },
   stt: {
     enabled: 'Speech To Text',
     provider: 'Speech-To-Text Provider',
@@ -409,6 +417,14 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   voice: {
     autoTts: 'Automatically speak assistant responses.'
   },
+  wakeWord: {
+    enabled: 'Always-on hotword ("hey casca") detection. When on, the app listens for the phrase and opens a voice turn when it hears it.',
+    phrase: 'Display label for the wake phrase. The engine keys detection on the model, so changing this only relabels the UI.',
+    sensitivity: 'Detection threshold (0–1). Higher is stricter — fewer false fires, but the phrase must be clearer.',
+    confirmationFrames: 'Consecutive over-threshold frames required before firing (1–10). Higher rejects ambient speech better.',
+    capture: 'Where wake mic audio is captured. local = backend opens the mic; client = the chat app streams PCM; auto = pick based on availability.',
+    inputDevice: 'PortAudio input selector (index or name). Blank uses the system default microphone.'
+  },
   stt: {
     enabled: 'Enable local or provider-backed speech transcription.',
     echoTranscripts: 'Display live speech-to-text transcript in the chat as you speak.',
@@ -512,7 +528,13 @@ export const SECTIONS: DesktopConfigSection[] = [
       'stt.elevenlabs.tag_audio_events',
       'stt.elevenlabs.diarize',
       'voice.record_key',
-      'voice.max_recording_seconds'
+      'voice.max_recording_seconds',
+      'wake_word.enabled',
+      'wake_word.phrase',
+      'wake_word.sensitivity',
+      'wake_word.confirmation_frames',
+      'wake_word.capture',
+      'wake_word.input_device'
     ]
   },
   {
