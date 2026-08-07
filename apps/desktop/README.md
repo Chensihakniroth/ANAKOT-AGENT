@@ -110,7 +110,7 @@ rm "$HOME/.anakot/anakot-agent/.anakot-bootstrap-complete"
 # Rebuild a broken Python venv
 rm -rf "$HOME/.anakot/anakot-agent/venv"
 # Reset a stuck macOS microphone prompt (macOS only)
-tccutil reset Microphone com.nousresearch.anakot
+tccutil reset Microphone com.callmemo.anakot
 ```
 
 **Windows (PowerShell):**

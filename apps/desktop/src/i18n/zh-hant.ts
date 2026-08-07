@@ -1865,7 +1865,8 @@ export const zhHant = defineLocale({
       previous: '上一頁',
       previousAria: '前往上一頁',
       next: '下一頁',
-      nextAria: '前往下一頁'
+      nextAria: '前往下一頁',
+      pageIndicator: (page, total) => `第 ${page} / ${total} 頁`
     },
     sidebar: {
       title: '側邊欄',

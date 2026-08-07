@@ -1654,6 +1654,7 @@ export interface Translations {
       previousAria: string
       next: string
       nextAria: string
+      pageIndicator: (page: number, total: number) => string
     }
     sidebar: {
       title: string

@@ -1907,7 +1907,8 @@ export const ja = defineLocale({
       previous: '前へ',
       previousAria: '前のページへ',
       next: '次へ',
-      nextAria: '次のページへ'
+      nextAria: '次のページへ',
+      pageIndicator: (page, total) => `${page} / ${total} ページ`
     },
     sidebar: {
       title: 'サイドバー',

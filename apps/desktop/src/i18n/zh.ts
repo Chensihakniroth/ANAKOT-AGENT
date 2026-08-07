@@ -2126,7 +2126,8 @@ export const zh: Translations = {
       previous: '上一页',
       previousAria: '前往上一页',
       next: '下一页',
-      nextAria: '前往下一页'
+      nextAria: '前往下一页',
+      pageIndicator: (page, total) => `第 ${page} / ${total} 页`
     },
     sidebar: {
       title: '侧边栏',

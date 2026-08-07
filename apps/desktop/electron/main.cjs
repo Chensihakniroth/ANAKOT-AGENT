@@ -476,6 +476,13 @@ function previewFileMetadata(filePath, mimeType) {
 }
 
 app.setName(APP_NAME)
+// Windows toast notifications silently no-op without an AppUserModelID:
+// Electron's `new Notification().show()` looks like it succeeds (isSupported()
+// returns true) but Windows drops the toast. Must match the installer AUMID
+// (electron-builder appId) so notifications route to the same app identity.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.callmemo.anakot')
+}
 // Seed the native About panel with the live Anakot version. This is refreshed
 // on every open via the explicit "About" menu handler (refreshAboutPanel), so
 // an in-place `anakot update` mid-session is reflected without an app restart;
@@ -6057,7 +6064,7 @@ ipcMain.handle('anakot:notebook:chat-stream-abort', async (_event, requestId) =>
 ipcMain.handle('anakot:notify', (_event, payload) => {
   if (!Notification.isSupported()) return false
   const prefs = loadNotificationPrefs()
-  const type = payload?.type || 'info'
+  const type = payload?.type || payload?.kind || 'info'
   if (prefs[type] === false) return false
   new Notification({
     title: payload?.title || 'Anakot',

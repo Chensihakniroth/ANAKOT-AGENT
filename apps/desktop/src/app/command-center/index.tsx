@@ -27,7 +27,8 @@ import { exportSession } from '@/lib/session-export'
 import { cn } from '@/lib/utils'
 import { upsertDesktopActionTask } from '@/store/activity'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
-import { $sessions, sessionPinId } from '@/store/session'
+import { notify } from '@/store/notifications'
+import { $sessions, setSessions, setSessionsTotal, sessionPinId } from '@/store/session'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -48,6 +49,9 @@ interface CommandCenterViewProps {
   // Accepted for call-site parity; navigation lives in the global Cmd+K palette.
   onNavigateRoute?: (path: string) => void
   onOpenSession: (sessionId: string) => void
+  /** Called after a bulk mutation (bulk delete, prune, delete empty) so the
+   *  parent can trigger a full session list resync from the backend. */
+  onSessionsChanged?: () => void
 }
 
 function formatTimestamp(value?: number | null): string {
@@ -118,7 +122,7 @@ function EmptyPanel({ action, description, title }: { action?: ReactNode; descri
   )
 }
 
-export function CommandCenterView({ initialSection, onClose, onDeleteSession, onOpenSession }: CommandCenterViewProps) {
+export function CommandCenterView({ initialSection, onClose, onDeleteSession, onOpenSession, onSessionsChanged }: CommandCenterViewProps) {
   const { t } = useI18n()
   const cc = t.commandCenter
   const sessions = useStore($sessions)
@@ -294,21 +298,62 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
   const handleBulkDelete = useCallback(async () => {
     const ids = [...selectedSessionIds]
     if (!ids.length) return
-    await bulkDeleteSessions(ids)
+    try {
+      const res = await bulkDeleteSessions(ids)
+      const deletedCount = res?.deleted ?? ids.length
+      if (deletedCount > 0 || res?.ok) {
+        const idSet = new Set(ids)
+        setSessions(prev => prev.filter(s => !idSet.has(s.id)))
+        setSessionsTotal(prev => Math.max(0, prev - deletedCount))
+        notify({ kind: 'success', message: `Deleted ${deletedCount} session(s).` })
+      }
+    } catch {
+      notify({ kind: 'error', message: 'Failed to delete sessions.' })
+    }
     setSelectedSessionIds(new Set())
     lastSelectedIndexRef.current = null
     void refreshSessionStats()
-  }, [selectedSessionIds, refreshSessionStats])
+    onSessionsChanged?.()
+  }, [selectedSessionIds, refreshSessionStats, onSessionsChanged])
 
   const handleDeleteEmpty = useCallback(async () => {
-    await deleteEmptySessions()
+    try {
+      const res = await deleteEmptySessions()
+      const deletedCount = res?.deleted ?? 0
+      if (deletedCount > 0 || res?.ok) {
+        setSessions(prev => prev.filter(s =>
+          (s.message_count ?? 0) > 0 || !s.ended_at || s.archived
+        ))
+        setSessionsTotal(prev => Math.max(0, prev - deletedCount))
+        notify({ kind: 'success', message: `Deleted ${deletedCount} empty session(s).` })
+      }
+    } catch {
+      notify({ kind: 'error', message: 'Failed to delete empty sessions.' })
+    }
     void refreshSessionStats()
-  }, [refreshSessionStats])
+    onSessionsChanged?.()
+  }, [refreshSessionStats, onSessionsChanged])
 
   const handlePrune = useCallback(async (days: number) => {
-    await pruneSessions(days)
+    try {
+      const res = await pruneSessions(days)
+      const removedCount = res?.removed ?? 0
+      if (removedCount > 0 || res?.ok) {
+        const cutoffSec = (Date.now() / 1000) - days * 86_400
+        setSessions(prev => prev.filter(s => {
+          if (!s.ended_at) return true
+          const ts = s.last_active || s.started_at || 0
+          return ts >= cutoffSec
+        }))
+        setSessionsTotal(prev => Math.max(0, prev - removedCount))
+        notify({ kind: 'success', message: `Pruned ${removedCount} session(s).` })
+      }
+    } catch {
+      notify({ kind: 'error', message: 'Failed to prune sessions.' })
+    }
     void refreshSessionStats()
-  }, [refreshSessionStats])
+    onSessionsChanged?.()
+  }, [refreshSessionStats, onSessionsChanged])
 
   const handleToggleSelect = useCallback((id: string, index: number, shiftKey: boolean) => {
     setSelectedSessionIds(prev => {

@@ -52,6 +52,8 @@ import { $petOverlayActive, popInPet, popOutPetFromSettings } from '@/store/pet-
 import { $gatewayState } from '@/store/session'
 
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationButton, PaginationNext, PaginationPrevious } from '@/components/ui/pagination'
+import { paginationItems } from '@/lib/pagination'
 
 /**
  * Appearance opt-in for the floating petdex mascot. A thin view over the shared
@@ -75,6 +77,7 @@ export function PetSettings() {
   const opacity = useStore($petOpacity)
   const anchor = useStore($petAnchor)
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
   const [confirmDelete, setConfirmDelete] = useState<GalleryPet | null>(null)
   const [renameTarget, setRenameTarget] = useState<GalleryPet | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -125,10 +128,25 @@ export function PetSettings() {
     }).then(ok => ok && triggerHaptic('crisp'))
   }
 
-  // The petdex catalog is thousands of entries, so rank + cap how many render.
-  const RENDER_CAP = 60
+  // The petdex catalog is thousands of entries, so rank + paginate. 12 fits the
+  // 3-col grid in the fixed-height scroll area as 4 full rows.
+  const PAGE_SIZE = 12
   const sorted = rankedGalleryPets(gallery, query)
-  const shown = sorted.slice(0, RENDER_CAP)
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const safePage = Math.min(page, pageCount)
+  const shown = sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+
+  // Jump back to page 1 whenever the search narrows or widens the results, and
+  // clamp if the gallery reloads smaller than the current page.
+  useEffect(() => {
+    setPage(1)
+  }, [query])
+
+  useEffect(() => {
+    if (page > pageCount) {
+      setPage(pageCount)
+    }
+  }, [page, pageCount])
 
   return (
     <SettingsContent>
@@ -249,12 +267,46 @@ export function PetSettings() {
                 <p className="mt-2 min-h-4 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
                   {error ? (
                     <span className="text-(--ui-red)">{error}</span>
-                  ) : sorted.length > RENDER_CAP ? (
-                    copy.countCapped(RENDER_CAP, sorted.length)
                   ) : (
-                    copy.count(sorted.length)
+                    <>
+                      {copy.count(sorted.length)}
+                      {pageCount > 1 && (
+                        <>
+                          {' · '}
+                          {t.ui.pagination.pageIndicator(safePage, pageCount)}
+                        </>
+                      )}
+                    </>
                   )}
                 </p>
+
+                {pageCount > 1 && (
+                  <Pagination className="mt-2 justify-start">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} />
+                      </PaginationItem>
+                      {paginationItems(safePage, pageCount).map((item, index) => (
+                        <PaginationItem key={`${item}-${index}`}>
+                          {item === 'ellipsis' ? (
+                            <PaginationEllipsis />
+                          ) : (
+                            <PaginationButton
+                              aria-label={`${t.ui.pagination.label} ${item}`}
+                              isActive={safePage === item}
+                              onClick={() => setPage(item)}
+                            >
+                              {item}
+                            </PaginationButton>
+                          )}
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext disabled={safePage >= pageCount} onClick={() => setPage(safePage + 1)} />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
               </>
             }
             description={copy.chooseDesc}

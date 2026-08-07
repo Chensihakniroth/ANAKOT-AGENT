@@ -17,6 +17,7 @@ import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from
 import { triggerHaptic } from '@/lib/haptics'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
+import { dispatchNativeNotification } from '@/store/native-notifications'
 import { notify } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { clearAllPrompts, setApprovalRequest, setSecretRequest, setSudoRequest } from '@/store/prompts'
@@ -576,12 +577,12 @@ export function useMessageStream({
         void hydrateFromStoredSession(3, completedState.storedSessionId, sessionId)
       }
 
-      if (document.hidden && sessionId === activeSessionIdRef.current) {
-        void window.anakotDesktop?.notify({
-          title: 'Anakot finished',
-          body: text.slice(0, 140) || 'The response is ready.'
-        })
-      }
+      dispatchNativeNotification({
+        kind: 'turnDone',
+        title: 'Anakot finished',
+        body: text.slice(0, 140) || 'The response is ready.',
+        sessionId
+      })
     },
     [activeSessionIdRef, hydrateFromStoredSession, refreshSessions, updateSessionState]
   )
@@ -881,6 +882,15 @@ export function useMessageStream({
           if (sessionId) {
             updateSessionState(sessionId, state => ({ ...state, needsInput: true }))
           }
+
+          // Native toast — a clarify is a blocking "answer me" event. ATTENTION
+          // kind: breaks through for an off-screen session while focused.
+          dispatchNativeNotification({
+            kind: 'input',
+            title: 'Anakot needs your input',
+            body: question.slice(0, 120),
+            sessionId
+          })
         }
       } else if (event.type === 'approval.request') {
         // Dangerous-command / execute_code approval. The Python side is blocked
@@ -898,6 +908,20 @@ export function useMessageStream({
         if (sessionId) {
           updateSessionState(sessionId, state => ({ ...state, needsInput: true }))
         }
+
+        // Native toast — an approval request is a blocking "come back to me"
+        // event. ATTENTION kind: breaks through for an off-screen session even
+        // while the app is focused (the gate lives in shouldFire).
+        dispatchNativeNotification({
+          kind: 'approval',
+          title: 'Anakot needs approval',
+          body:
+            (typeof payload?.description === 'string' ? payload.description : 'Approve or deny this action.').slice(
+              0,
+              120
+            ),
+          sessionId
+        })
       } else if (event.type === 'sudo.request') {
         // Sudo password capture (tools/terminal_tool.py). Blocked on
         // sudo.respond {request_id, password}.
@@ -909,6 +933,15 @@ export function useMessageStream({
           if (sessionId) {
             updateSessionState(sessionId, state => ({ ...state, needsInput: true }))
           }
+
+          // Native toast — sudo password capture blocks the terminal tool until
+          // answered. ATTENTION kind (same gate as clarify).
+          dispatchNativeNotification({
+            kind: 'input',
+            title: 'Anakot needs your sudo password',
+            body: 'Enter your password to continue.',
+            sessionId
+          })
         }
       } else if (event.type === 'secret.request') {
         // Skill credential capture (tools/skills_tool.py). Blocked on
@@ -926,6 +959,16 @@ export function useMessageStream({
           if (sessionId) {
             updateSessionState(sessionId, state => ({ ...state, needsInput: true }))
           }
+
+          // Native toast — credential capture blocks the skills tool until
+          // answered. ATTENTION kind (same gate as clarify).
+          const envVar = typeof payload?.env_var === 'string' ? payload.env_var : ''
+          dispatchNativeNotification({
+            kind: 'input',
+            title: 'Anakot needs a secret',
+            body: envVar ? `Enter your ${envVar} to continue.` : 'Enter a value to continue.',
+            sessionId
+          })
         }
       } else if (event.type === 'message.reaction') {
         // The agent reacted to a message via the desktop-gated
@@ -999,6 +1042,16 @@ export function useMessageStream({
           flushQueuedDeltas(sessionId)
           failAssistantMessage(sessionId, errorMessage)
         }
+
+        // Native toast — a failed turn while the user is away. Completion kind:
+        // only the active session fires, and only while backgrounded (the gate
+        // lives in shouldFire), so background-session errors can't spam.
+        dispatchNativeNotification({
+          kind: 'turnError',
+          title: 'Anakot ran into an error',
+          body: errorMessage.slice(0, 140) || 'The response failed.',
+          sessionId
+        })
 
         if (isActiveEvent) {
           setTurnStartedAt(null)

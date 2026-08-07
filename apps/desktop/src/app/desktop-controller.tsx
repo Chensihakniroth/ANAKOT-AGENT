@@ -715,6 +715,7 @@ export function DesktopController() {
             onDeleteSession={removeSession}
             onNavigateRoute={path => navigate(path)}
             onOpenSession={sessionId => navigate(sessionRoute(sessionId))}
+            onSessionsChanged={refreshSessions}
           />
         </Suspense>
       )}

@@ -197,7 +197,7 @@ rm "$HOME/.anakot/anakot-agent/.anakot-bootstrap-complete"
 rm -rf "$HOME/.anakot/anakot-agent/venv"
 
 # Reset a stuck macOS microphone prompt
-tccutil reset Microphone com.nousresearch.anakot
+tccutil reset Microphone com.callmemo.anakot
 ```
 
 ## Building from source

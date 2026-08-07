@@ -142,7 +142,7 @@
   },
   "build": {
     "electronVersion": "40.9.3",
-    "appId": "com.nousresearch.anakot",
+    "appId": "com.callmemo.anakot",
     "productName": "Anakot",
     "executableName": "Anakot",
     "artifactName": "Anakot-${version}-${os}-${arch}.${ext}",

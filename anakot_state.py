@@ -3591,9 +3591,11 @@ class SessionDB:
         files (``.json`` / ``.jsonl`` / ``request_dump_*``) for the deleted
         session. Returns True if the session was found and deleted.
         """
+        target_id = self.resolve_session_id(session_id) or session_id
+
         def _do(conn):
             cursor = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE id = ?", (session_id,)
+                "SELECT COUNT(*) FROM sessions WHERE id = ?", (target_id,)
             )
             if cursor.fetchone()[0] == 0:
                 return False
@@ -3601,15 +3603,15 @@ class SessionDB:
             conn.execute(
                 "UPDATE sessions SET parent_session_id = NULL "
                 "WHERE parent_session_id = ?",
-                (session_id,),
+                (target_id,),
             )
-            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
-            conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (target_id,))
+            conn.execute("DELETE FROM sessions WHERE id = ?", (target_id,))
             return True
 
         deleted = self._execute_write(_do)
         if deleted:
-            self._remove_session_files(sessions_dir, session_id)
+            self._remove_session_files(sessions_dir, target_id)
         return deleted
 
     def delete_sessions(

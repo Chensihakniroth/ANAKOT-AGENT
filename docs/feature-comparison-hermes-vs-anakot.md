@@ -1,8 +1,19 @@
 # Hermes Agent vs Anakot Agent — Full Feature Comparison
 
 > **Generated:** 2026-08-04 · **Anakot HEAD:** `6d3c8e1bc` (main) · **Hermes upstream:** `NousResearch/hermes-agent@main`
+> **Refreshed:** 2026-08-06 · **Anakot HEAD:** `8399b266e` · **Hermes HEAD:** `3aeff23`
 > **Method:** Exhaustive inventory of both codebases (CLI registry, `agent/`, `tools/`, `gateway/`, `plugins/`, `skills/`, `apps/desktop`, `tui_gateway` RPC), cross-verified against Anakot source.
 > **Legend:** ✅ present · ❌ missing · 🔶 partial / present in reduced form · 🆕 Anakot-only (Hermes doesn't have it)
+>
+> **2026-08-06 freshness corrections (supersede the 08-04 snapshot):**
+> - ✅ **Projects & Worktrees** — ported: 16 `projects.*` RPC methods in `tui_gateway/server.py`, `store/projects.ts`, 13 files in `app/chat/sidebar/projects/`, electron `anakot:git:worktreeAdd/List/Remove` + `create-pr` + `scanRepos`.
+> - ✅ **Quick-Entry** — ported (`app/quick-entry/`, `store/quick-entry.ts`, `electron/quick-entry.cjs`, `quick-entry-settings.tsx`).
+> - ✅ **Reactions** — ported (merged into `app/chat/` components; Anakot has no `components/assistant-ui/thread/`).
+> - ✅ **Marketplace themes** — ported (`themes/vscode-marketplace.ts` fetcher + `vscode-theme-browser.tsx`, rendered in appearance-settings).
+> - ✅ **Notifications settings** — PRESENT (user-verified 08-06): full `NotificationToggleList` section inside `app/settings/appearance-settings.tsx:564-674`, wired to `getNotificationPrefs`/`setNotificationPrefs`. No standalone page, but the feature exists.
+> - ✅ **Terminal backend panel + font setting** — PRESENT (user-verified 08-06): backend config = Toolsets → "Tool Backends" (`toolsets-settings.tsx` + `toolset-config-panel.tsx`, incl. the `terminal` toolset); font/appearance = `terminal-settings.tsx`.
+> - ✅ **Window translucency** — PRESENT (content-verified 08-06): `WindowOpacitySlider` at `appearance-settings.tsx:562`. Only ambient/zoom stores remain.
+> - ❌ Still missing (re-verified 08-06): wake-indicator, webhooks page, completion sound, keep-awake, find-in-page, battery, session switcher, plugins settings, rich social embeds, multi-window. Partial: voice provider fields (`tts.*`/`stt.*` in generic Config page), memory provider config (`memory.provider` enum in Config page), mermaid embeds (present, only social iframe embeds missing).
 
 ---
 
@@ -14,9 +25,9 @@ Anakot is a fork of Hermes Agent. It shares ~90% of the core (agent loop, tools,
 2. **Learning/Journey graph** — present as code + web API + starmap UI, but **NOT wired into the agent loop** (no `/journey`, no `learning.*` RPC, no agent-turn integration).
 3. **20 CLI commands** missing (`/prompt`, `/diff`, `/journey`, `/learn`, `/init`, `/moa`, `/pet`, `/hatch`, `/wake`, `/focus`, `/battery`, `/timestamps`, `/context`, `/approvals`, `/memory`, `/egress`, `/suggestions`, `/blueprint`, `/subscription`, `/topup`).
 4. **Model provider catalog** — 8 provider plugins vs Hermes' 33 (many still reachable via generic chat_completions/custom, but not preconfigured).
-5. **Desktop gaps** — projects/worktrees, quick-entry, wake-indicator, reactions, learning journey page, marketplace themes, webhooks page, window effects (translucency/ambient), notifications settings.
+5. **Desktop gaps** (re-verified 2026-08-06) — wake-indicator, webhooks page, completion sound, keep-awake, find-in-page, battery, session switcher, ssh host selection, computer-use panel, plugins settings, rich social embeds, multi-window. Partial: window effects (ambient/zoom stores only — opacity slider present), voice provider fields (`tts.*`/`stt.*` in generic Config page), memory provider config (`memory.provider` enum in Config page), mermaid embeds (present). (Projects/worktrees, quick-entry, reactions, marketplace themes, keybinds, terminal backend panel + font, **notifications settings**, **window translucency**: **present — ported since 08-04 / user-verified 08-06**.)
 6. **Platform adapters** — missing `a2a`, `buzz`, `raft`, `photon`, `whatsapp_cloud`.
-7. **RPC surface** — 90 handlers vs 131: no `billing.*`, `learning.*`, `projects.*`, `verification.*`, `wake.*`, `usage.bars`, `llm.oneshot`, `system.battery`, `message.react`, `pdf.attach`, `file.attach`, `handoff.*`, `terminal.read.respond`.
+7. **RPC surface** — no `billing.*`, `learning.*`, `verification.*`, `wake.*`, `usage.bars`, `llm.oneshot`, `system.battery`, `pdf.attach`, `file.attach`, `handoff.*`, `terminal.read.respond`. (`projects.*` and `message.react` are PRESENT — corrected 2026-08-06.)
 
 **Anakot-only (superset):** Web dashboard (181 routes) + full WEB_VERSION web app, NotebookLLM, Discord Rich Presence, multi-user admin/grants, `gquota`, `obsidian_graph_scan` tool, Windows-native installers/bootstrap, Railway/docker-compose.windows, mobile responsive web, `auto-read-aloud`/haptics/mobile shell in desktop, ponytail agent kit, callmemo provider + account/subscription.
 
@@ -103,10 +114,10 @@ Anakot is a fork of Hermes Agent. It shares ~90% of the core (agent loop, tools,
 | Reactions UI | `reactions.ts`, `reactions-local`, `reactions-enabled` stores |
 | Floating HUD | `floating-hud.tsx` module + `HUD_ITEM`/`HUD_TEXT` |
 | Contrib panes/surfaces | `contrib/` (panes, surfaces, wiring, controller, latest-actions) |
-| Window effects | `translucency`, `ambient`, `backdrop`, `zoom` gateway stores |
+| Window effects | `translucency`, `ambient`, `backdrop`, `zoom` gateway stores — Anakot: opacity slider PRESENT (`WindowOpacitySlider` in appearance-settings.tsx:562); only ambient/zoom stores remain |
 | Billing UI | `billing/` settings + `billing-block.ts` store |
 | Memory settings UI | `settings/memory/` |
-| Notifications settings | `settings/notifications-settings.tsx` |
+| Notifications settings | `settings/notifications-settings.tsx` — Anakot: PRESENT as `NotificationToggleList` section in appearance-settings.tsx:564-674 |
 | SSH remote bootstrap (Electron) | `ssh-bootstrap-coordinator`, `ssh-config`, `ssh-connection` (Anakot has SSH *environment* backend but no desktop remote-bootstrap) |
 | Git worktree ops (Electron) | `git-worktree-ops` (Anakot has git channels but no worktree IPC) |
 | Native OAuth (Electron) | `native-oauth`, `native-oauth-login`, `native-token-store`, `native-auth-decisions` |

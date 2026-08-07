@@ -1993,7 +1993,8 @@ export const en: Translations = {
       previous: 'Prev',
       previousAria: 'Go to previous page',
       next: 'Next',
-      nextAria: 'Go to next page'
+      nextAria: 'Go to next page',
+      pageIndicator: (page, total) => `Page ${page} of ${total}`
     },
     sidebar: {
       title: 'Sidebar',

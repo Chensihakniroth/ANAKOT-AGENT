@@ -1465,9 +1465,9 @@ class APIServerAdapter(BasePlatformAdapter):
         db = self._ensure_session_db()
         if db is None:
             return web.json_response(_openai_error("Session database unavailable", code="session_db_unavailable"), status=503)
-        total = db.session_count(include_archived=True)
-        active_store = db.session_count(include_archived=False)
-        archived = db.session_count(archived_only=True)
+        total = db.session_count(include_archived=True, exclude_children=True)
+        active_store = db.session_count(include_archived=False, exclude_children=True)
+        archived = db.session_count(archived_only=True, exclude_children=True)
         messages = db.message_count()
         by_source: dict = {}
         try:

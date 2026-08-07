@@ -177,11 +177,12 @@ export async function listAllProfileSessions(
 // read path. A remote session's row lives only on its remote host, so a mutation
 // that hit the local primary would no-op or 404. Omit for the current/default.
 export function setSessionArchived(id: string, archived: boolean, profile?: string | null): Promise<{ ok: boolean }> {
+  const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
   return window.anakotDesktop.api<{ ok: boolean }>({
     ...(profile ? { profile } : {}),
-    path: `/api/sessions/${encodeURIComponent(id)}`,
+    path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
     method: 'PATCH',
-    body: { archived }
+    body: { archived, ...(profile ? { profile } : {}) }
   })
 }
 
@@ -204,9 +205,10 @@ export function getSessionMessages(id: string, profile?: string | null): Promise
 }
 
 export function deleteSession(id: string, profile?: string | null): Promise<{ ok: boolean }> {
+  const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
   return window.anakotDesktop.api<{ ok: boolean }>({
     ...(profile ? { profile } : {}),
-    path: `/api/sessions/${encodeURIComponent(id)}`,
+    path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
     method: 'DELETE'
   })
 }
@@ -216,9 +218,10 @@ export function renameSession(
   title: string,
   profile?: string | null
 ): Promise<{ ok: boolean; title: string }> {
+  const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
   return window.anakotDesktop.api<{ ok: boolean; title: string }>({
     ...(profile ? { profile } : {}),
-    path: `/api/sessions/${encodeURIComponent(id)}`,
+    path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
     method: 'PATCH',
     body: { title, ...(profile ? { profile } : {}) }
   })

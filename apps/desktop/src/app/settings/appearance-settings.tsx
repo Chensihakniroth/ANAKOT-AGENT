@@ -11,6 +11,13 @@ import { triggerHaptic } from '@/lib/haptics'
 import { Check, Download, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
+import {
+  NATIVE_NOTIFICATION_KINDS,
+  $nativeNotifyPrefs,
+  setNativeNotifyEnabled,
+  setNativeNotifyKind,
+  type NativeNotificationKind
+} from '@/store/native-notifications'
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
 import { useTheme } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
@@ -617,53 +624,61 @@ function WindowOpacitySlider() {
 }
 
 function NotificationToggleList() {
-  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null)
+  const prefs = useStore($nativeNotifyPrefs)
 
-  useEffect(() => {
-    window.anakotDesktop.getNotificationPrefs().then(setPrefs).catch(() => {})
+  const handleKindToggle = useCallback((kind: NativeNotificationKind, value: boolean) => {
+    setNativeNotifyKind(kind, value)
+    triggerHaptic('selection')
   }, [])
 
-  const handleToggle = useCallback((type: keyof NotificationPrefs, value: boolean) => {
-    const next = { ...prefs!, [type]: value }
-    setPrefs(next)
-    window.anakotDesktop.setNotificationPrefs(next).catch(() => {})
+  const handleMasterToggle = useCallback((value: boolean) => {
+    setNativeNotifyEnabled(value)
     triggerHaptic('selection')
-  }, [prefs])
+  }, [])
 
-  if (!prefs) return null
-
-  const labels: Record<keyof NotificationPrefs, string> = {
-    message: 'Messages',
-    task_complete: 'Task Complete',
-    update: 'Updates',
-    error: 'Errors',
-    info: 'Info'
+  const labels: Record<NativeNotificationKind, string> = {
+    approval: 'Tool Approvals',
+    backgroundDone: 'Background Tasks',
+    input: 'Input Prompts',
+    turnDone: 'Replies Finished',
+    turnError: 'Errors'
   }
 
-  const descriptions: Record<keyof NotificationPrefs, string> = {
-    message: 'New messages and assistant replies',
-    task_complete: 'When background tasks complete',
-    update: 'App update notifications',
-    error: 'Error alerts',
-    info: 'Informational notifications'
+  const descriptions: Record<NativeNotificationKind, string> = {
+    approval: 'When the agent needs approval for a tool',
+    backgroundDone: 'When background tasks complete',
+    input: 'When the agent needs your input',
+    turnDone: 'When a reply finishes while you\u2019re away',
+    turnError: 'When a reply fails'
   }
 
   return (
     <ListRow
       below={
         <div className="mt-3 grid gap-2">
-          {(Object.keys(prefs) as Array<keyof NotificationPrefs>).map(type => (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-foreground">Native notifications</div>
+              <div className="text-[0.65rem] leading-tight text-muted-foreground">Master switch for all system toasts</div>
+            </div>
+            <Switch
+              checked={prefs.enabled}
+              onCheckedChange={handleMasterToggle}
+              size="xs"
+            />
+          </div>
+          {NATIVE_NOTIFICATION_KINDS.map(kind => (
             <div
               className="flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2"
-              key={type}
+              key={kind}
             >
               <div className="min-w-0">
-                <div className="text-xs font-medium text-foreground">{labels[type]}</div>
-                <div className="text-[0.65rem] leading-tight text-muted-foreground">{descriptions[type]}</div>
+                <div className="text-xs font-medium text-foreground">{labels[kind]}</div>
+                <div className="text-[0.65rem] leading-tight text-muted-foreground">{descriptions[kind]}</div>
               </div>
               <Switch
-                checked={prefs[type]}
-                onCheckedChange={v => handleToggle(type, v)}
+                checked={prefs.kinds[kind]}
+                onCheckedChange={v => handleKindToggle(kind, v)}
                 size="xs"
               />
             </div>

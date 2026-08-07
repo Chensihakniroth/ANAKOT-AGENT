@@ -5661,9 +5661,9 @@ async def get_session_stats(request: Request):
     else:
         db = SessionDB(read_only=True)
     try:
-        total = db.session_count(include_archived=True)
-        active_store = db.session_count(include_archived=False)
-        archived = db.session_count(archived_only=True)
+        total = db.session_count(include_archived=True, exclude_children=True)
+        active_store = db.session_count(include_archived=False, exclude_children=True)
+        archived = db.session_count(archived_only=True, exclude_children=True)
         messages = db.message_count()
         by_source: Dict[str, int] = {}
         try:
@@ -5774,7 +5774,8 @@ async def delete_session_endpoint(session_id: str, request: Request, profile: Op
     # desktop routes their DELETE to the remote backend. Omit for current/default.
     db = _open_session_db_for_profile(profile, request)
     try:
-        if not db.delete_session(session_id):
+        sid = db.resolve_session_id(session_id) or session_id
+        if not db.delete_session(sid):
             raise HTTPException(status_code=404, detail="Session not found")
         return {"ok": True}
     finally:
