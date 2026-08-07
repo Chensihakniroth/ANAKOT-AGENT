@@ -30,6 +30,53 @@ class TestDefaults:
         assert path.endswith("hey_casca.onnx")
 
 
+class TestInputGain:
+    def test_default_when_missing(self):
+        assert ww._input_gain({}) == 1.0
+
+    def test_parses_float(self):
+        assert ww._input_gain({"input_gain": 8}) == 8.0
+        assert ww._input_gain({"input_gain": "4.5"}) == 4.5
+
+    def test_rejects_bad_values(self):
+        assert ww._input_gain({"input_gain": "abc"}) == 1.0
+        assert ww._input_gain({"input_gain": 0.01}) == 1.0  # below floor
+        assert ww._input_gain({"input_gain": 128}) == 1.0  # above ceiling
+
+    def test_detector_stores_gain(self):
+        det = ww.WakeWordDetector(engine=None, on_wake=lambda: None, input_gain=10.0)
+        assert det.input_gain == 10.0
+        det2 = ww.WakeWordDetector(engine=None, on_wake=lambda: None, input_gain=0.01)
+        assert det2.input_gain == 1.0
+
+
+class TestResample:
+    def test_identity_when_rates_match(self):
+        import numpy as np
+
+        frame = np.zeros(1280, dtype=np.int16)
+        assert ww._resample_linear(frame, 16000, 16000) is frame
+
+    def test_length_conversion_44100_to_16000(self):
+        import numpy as np
+
+        frame = np.zeros(3528, dtype=np.int16)
+        out = ww._resample_linear(frame, 44100, 16000)
+        assert len(out) == 1280
+        assert out.dtype == np.int16
+
+    def test_tone_survives_roundtrip(self):
+        import numpy as np
+
+        t = np.arange(0, 0.08, 1 / 44100, dtype=np.float32)
+        tone = (30000 * np.sin(2 * np.pi * 440 * t)).astype(np.int16)
+        up = ww._resample_linear(tone, 44100, 48000)
+        back = ww._resample_linear(up, 48000, 16000)
+        assert len(back) == 1280
+        # amplitude roughly preserved through the roundtrip
+        assert np.abs(back).max() > 10000
+
+
 class TestSensitivity:
     def test_default_when_missing(self):
         assert ww._sensitivity({}) == 0.6

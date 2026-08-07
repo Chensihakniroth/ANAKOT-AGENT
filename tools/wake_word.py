@@ -68,6 +68,10 @@ _DEFAULTS: Dict[str, Any] = {
     "enabled": False,
     "surface": "auto",
     "input_device": None,
+    # Software gain applied to captured frames before detection. Raw capture
+    # paths (WDM-KS) bypass the Windows mixer gain, so speech arrives very
+    # quiet; set this > 1.0 (e.g. 8) for such devices.
+    "input_gain": 1.0,
     # Where PCM is captured:
     #   "local"  — PortAudio on the backend host (historic default)
     #   "client" — desktop/TUI streams int16 frames via wake.feed
@@ -179,6 +183,18 @@ def _input_device(cfg: Dict[str, Any]) -> int | str | None:
         return raw
     value = str(raw).strip()
     return value or None
+
+
+def _input_gain(cfg: Dict[str, Any]) -> float:
+    """Configured software gain for captured frames (>= 0.1)."""
+    raw = _get(cfg, "input_gain")
+    try:
+        gain = float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+    if gain < 0.1 or gain > 64.0:
+        return 1.0
+    return gain
 
 
 def _sensitivity(cfg: Dict[str, Any]) -> float:
@@ -371,6 +387,26 @@ def silent_audio_hint(details: Dict[str, Any]) -> str:
         f"Microphone delivers only silence from {_device_label(details)}. "
         "Check the selected input device, then toggle the wake word."
     )
+
+
+def _resample_linear(frame, src_rate: int, dst_rate: int):
+    """Linear-interpolation resample of a 1-D int16 frame to dst_rate.
+
+    Some input devices (WDM-KS, WASAPI exclusive) only open at their native
+    sample rate, so the engine captures at the native format and converts to
+    the detector's 16 kHz frames in Python. Pure numpy — no scipy needed.
+    """
+    import numpy as np
+
+    if src_rate == dst_rate or len(frame) == 0:
+        return frame
+    n_out = max(1, round(len(frame) * dst_rate / src_rate))
+    src = np.arange(n_out, dtype=np.float64) * src_rate / dst_rate
+    x0 = np.floor(src).astype(np.int64)
+    x1 = np.minimum(x0 + 1, len(frame) - 1)
+    frac = (src - x0).astype(np.float32)
+    f = frame.astype(np.float32)
+    return (f[x0] * (1.0 - frac) + f[x1] * frac).astype(np.int16)
 
 
 # ---------------------------------------------------------------------------
@@ -611,12 +647,14 @@ class WakeWordDetector:
                  cooldown: float = _FIRE_COOLDOWN_SECONDS,
                  on_failure: Optional[Callable[["WakeWordDetector"], None]] = None,
                  input_device: int | str | None = None,
-                 external_audio: bool = False):
+                 external_audio: bool = False,
+                 input_gain: float = 1.0):
         self.engine = engine
         self.on_wake = on_wake
         self.cooldown = cooldown
         self.on_failure = on_failure
         self.input_device = input_device
+        self.input_gain = float(input_gain) if float(input_gain) >= 0.1 else 1.0
         self.external_audio = bool(external_audio)
         self.input_device_details: Dict[str, Any] = (
             {"selector": "client", "name": "client capture", "hostapi": "remote"}
@@ -738,6 +776,12 @@ class WakeWordDetector:
              startup_errors: list[BaseException]) -> None:
         frame_length = self.engine.frame_length
         stream = None
+        # Capture format — set by the local branch below; external/client
+        # capture feeds 16 kHz frames directly, so the conversion steps are
+        # no-ops there.
+        stream_rate = SAMPLE_RATE
+        stream_channels = 1
+        stream_blocksize = frame_length
 
         if self.external_audio:
             # Drain any stale frames from a previous arm.
@@ -769,13 +813,26 @@ class WakeWordDetector:
                 self.input_device_details.get("default_samplerate") or "unknown",
                 SAMPLE_RATE,
             )
+            # Some devices (WDM-KS, WASAPI exclusive) only open at their native
+            # rate/format — the detector needs 16 kHz mono frames, so capture at
+            # the native format and downmix/resample in Python.
+            native_rate = int(self.input_device_details.get("default_samplerate") or SAMPLE_RATE)
+            native_channels = max(1, min(2, int(self.input_device_details.get("max_input_channels") or 1)))
+            stream_rate = native_rate if native_rate > 0 else SAMPLE_RATE
+            stream_channels = native_channels
+            stream_blocksize = (
+                max(frame_length, round(frame_length * stream_rate / SAMPLE_RATE))
+                if stream_rate != SAMPLE_RATE
+                else frame_length
+            )
             try:
                 stream = sd.InputStream(
                     device=self.input_device,
-                    samplerate=SAMPLE_RATE,
-                    channels=1,
+                    samplerate=stream_rate,
+                    channels=stream_channels,
                     dtype="int16",
-                    blocksize=frame_length,
+                    blocksize=stream_blocksize,
+                    callback=lambda indata, frames, t, status: self._audio_q.put(indata.copy()),
                 )
                 stream.start()
             except Exception as e:
@@ -802,23 +859,28 @@ class WakeWordDetector:
         try:
             while not self._stop.is_set():
                 try:
-                    if self.external_audio:
-                        try:
-                            frame = self._audio_q.get(timeout=0.25)
-                        except Exception:
-                            # No client frames yet — count as silence for status.
-                            self._silent_frames += 1
-                            if self._silent_frames == silent_alert_frames:
-                                self.audio_silent = True
-                            continue
-                        data = frame
-                    else:
-                        data, _overflow = stream.read(frame_length)
+                    # Callback stream (local capture) and wake.feed (external
+                    # capture) both land here — queue.get with a short timeout
+                    # doubles as the silence detector when the source stalls.
+                    try:
+                        data = self._audio_q.get(timeout=0.25)
+                    except Exception:
+                        # No frames yet — count as silence for status.
+                        self._silent_frames += 1
+                        if self._silent_frames == silent_alert_frames:
+                            self.audio_silent = True
+                        continue
                 except Exception as e:
                     logger.warning("wake word: stream read error: %s", e)
                     failed = not self._stop.is_set()
                     break
-                frame = data[:, 0] if getattr(data, "ndim", 1) == 2 else data
+                if getattr(data, "ndim", 1) == 2:
+                    frame = data.mean(axis=1) if data.shape[1] > 1 else data[:, 0]
+                    frame = frame.astype("int16")
+                else:
+                    frame = data
+                if stream_rate != SAMPLE_RATE:
+                    frame = _resample_linear(frame, stream_rate, SAMPLE_RATE)
                 try:
                     peak = int(abs(frame).max()) if len(frame) else 0
                 except Exception:
@@ -837,6 +899,13 @@ class WakeWordDetector:
                         logger.info("wake word: mic audio detected — stream healthy")
                     self._silent_frames = 0
                     self.audio_silent = False
+                if self.input_gain != 1.0:
+                    try:
+                        import numpy as _np
+
+                        frame = _np.clip(frame * self.input_gain, -32768, 32767).astype("int16")
+                    except Exception:
+                        pass
                 try:
                     fired = self.engine.process(frame)
                 except Exception as e:
@@ -978,6 +1047,7 @@ def start_listening(
                 on_failure=_detector_failed,
                 input_device=_input_device(cfg),
                 external_audio=external_audio,
+                input_gain=_input_gain(cfg),
             )
             _detector = detector
             _detector_owner = owner
