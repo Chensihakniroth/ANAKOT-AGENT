@@ -294,12 +294,53 @@ echo    Cloning repository...
 echo.
 
 set "TEMP_DIR=%TEMP%\anakot-install-%RANDOM%"
-git clone --depth 1 --filter=blob:none --sparse https://github.com/Chensihakniroth/ANAKOT-AGENT.git "%TEMP_DIR%"
-if %ERRORLEVEL% NEQ 0 (
-    echo    ✘ Git clone failed. Check your internet connection.
+set "REPO_URL=https://github.com/Chensihakniroth/ANAKOT-AGENT.git"
+
+git clone --depth 1 --filter=blob:none --sparse "%REPO_URL%" "%TEMP_DIR%"
+if %ERRORLEVEL% EQU 0 goto :CLONE_OK
+
+:: Private repo → prompt for credentials
+echo.
+echo    ✘ Anonymous clone failed.
+echo      This repository is PRIVATE. You need a GitHub account
+echo      that Chensihakniroth has granted access to.
+echo.
+set /p "GH_USER=    GitHub username: "
+if "%GH_USER%"=="" (
+    echo    ✘ No username entered. Cannot install.
     pause
     exit /b 1
 )
+
+echo.
+echo    Enter a GitHub Personal Access Token:
+echo      - Classic:      scope "repo"
+echo      - Fine-grained: Contents: Read-only on Chensihakniroth/ANAKOT-AGENT
+echo      Create one at:  https://github.com/settings/tokens
+echo.
+for /f "delims=" %%t in ('powershell -NoProfile -Command "$c=Read-Host -AsSecureString 'GitHub token'; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($c))"') do set "GH_TOKEN=%%t"
+if "%GH_TOKEN%"=="" (
+    echo    ✘ No token entered. Cannot install.
+    pause
+    exit /b 1
+)
+
+echo    → Retrying with authentication...
+git clone --depth 1 --filter=blob:none --sparse "https://%GH_USER%:%GH_TOKEN%@github.com/Chensihakniroth/ANAKOT-AGENT.git" "%TEMP_DIR%" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo    ✘ Authenticated clone failed.
+    echo      Check the username/token and that your account has access.
+    pause
+    exit /b 1
+)
+
+:: Strip token from remote URL + store credentials for future updates
+git -C "%TEMP_DIR%" remote set-url origin "%REPO_URL%"
+git -C "%TEMP_DIR%" config credential.helper store
+if not exist "%USERPROFILE%\.git-credentials" type nul > "%USERPROFILE%\.git-credentials"
+echo https://%GH_USER%:%GH_TOKEN%@github.com>> "%USERPROFILE%\.git-credentials"
+
+:CLONE_OK
 
 cd /d "%TEMP_DIR%"
 git sparse-checkout set --no-cone ^

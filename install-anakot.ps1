@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Anakot Agent - Cross-Platform Installer (PowerShell)
@@ -391,10 +391,49 @@ Write-Host ""
 
 $tempDir = "$env:TEMP\anakot-install-$(Get-Random)"
 git clone --depth 1 --filter=blob:none --sparse $RepoUrl $tempDir
-if ($LASTEXITCODE -ne 0) {
-    Write-Fail "Git clone failed. Check your internet connection."
-    Read-Host "Press Enter to exit"
-    exit 1
+if ($LASTEXITCODE -eq 0) { $cloned = $true } else { $cloned = $false }
+
+if (-not $cloned) {
+    # Private repo -> prompt for credentials
+    Write-Host ""
+    Write-Fail "Anonymous clone failed."
+    Write-Host "    This repository is PRIVATE. You need a GitHub account"
+    Write-Host "    that Chensihakniroth has granted access to."
+    Write-Host ""
+    $ghUser = Read-Host "    GitHub username"
+    if (-not $ghUser) {
+        Write-Fail "No username entered. Cannot install."
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "    Enter a GitHub Personal Access Token:"
+    Write-Host "      - Classic:      scope 'repo'"
+    Write-Host "      - Fine-grained: Contents: Read-only on Chensihakniroth/ANAKOT-AGENT"
+    Write-Host "      Create one at:  https://github.com/settings/tokens"
+    Write-Host ""
+    $secureToken = Read-Host -AsSecureString "    Token"
+    $ghToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken))
+    if (-not $ghToken) {
+        Write-Fail "No token entered. Cannot install."
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+    Write-Info "Retrying with authentication..."
+    $authUrl = "https://$ghUser`:$([uri]::EscapeDataString($ghToken))@github.com/Chensihakniroth/ANAKOT-AGENT.git"
+    git clone --depth 1 --filter=blob:none --sparse $authUrl $tempDir 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Authenticated clone failed."
+        Write-Host "    Check the username/token and that your account has access."
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+    # Strip token from remote URL + store credentials for future updates
+    git -C $tempDir remote set-url origin $RepoUrl
+    git -C $tempDir config credential.helper store
+    "protocol=https`nhost=github.com`nusername=$ghUser`npassword=$ghToken`n" |
+        git -C $tempDir credential approve | Out-Null
 }
 
 Set-Location $tempDir

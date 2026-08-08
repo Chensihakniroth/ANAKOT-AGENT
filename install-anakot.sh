@@ -432,7 +432,44 @@ echo "    Cloning repository..."
 echo ""
 
 TEMP_DIR=$(mktemp -d)
-git clone --depth 1 --filter=blob:none --sparse "$REPO_URL" "$TEMP_DIR"
+if ! git clone --depth 1 --filter=blob:none --sparse "$REPO_URL" "$TEMP_DIR" 2>/dev/null; then
+    # Private repo -> prompt for credentials
+    echo ""
+    echo "    ✘ Anonymous clone failed."
+    echo "      This repository is PRIVATE. You need a GitHub account"
+    echo "      that Chensihakniroth has granted access to."
+    echo ""
+    read -r -p "    GitHub username: " GH_USER
+    if [ -z "$GH_USER" ]; then
+        echo "    ✘ No username entered. Cannot install."
+        exit 1
+    fi
+    echo ""
+    echo "    Enter a GitHub Personal Access Token:"
+    echo "      - Classic:      scope 'repo'"
+    echo "      - Fine-grained: Contents: Read-only on Chensihakniroth/ANAKOT-AGENT"
+    echo "      Create one at:  https://github.com/settings/tokens"
+    echo ""
+    read -r -s -p "    Token: " GH_TOKEN
+    echo ""
+    if [ -z "$GH_TOKEN" ]; then
+        echo "    ✘ No token entered. Cannot install."
+        exit 1
+    fi
+    echo "    → Retrying with authentication..."
+    AUTH_URL="https://${GH_USER}:${GH_TOKEN}@github.com/Chensihakniroth/ANAKOT-AGENT.git"
+    if ! git clone --depth 1 --filter=blob:none --sparse "$AUTH_URL" "$TEMP_DIR" 2>/dev/null; then
+        echo "    ✘ Authenticated clone failed."
+        echo "      Check the username/token and that your account has access."
+        exit 1
+    fi
+    # Strip token from remote URL + store credentials for future updates
+    git -C "$TEMP_DIR" remote set-url origin "$REPO_URL"
+    git -C "$TEMP_DIR" config credential.helper store
+    printf 'protocol=https\nhost=github.com\nusername=%s\npassword=%s\n\n' \
+        "$GH_USER" "$GH_TOKEN" |
+        git -C "$TEMP_DIR" credential approve >/dev/null 2>&1 || true
+fi
 
 cd "$TEMP_DIR"
 git sparse-checkout set --no-cone \
