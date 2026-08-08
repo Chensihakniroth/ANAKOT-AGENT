@@ -205,6 +205,7 @@ _LONG_HANDLERS = frozenset(
     {
         "browser.manage",
         "cli.exec",
+        "llm.oneshot",
         "session.branch",
         "session.compress",
         "session.resume",
@@ -10305,3 +10306,80 @@ def _(rid, params, pdb, conn) -> dict:
     cwd = _completion_cwd({"cwd": str(params.get("cwd") or "").strip()} if params.get("cwd") else {})
     proj = pdb.project_for_path(conn, cwd)
     return _ok(rid, {"project": proj.to_dict() if proj else None, "cwd": cwd, "branch": _git_branch_for_cwd(cwd)})
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# llm.oneshot — stateless single-shot completion (desktop "🎲 generate idea").
+# No agent loop, no tools, no session side effects: build a plain
+# system+user completion and return {"text": ...}. Inherits the live
+# session's model/provider/credentials when one exists so the idea
+# generator matches the model the user is actually chatting with;
+# otherwise resolves the configured default via the auxiliary auto chain.
+# Registered in _LONG_HANDLERS: a completion takes seconds, so it must not
+# block the dispatcher loop (approval.respond / session.interrupt etc.
+# would sit unread in the stdin pipe for the duration).
+# ─────────────────────────────────────────────────────────────────────────
+@method("llm.oneshot")
+def _(rid, params: dict) -> dict:
+    instructions = str(params.get("instructions") or "").strip()
+    input_text = str(params.get("input") or "").strip()
+    if not input_text and not instructions:
+        return _err(rid, 5071, "input or instructions required")
+
+    temperature = params.get("temperature")
+    if temperature is not None:
+        try:
+            temperature = float(temperature)
+        except (TypeError, ValueError):
+            temperature = None
+        else:
+            temperature = max(0.0, min(2.0, temperature))
+
+    messages: list[dict] = []
+    if instructions:
+        messages.append({"role": "system", "content": instructions})
+    messages.append({"role": "user", "content": input_text or "(no input)"})
+
+    # Inherit the live session's runtime when one exists — mirrors the
+    # getattr pattern in _background_agent_kwargs. A stateless call has no
+    # session_id of its own, so prefer the caller's explicit id, else the
+    # most recently created live session.
+    agent = None
+    try:
+        with _sessions_lock:
+            sid = str(params.get("session_id") or "")
+            if sid:
+                agent = (_sessions.get(sid) or {}).get("agent")
+            else:
+                for session in reversed(list(_sessions.values())):
+                    if session.get("agent") is not None:
+                        agent = session["agent"]
+                        break
+    except Exception:
+        agent = None
+
+    try:
+        from agent.auxiliary_client import call_llm
+
+        kwargs: dict = {
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 400,
+        }
+        if agent is not None:
+            kwargs["provider"] = getattr(agent, "provider", None) or None
+            kwargs["base_url"] = getattr(agent, "base_url", None) or None
+            kwargs["api_key"] = getattr(agent, "api_key", None) or None
+            kwargs["model"] = getattr(agent, "model", None) or None
+
+        response = call_llm(task=None, **kwargs)
+        try:
+            content = response.choices[0].message.content
+        except Exception:
+            content = str(response)
+        if not isinstance(content, str):
+            content = str(content or "")
+        return _ok(rid, {"text": content.strip()})
+    except Exception as e:
+        return _err(rid, 5072, f"llm.oneshot failed: {e}")
+
