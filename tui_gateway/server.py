@@ -218,11 +218,11 @@ _LONG_HANDLERS = frozenset(
         "pet.generate.status",
         "pet.hatch",
         "pet.cancel",
-        # Mic open/halt/close block for up to ~5s (start/resume wait on the
-        # device; stop/pause join the capture thread). Off the main loop so a
-        # flaky mic can't freeze every other RPC (approval.respond, heartbeat,
-        # session streaming). wake.status stays fast-path (quick state read)
-        # and wake.feed MUST stay inline (continuous renderer audio frames).
+        # Wake-word mic open/halt/close can block up to ~5 s (start/resume wait
+        # on the device; stop/pause join the capture thread), so run it off the
+        # main loop — a flaky mic must not freeze approval.respond/heartbeat/
+        # session streaming. wake.status stays fast-path; wake.feed (continuous
+        # renderer audio frames) MUST stay inline on the main loop.
         "wake.pause",
         "wake.resume",
         "wake.start",
