@@ -474,3 +474,129 @@ class TestStreamingParser:
                 content_text = inner_delta.get("text", "")
         assert content_text == ""
         assert "error" in chunk
+
+
+# ── Retrieval: chunking ────────────────────────────────────────────────
+
+
+class TestChunkText:
+    def test_empty_text(self):
+        from anakot_cli.notebooks import chunk_text
+        assert chunk_text("") == []
+        assert chunk_text("   \n  ") == []
+
+    def test_short_text_single_chunk(self):
+        from anakot_cli.notebooks import chunk_text
+        assert chunk_text("hello world") == ["hello world"]
+
+    def test_long_text_multiple_chunks_with_overlap(self):
+        from anakot_cli.notebooks import chunk_text
+        text = "a" * 3000
+        chunks = chunk_text(text)
+        assert len(chunks) >= 2
+        assert all(chunks)
+        # Overlap window is preserved between consecutive chunks
+        assert chunks[0][-200:] == chunks[1][:200]
+
+    def test_prefers_newline_boundary(self):
+        from anakot_cli.notebooks import chunk_text
+        text = "p" * 1000 + "\n" + "q" * 2000
+        chunks = chunk_text(text)
+        # First chunk breaks at the newline in the back half of the window
+        assert chunks[0] == "p" * 1000
+
+
+# ── Retrieval: tokenize ────────────────────────────────────────────────
+
+
+class TestTokenize:
+    def test_basic(self):
+        from anakot_cli.notebooks import tokenize
+        assert tokenize("The Quick, Brown Fox! 123") == ["quick", "brown", "fox", "123"]
+
+    def test_removes_stopwords_and_single_chars(self):
+        from anakot_cli.notebooks import tokenize
+        assert tokenize("a the and of") == []
+
+
+# ── Retrieval: ranking ─────────────────────────────────────────────────
+
+
+class TestRankChunks:
+    def test_relevant_chunk_scores_higher(self):
+        from anakot_cli.notebooks import rank_chunks
+        chunks = [
+            (0, "The anaconda is a large snake found in the amazon rainforest."),
+            (1, "Quantum entanglement is a physics phenomenon."),
+        ]
+        scored = rank_chunks("anaconda snake", chunks)
+        assert len(scored) == 2
+        assert all(len(item) == 3 for item in scored)
+        assert scored[0][0] == 0
+        assert scored[0][2] > scored[1][2]
+
+    def test_empty_query_scores_zero(self):
+        from anakot_cli.notebooks import rank_chunks
+        chunks = [(0, "anaconda snakes"), (1, "quantum physics")]
+        scored = rank_chunks("the and of", chunks)
+        assert all(item[2] == 0.0 for item in scored)
+
+
+# ── Retrieval: context building ────────────────────────────────────────
+
+
+class TestBuildChatContext:
+    def _add(self, nb, filename, text):
+        from anakot_cli.notebooks import add_source
+        return add_source(
+            notebook_id=nb["id"],
+            filename=filename,
+            original_name=filename,
+            source_type="text",
+            content_bytes=b"x",
+            extracted_text=text,
+            page_count=0,
+            word_count=1,
+            char_count=1,
+        )
+
+    def test_no_sources_returns_none(self):
+        from anakot_cli.notebooks import build_chat_context
+        nb = _create()
+        assert build_chat_context(nb["id"], "hello") == (None, None)
+
+    def test_global_question_uses_even_spread(self):
+        from anakot_cli.notebooks import build_chat_context
+        nb = _create()
+        self._add(nb, "a.txt", "Anaconda snakes live in the amazon. " * 100)
+        self._add(nb, "b.txt", "Quantum physics studies entanglement. " * 100)
+        ctx, note = build_chat_context(nb["id"], "What is this about?")
+        assert ctx
+        assert note == ""
+        assert "--- Source 1: a.txt ---" in ctx
+        assert "--- Source 2: b.txt ---" in ctx
+
+    def test_relevant_source_ranked_and_numbered(self):
+        from anakot_cli.notebooks import build_chat_context
+        nb = _create()
+        self._add(nb, "physics.txt", "Quantum entanglement and wave functions. " * 13)
+        self._add(nb, "anaconda.txt", "Anaconda snakes eat fish in the amazon river. " * 13)
+        # Budget too small for even one full chunk (~600 chars) — the fallback
+        # must keep the single most relevant passage, which is from source 2.
+        ctx, note = build_chat_context(nb["id"], "anaconda snakes", max_chars=500)
+        assert ctx
+        assert note  # passages were omitted
+        # Source numbering matches get_notebook order (physics is 1, anaconda is 2)
+        assert "--- Source 2: anaconda.txt ---" in ctx
+        assert "anaconda" in ctx.lower()
+        # Context stays near budget even with the single-block fallback
+        assert len(ctx) <= 500 + 600
+
+    def test_budget_caps_total_context(self):
+        from anakot_cli.notebooks import build_chat_context
+        nb = _create()
+        self._add(nb, "big.txt", "Anaconda snakes eat fish. " * 5000)
+        ctx, note = build_chat_context(nb["id"], "anaconda fish", max_chars=4000)
+        assert ctx
+        assert note
+        assert len(ctx) <= 4000 + 600

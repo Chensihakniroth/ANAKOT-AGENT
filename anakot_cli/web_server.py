@@ -10547,6 +10547,7 @@ from anakot_cli.notebooks import (
     update_source_summary as _nb_update_source_summary,
     delete_source as _nb_delete_source,
     get_all_extracted_text as _nb_get_all_text,
+    build_chat_context as _nb_build_chat_context,
     extract_pdf_text as _nb_extract_pdf,
     extract_text_content as _nb_extract_text,
     _notebooks_root as _nb_root,
@@ -10981,18 +10982,14 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
-    # Build context from all sources
-    context_text = _nb_get_all_text(notebook_id, user_id=user_id)
-    if not context_text.strip():
+    # Build retrieval-aware context from the sources most relevant to the question
+    _ctx = _nb_build_chat_context(notebook_id, body.message, user_id=user_id)
+    if not _ctx or not _ctx[0]:
         raise HTTPException(
             status_code=400,
             detail="No extracted text in this notebook. Upload documents first.",
         )
-
-    # Truncate to ~50k chars to stay within context limits for smaller models
-    max_context_chars = 50_000
-    if len(context_text) > max_context_chars:
-        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+    context_text = _ctx[0] + _ctx[1]
 
     # Build messages
     source_names = [s["original_name"] for s in nb.get("sources", [])]
@@ -11147,16 +11144,12 @@ async def _notebook_chat_stream_generator(
         yield f"data: {_json.dumps({'error': 'Notebook not found'})}\n\n"
         return
 
-    # Build context from all sources
-    context_text = _nb_get_all_text(notebook_id, user_id=user_id)
-    if not context_text.strip():
+    # Build retrieval-aware context from the sources most relevant to the question
+    _ctx = _nb_build_chat_context(notebook_id, message, user_id=user_id)
+    if not _ctx or not _ctx[0]:
         yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
         return
-
-    # Truncate to ~50k chars
-    max_context_chars = 50_000
-    if len(context_text) > max_context_chars:
-        context_text = context_text[:max_context_chars] + "\n\n[...truncated...]"
+    context_text = _ctx[0] + _ctx[1]
 
     # Build messages
     source_names = [s["original_name"] for s in nb.get("sources", [])]

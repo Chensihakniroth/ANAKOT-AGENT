@@ -18,7 +18,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from anakot_cli.config import get_anakot_home
 
@@ -564,6 +564,213 @@ def get_all_extracted_text(
         total += len(header) + len(truncated)
 
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Retrieval: chunking + relevance ranking
+# ---------------------------------------------------------------------------
+
+_NB_CHUNK_SIZE = 1400
+_NB_CHUNK_OVERLAP = 200
+
+_NB_STOPWORDS = frozenset(
+    """a about after again all also am an and any are as at be because been before being
+    between both but by can could did do does doing down during each few for from further
+    had has have having he her here hers him his how i if in into is it its itself just
+    me more most my no nor not of off on or other our ours out over own same she should so
+    some such than that the their theirs them then there these they this those through to
+    too under until up very was we were what when where which while who whom why will with
+    you your yours""".split()
+)
+
+
+def chunk_text(
+    text: str,
+    chunk_size: int = _NB_CHUNK_SIZE,
+    overlap: int = _NB_CHUNK_OVERLAP,
+) -> List[str]:
+    """Split *text* into overlapping chunks for retrieval.
+
+    Chunks prefer to end on a newline boundary (paragraph break) when one
+    exists in the back half of the window; long unbroken runs are hard-split.
+    Returns a list of non-empty chunks.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    if len(text) <= chunk_size:
+        return [text]
+
+    chunks: List[str] = []
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_size, n)
+        if end < n:
+            # Prefer breaking at a paragraph/newline boundary in the latter
+            # half of the window so chunks stay readable.
+            cut = text.rfind("\n", start + chunk_size // 2, end)
+            if cut > start:
+                end = cut
+        piece = text[start:end].strip()
+        if piece:
+            chunks.append(piece)
+        if end >= n:
+            break
+        start = max(end - overlap, start + 1)
+    return chunks
+
+
+def tokenize(text: str) -> List[str]:
+    """Lowercase alphanumeric tokens minus a small English stopword list."""
+    import re
+
+    return [
+        t
+        for t in re.findall(r"[a-z0-9]+", text.lower())
+        if len(t) > 1 and t not in _NB_STOPWORDS
+    ]
+
+
+def rank_chunks(query: str, chunks: List[tuple]) -> List[tuple]:
+    """BM25-lite ranking of ``(source_index, chunk_text)`` pairs vs *query*.
+
+    Returns the same list with a float score appended to each tuple:
+    ``(source_index, chunk_text, score)``. Scores are corpus-relative (idf is
+    computed over the chunk set), so only ordering is meaningful. A query with
+    no meaningful terms scores everything 0.
+    """
+    import math
+    from collections import Counter
+
+    q_terms = tokenize(query)
+    scored = [(si, c, 0.0) for si, c in chunks]
+    if not q_terms or not chunks:
+        return scored
+
+    n = len(chunks)
+    doc_tokens = [tokenize(c) for _, c in chunks]
+    df: Counter = Counter()
+    for toks in doc_tokens:
+        for t in set(toks):
+            df[t] += 1
+    avgdl = max(1.0, sum(len(t) for t in doc_tokens) / n)
+    k1, b = 1.5, 0.75
+
+    out: List[tuple] = []
+    for (si, c), toks in zip(chunks, doc_tokens):
+        dl = Counter(toks)
+        doc_len = len(toks)
+        score = 0.0
+        for t in q_terms:
+            tf = dl.get(t)
+            if not tf:
+                continue
+            idf = math.log(1.0 + (n - df[t] + 0.5) / (df[t] + 0.5))
+            score += idf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b + b * doc_len / avgdl))
+        out.append((si, c, score))
+    return out
+
+
+def get_source_texts(
+    notebook_id: str, user_id: str | None = None
+) -> List[Dict[str, Any]]:
+    """Ordered extracted texts of a notebook's sources.
+
+    Order matches ``get_notebook()['sources']`` (sort_order, created_at) so a
+    source's position in the returned list is its ``[Source N]`` number - 1.
+    """
+    _migrate_legacy_notebooks(user_id)
+    db = _get_db(notebook_id, user_id)
+    _init_db(db)
+    rows = db.execute(
+        "SELECT id, filename, extracted_text FROM source "
+        "WHERE notebook_id = ? AND extracted_text IS NOT NULL "
+        "ORDER BY sort_order, created_at",
+        (notebook_id,),
+    ).fetchall()
+    db.close()
+    return [
+        {"id": r["id"], "filename": r["filename"], "text": r["extracted_text"] or ""}
+        for r in rows
+    ]
+
+
+def build_chat_context(
+    notebook_id: str,
+    message: str,
+    user_id: str | None = None,
+    max_chars: int = 50_000,
+) -> Optional[Tuple[str, str]]:
+    """Build a retrieval-aware context block for notebook chat.
+
+    Chunks every source, BM25-ranks the passages against *message*, and spends
+    the *max_chars* budget on the most relevant passages (capped at 60% per
+    source so one document can't monopolize the window). Each passage is
+    labeled ``--- Source N: <filename> ---`` where N is the 1-indexed position
+    in ``get_notebook()['sources']`` — the same numbering the frontend uses for
+    ``[Source N]`` citations.
+
+    Global questions ("summarize this notebook") have no useful query terms, so
+    they fall back to an even per-source spread instead of top-k ranking.
+
+    Returns ``(context_text, note)`` — *note* is a transparency string ("" when
+    nothing was dropped). Returns ``(None, None)`` when the notebook has no
+    extractable text.
+    """
+    sources = [s for s in get_source_texts(notebook_id, user_id) if s["text"].strip()]
+    if not sources:
+        return None, None
+
+    chunks: List[tuple] = []
+    for si, s in enumerate(sources):
+        for c in chunk_text(s["text"]):
+            chunks.append((si, c))
+
+    ranked = rank_chunks(message, chunks)
+    ranked.sort(key=lambda x: x[2], reverse=True)
+    has_matches = ranked and ranked[0][2] > 0
+
+    if not has_matches:
+        # No meaningful query (or nothing matched): even per-source spread so
+        # global questions still see the whole notebook.
+        budget_per = max(max_chars // len(sources), 1)
+        parts = []
+        for si, s in enumerate(sources):
+            text = s["text"]
+            if len(text) > budget_per:
+                text = text[:budget_per] + "\n\n[...truncated...]"
+            parts.append(f"--- Source {si + 1}: {s['filename']} ---\n{text}")
+        return "\n\n".join(parts), ""
+
+    # Ranked selection with a per-source cap so one document can't eat the
+    # whole window.
+    per_source_budget = int(max_chars * 0.6)
+    parts = []
+    used = 0
+    src_used: Dict[int, int] = {}
+    omitted = 0
+    for si, c, _score in ranked:
+        block = f"--- Source {si + 1}: {sources[si]['filename']} ---\n{c}"
+        if used + len(block) > max_chars:
+            omitted += 1
+            continue
+        if src_used.get(si, 0) + len(block) > per_source_budget:
+            omitted += 1
+            continue
+        parts.append(block)
+        used += len(block)
+        src_used[si] = src_used.get(si, 0) + len(block)
+    if not parts and ranked:
+        si, c, _ = ranked[0]
+        parts.append(f"--- Source {si + 1}: {sources[si]['filename']} ---\n{c}")
+    note = (
+        f"\n\n[Note: {omitted} of {len(chunks)} passages omitted as less "
+        "relevant to the query.]"
+        if omitted
+        else ""
+    )
+    return "\n\n".join(parts), note
 
 
 # ---------------------------------------------------------------------------
