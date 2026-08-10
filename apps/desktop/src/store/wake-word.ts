@@ -121,6 +121,7 @@ export async function armWake(): Promise<boolean> {
     }
     await gateway.request('wake.start', {}, 15_000)
     await refreshWakeStatus()
+    $wakeWord.set({ ...$wakeWord.get(), busy: false })
     return true
   } catch (error) {
     $wakeWord.set({ ...$wakeWord.get(), busy: false, error: errorMessage(error) })
@@ -151,6 +152,7 @@ export async function disarmWake(): Promise<boolean> {
       // Non-fatal: listener is already stopped.
     }
     await refreshWakeStatus()
+    $wakeWord.set({ ...$wakeWord.get(), busy: false })
     return true
   } catch (error) {
     $wakeWord.set({ ...$wakeWord.get(), busy: false, error: errorMessage(error) })

@@ -3652,6 +3652,31 @@ function installContextMenu(window) {
   })
 }
 
+// Shared wiring for spawned helper windows (pet overlay, quick entry): the
+// same keyboard shortcuts, context menu, and navigation hardening the main
+// window wires inline in createWindow(). Ported from Hermes — the quick-entry
+// port (285c73857) shipped the call sites but not this definition, which made
+// every spawn of the pet overlay / quick-entry window throw a ReferenceError.
+function wireCommonWindowHandlers(win) {
+  installPreviewShortcut(win)
+  installDevToolsShortcut(win)
+  installZoomShortcuts(win)
+  installContextMenu(win)
+  win.webContents.setWindowOpenHandler(details => {
+    openExternalUrl(details.url)
+
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if ((DEV_SERVER && url.startsWith(DEV_SERVER)) || (!DEV_SERVER && url.startsWith(`${RENDERER_PROTOCOL}://localhost`))) {
+      return
+    }
+
+    event.preventDefault()
+    openExternalUrl(url)
+  })
+}
+
 // Microphone capture for the voice composer. The renderer drives mic access
 // through getUserMedia, which Chromium gates behind these two session hooks.
 //

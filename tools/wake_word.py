@@ -803,6 +803,23 @@ class WakeWordDetector:
                 ready.set()
                 return
 
+            if sys.platform == "win32":
+                # PortAudio's WASAPI backend requires COM initialized on the
+                # thread that opens the stream. The listener may be started
+                # from a thread-pool worker (tui_gateway routes wake.start via
+                # _LONG_HANDLERS) whose thread has no COM apartment — without
+                # this, Pa_StartStream fails with PaErrorCode -9999
+                # (WdmSyncIoctl: DeviceIoControl GLE=6) on Intel Smart Sound
+                # devices. CoInitializeEx is per-thread and re-entrant; this
+                # thread exits right after the stream closes, so no matching
+                # CoUninitialize is required.
+                try:
+                    import ctypes
+
+                    ctypes.windll.ole32.CoInitializeEx(None, 0)
+                except Exception:
+                    pass
+
             self.input_device_details = _describe_input_device(sd, self.input_device)
             logger.info(
                 "wake word: opening microphone device=%s selector=%r hostapi=%s "
