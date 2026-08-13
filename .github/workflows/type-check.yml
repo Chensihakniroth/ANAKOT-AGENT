@@ -1,0 +1,51 @@
+name: Type Check (desktop)
+
+# Catches TypeScript type errors in the desktop app on every push/PR.
+# This is the gap that previously let a broken dev tree go unnoticed
+# (e.g. a duplicate `useState` import + a missing `MarkdownTextContent`
+# import compiled fine locally with a partial node_modules, but would
+# have been caught here). Mirrors the Node setup used by
+# build-windows-installer.yml.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "website/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "website/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: type-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  type-check:
+    name: tsc -b (apps/desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Type-check desktop app
+        run: npm run type-check
+        working-directory: apps/desktop
