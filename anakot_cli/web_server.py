@@ -10968,7 +10968,8 @@ async def notebook_get_overview(notebook_id: str, request: Request):
 class NotebookChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict[str, str]]] = None  # [{role, content}, ...]
-    source_id: Optional[str] = None  # scope retrieval to a single source
+    source_id: Optional[str] = None  # scope retrieval to a single source (legacy)
+    source_ids: Optional[List[str]] = None  # scope retrieval to specific sources (union)
 
 
 @app.post("/api/notebooks/{notebook_id}/chat")
@@ -10987,7 +10988,7 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
 
     # Build retrieval-aware context from the sources most relevant to the question
     _ctx = _nb_build_chat_context(
-        notebook_id, body.message, user_id=user_id, source_id=body.source_id
+        notebook_id, body.message, user_id=user_id, source_id=body.source_id, source_ids=body.source_ids
     )
     if not _ctx or not _ctx[0]:
         raise HTTPException(
@@ -11144,6 +11145,7 @@ async def _notebook_chat_stream_generator(
     history: list,
     user_id: str | None = None,
     source_id: str | None = None,
+    source_ids: list[str] | None = None,
 ):
     """Generator that yields SSE chunks for notebook chat."""
     import json as _json
@@ -11155,7 +11157,7 @@ async def _notebook_chat_stream_generator(
 
     # Build retrieval-aware context from the sources most relevant to the question
     _ctx = _nb_build_chat_context(
-        notebook_id, message, user_id=user_id, source_id=source_id
+        notebook_id, message, user_id=user_id, source_id=source_id, source_ids=source_ids
     )
     if not _ctx or not _ctx[0]:
         yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
@@ -11166,7 +11168,21 @@ async def _notebook_chat_stream_generator(
     source_names = [s["original_name"] for s in nb.get("sources", [])]
     sources_list = ", ".join(source_names)
     scope_instruction = ""
-    if source_id:
+    if source_ids:
+        _wanted = set(source_ids)
+        _names = [
+            f"[Source {i + 1}] ({src['original_name']})"
+            for i, src in enumerate(nb.get("sources", []))
+            if src["id"] in _wanted
+        ]
+        if _names:
+            scope_instruction = (
+                "The user is scoping this question to specific sources: "
+                + ", ".join(_names)
+                + ". Answer using ONLY those sources' content below. "
+                "Never cite other sources.\n\n"
+            )
+    elif source_id:
         for i, src in enumerate(nb.get("sources", [])):
             if src["id"] == source_id:
                 scope_instruction = (
@@ -11373,6 +11389,7 @@ async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, requ
             body.history or [],
             user_id=user_id,
             source_id=body.source_id,
+            source_ids=body.source_ids,
         ),
         media_type="text/event-stream",
         headers={

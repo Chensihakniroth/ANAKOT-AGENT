@@ -99,7 +99,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [leftWidth, setLeftWidth] = useState(256); // px, 0 = collapsed
   const [rightWidth, setRightWidth] = useState(288); // px, 0 = collapsed
   const [dragging, setDragging] = useState<"left" | "right" | null>(null);
-  const [scopeToSource, setScopeToSource] = useState(false);
+  const [scopeEnabled, setScopeEnabled] = useState(false);
+  const [scopedSourceIds, setScopedSourceIds] = useState<string[]>([]);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [editingSourceName, setEditingSourceName] = useState("");
   const [chatSearchQuery, setChatSearchQuery] = useState("");
@@ -151,7 +152,8 @@ export function NotebookView({ onClose }: NotebookViewProps) {
     setSelectedSource(null);
     setSourceText("");
     setOverview("");
-    setScopeToSource(false);
+    setScopeEnabled(false);
+    setScopedSourceIds([]);
     hasStreamedOnceRef.current = false;
     // Load persisted chat history
     try {
@@ -250,7 +252,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
           if (selectedSource?.id === sourceId) {
             setSelectedSource(null);
             setSourceText("");
-            setScopeToSource(false);
+            setScopedSourceIds((prev) => prev.filter((id) => id !== sourceId));
           }
           notify({ kind: "success", message: "Source removed" });
         },
@@ -648,7 +650,7 @@ ${src.summary}
         question,
         updatedMessages.slice(0, -1).slice(-20),
         controller.signal,
-        scopeToSource ? selectedSource?.id ?? null : null
+        scopeEnabled && scopedSourceIds.length > 0 ? scopedSourceIds : null
       );
 
       let accumulated = "";
@@ -688,7 +690,7 @@ ${src.summary}
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, currentNotebook, chatMessages, scopeToSource, selectedSource]);
+  }, [chatInput, currentNotebook, chatMessages, scopeEnabled, scopedSourceIds]);
 
   // ── Chat search highlight ─────────────────────────────────────
   const highlightMatch = useCallback((text: string, query: string): React.ReactNode => {
@@ -1430,20 +1432,40 @@ ${src.summary}
 
         {/* Chat input */}
         <div className="border-t border-(--ui-stroke-secondary)/60 p-3">
-          {/* Source scope toggle */}
-          {selectedSource && (
-            <div className="mb-2 flex items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-(--ui-text-secondary)">
-                <input
-                  type="checkbox"
-                  checked={scopeToSource}
-                  onChange={(e) => setScopeToSource(e.target.checked)}
-                  className="accent-(--ui-accent)"
-                />
-                Ask about <span className="font-medium text-(--ui-text-primary)">{selectedSource.original_name}</span> only
-              </label>
-            </div>
-          )}
+          {/* Multi-source retrieval scope */}
+          <div className="mb-2">
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-(--ui-text-secondary)">
+              <input
+                type="checkbox"
+                checked={scopeEnabled}
+                onChange={(e) => setScopeEnabled(e.target.checked)}
+                className="accent-(--ui-accent)"
+              />
+              Scope chat to selected sources
+            </label>
+            {scopeEnabled && (
+              <div className="mt-1.5 max-h-36 space-y-1 overflow-y-auto rounded-lg border border-(--ui-stroke-secondary)/60 bg-(--ui-surface-elevated)/50 p-2">
+                {sources.map((s) => {
+                  const checked = scopedSourceIds.includes(s.id);
+                  return (
+                    <label key={s.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-(--ui-text-secondary)">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setScopedSourceIds((prev) =>
+                            checked ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                          )
+                        }
+                        className="accent-(--ui-accent)"
+                      />
+                      <span className="truncate">{s.original_name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {chatMessages.length > 0 && (
             <div className="mb-2 flex justify-end">
               <button
@@ -1456,9 +1478,9 @@ ${src.summary}
             </div>
           )}
           <div className="flex items-end gap-2 rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/70 p-2 backdrop-blur-md transition-colors duration-200 focus-within:border-(--ui-accent)/60 focus-within:bg-(--ui-surface-elevated)/90">
-            {scopeToSource && selectedSource && (
+            {scopeEnabled && scopedSourceIds.length > 0 && (
               <span className="mb-0.5 inline-flex shrink-0 items-center gap-1 self-center rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
-                <Search size={12} className="shrink-0" /> {selectedSource.original_name}
+                <Search size={12} className="shrink-0" /> {scopedSourceIds.length} source{scopedSourceIds.length > 1 ? "s" : ""} scoped
               </span>
             )}
             <div className="relative min-w-0 flex-1">

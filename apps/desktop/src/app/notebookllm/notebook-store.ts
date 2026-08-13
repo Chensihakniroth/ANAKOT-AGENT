@@ -419,13 +419,13 @@ export async function openNotebookChatStream(
   message: string,
   history: Array<{ role: string; content: string }>,
   signal?: AbortSignal,
-  sourceId?: string | null
+  sourceIds?: string[] | null
 ): Promise<NotebookStreamReader> {
   const { requestId } = await window.anakotDesktop.notebookChatStreamStart({
     notebookId,
     message,
     history,
-    sourceId: sourceId ?? null,
+    sourceIds: sourceIds && sourceIds.length ? sourceIds : null,
   });
 
   let buffer: Array<string> = [];

@@ -726,6 +726,7 @@ def build_chat_context(
     user_id: str | None = None,
     max_chars: int = 50_000,
     source_id: str | None = None,
+    source_ids: list[str] | None = None,
 ) -> Optional[Tuple[str, str]]:
     """Build a retrieval-aware context block for notebook chat.
 
@@ -736,10 +737,12 @@ def build_chat_context(
     in ``get_notebook()['sources']`` — the same numbering the frontend uses for
     ``[Source N]`` citations.
 
-    If *source_id* is given, only that source's extracted text is considered
-    ("ask about this source only"). The labels keep the source's ORIGINAL
-    position in the notebook, so citations stay consistent with the source
-    list the frontend renders.
+    Scoping: ``source_ids`` (a list) restricts retrieval to those specific
+    sources (union) — the multi-source "scope to selected sources" mode.
+    ``source_id`` (single, legacy) restricts to one source and is ignored when
+    ``source_ids`` is provided. Either way the labels keep each source's
+    ORIGINAL position in the notebook so citations stay consistent with the
+    source list the frontend renders.
 
     Global questions ("summarize this notebook") have no useful query terms, so
     they fall back to an even per-source spread instead of top-k ranking.
@@ -752,24 +755,32 @@ def build_chat_context(
     if not all_sources:
         return None, None
 
-    base = 0
-    if source_id:
+    # Resolve the scoped subset, preserving original source order.
+    scoped_idx: list[int] | None = None
+    if source_ids:
+        wanted = set(source_ids)
+        scoped_idx = [i for i, s in enumerate(all_sources) if s["id"] in wanted]
+        if not scoped_idx:
+            scoped_idx = None  # no ids matched → fall back to all sources
+    elif source_id:
         matched = next(
             (i for i, s in enumerate(all_sources) if s["id"] == source_id),
             None,
         )
-        if matched is None:
-            sources = all_sources
-        else:
-            sources = [all_sources[matched]]
-            base = matched
-    else:
-        sources = all_sources
+        if matched is not None:
+            scoped_idx = [matched]
+
+    if scoped_idx is None:
+        scoped_idx = list(range(len(all_sources)))
+    sources = [all_sources[i] for i in scoped_idx]
+    # Map each scoped source to its ORIGINAL 1-indexed position so [Source N]
+    # citations in the frontend keep matching the full source list.
+    orig_pos = {si: scoped_idx[si] + 1 for si in range(len(sources))}
 
     chunks: List[tuple] = []
     for si, s in enumerate(sources):
         for c in chunk_text(s["text"]):
-            chunks.append((base + si, c))
+            chunks.append((si, c))
 
     ranked = rank_chunks(message, chunks)
     ranked.sort(key=lambda x: x[2], reverse=True)
@@ -784,7 +795,7 @@ def build_chat_context(
             text = s["text"]
             if len(text) > budget_per:
                 text = text[:budget_per] + "\n\n[...truncated...]"
-            parts.append(f"--- Source {base + si + 1}: {s['filename']} ---\n{text}")
+            parts.append(f"--- Source {orig_pos[si]}: {s['filename']} ---\n{text}")
         return "\n\n".join(parts), ""
 
     # Ranked selection with a per-source cap so one document can't eat the
@@ -795,7 +806,7 @@ def build_chat_context(
     src_used: Dict[int, int] = {}
     omitted = 0
     for si, c, _score in ranked:
-        block = f"--- Source {si + 1}: {sources[si - base]['filename']} ---\n{c}"
+        block = f"--- Source {orig_pos[si]}: {sources[si]['filename']} ---\n{c}"
         if used + len(block) > max_chars:
             omitted += 1
             continue
@@ -807,7 +818,7 @@ def build_chat_context(
         src_used[si] = src_used.get(si, 0) + len(block)
     if not parts and ranked:
         si, c, _ = ranked[0]
-        parts.append(f"--- Source {si + 1}: {sources[si - base]['filename']} ---\n{c}")
+        parts.append(f"--- Source {orig_pos[si]}: {sources[si]['filename']} ---\n{c}")
     note = (
         f"\n\n[Note: {omitted} of {len(chunks)} passages omitted as less "
         "relevant to the query.]"

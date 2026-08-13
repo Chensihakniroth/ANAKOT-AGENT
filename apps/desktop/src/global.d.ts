@@ -54,9 +54,9 @@ declare global {
         notebookId: string
         message: string
         history?: Array<{ role: string; content: string }>
-        sourceId?: string | null
+        sourceIds?: string[] | null
         profile?: string | null
-        sourceId?: string | null
+        sourceIds?: string[] | null
       }) => Promise<{ requestId: string }>
       notebookChatStreamAbort: (requestId: string) => Promise<{ ok: boolean }>
       onNotebookChatStreamData: (cb: (event: NotebookChatStreamEvent) => void) => () => void
