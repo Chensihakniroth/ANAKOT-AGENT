@@ -27,13 +27,12 @@ import {
   reorderSources,
   renameSource,
   duplicateNotebook,
+  setNotebookPinned,
+  truncateChatHistory,
   openNotebookChatStream,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
-import { Button } from "@/components/ui/button";
-import { PromptInput } from "@/components/ui/ai-chat-input";
-import { ModelPickerDialog } from "@/components/model-picker";
-import { useState } from "react";
+import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
 import { CodeHighlight } from "./code-highlight";
 import { notify, notifyError } from "@/store/notifications";
 import {
@@ -44,17 +43,20 @@ import {
   ChevronUp,
   Clipboard,
   Copy,
+  Download,
   FileText,
   Link,
   Loader2,
   MessageCircle,
   NotebookTabs,
   Pencil,
+  Pin,
   Plus,
   RefreshCw,
   Search,
   Send,
   Sparkles,
+  Square,
   Upload,
   X,
   Zap,
@@ -103,6 +105,10 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
+  const [sourceSearchQuery, setSourceSearchQuery] = useState("");
+  const [previewLimit, setPreviewLimit] = useState(5000); // chars shown before "Load more"
+  const [hoveredCitation, setHoveredCitation] = useState<number | null>(null);
+  const [sortMode, setSortMode] = useState<"updated" | "created" | "alpha">("updated");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const MIN_PANEL = 40; // px — below this, panel collapses
@@ -110,6 +116,15 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   useEffect(() => {
     loadNotebooks();
+  }, []);
+
+  // Each note is its own session: when the overlay closes (component
+  // unmounts), drop the selected notebook so the next open starts at the
+  // notebook list instead of resuming the last note's conversation.
+  useEffect(() => {
+    return () => {
+      $currentNotebook.set(null);
+    };
   }, []);
 
   // If overlay reopens with notebook already selected (from previous session), reload chat
@@ -187,23 +202,34 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file || !currentNotebook) return;
-      if (file.size > MAX_FILE_SIZE) {
-        notifyError(new Error(`${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit`), "File too large");
-        e.target.value = "";
-        return;
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0 || !currentNotebook) return;
+      let successCount = 0;
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          notifyError(new Error(`${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit`), `Skipped ${file.name}`);
+          continue;
+        }
+        try {
+          await uploadSource(currentNotebook.id, file);
+          successCount++;
+        } catch (err) {
+          notifyError(err, `Failed to upload ${file.name}`);
+        }
       }
-      await uploadSource(currentNotebook.id, file);
       e.target.value = "";
-      // Auto-summarize sources that don't have summaries
-      setSummarizing(true);
-      summarizeNotebook(currentNotebook.id)
-        .then((r) => {
-          if (r.summarized > 0) loadNotebook(currentNotebook.id);
-        })
-        .catch(() => {})
-        .finally(() => setSummarizing(false));
+      if (successCount > 0) {
+        notify({ kind: "success", message: `Uploaded ${successCount} of ${files.length} file(s)` });
+        await loadNotebook(currentNotebook.id);
+        // Auto-summarize sources that don't have summaries
+        setSummarizing(true);
+        summarizeNotebook(currentNotebook.id)
+          .then((r) => {
+            if (r.summarized > 0) loadNotebook(currentNotebook.id);
+          })
+          .catch(() => {})
+          .finally(() => setSummarizing(false));
+      }
     },
     [currentNotebook]
   );
@@ -449,10 +475,11 @@ ${src.summary}
     async (src: NotebookSource) => {
       setSelectedSource(src);
       setSourceText("");
+      setPreviewLimit(5000);
       if (!currentNotebook) return;
       try {
         const text = await getSourceText(currentNotebook.id, src.id);
-        setSourceText(text.slice(0, 5000));
+        setSourceText(text);
       } catch {
         setSourceText("(unable to load source text)");
       }
@@ -477,6 +504,26 @@ ${src.summary}
     },
     [sources, handleSelectSource]
   );
+
+  // ── Citation hover handlers ─────────────────────────────────
+  const handleCitationHover = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") || "";
+      if (!href.startsWith("citation://")) return;
+      const idx = parseInt(href.replace("citation://", ""), 10) - 1;
+      if (sources[idx]) {
+        setHoveredCitation(idx);
+      }
+    },
+    [sources]
+  );
+
+  const handleCitationHoverEnd = useCallback(() => {
+    setHoveredCitation(null);
+  }, []);
 
   // ── Preprocess text: [Source N] → clickable markdown link ──────────
   const preprocessCitations = useCallback(
@@ -577,19 +624,15 @@ ${src.summary}
     if (currentNotebook) handleLoadOverview();
   }, [currentNotebook, handleLoadOverview]);
 
-  const handleChat = useCallback(async (textOverride?: string) => {
-    const rawInput = (textOverride ?? chatInput).trim();
-    if (!rawInput || !currentNotebook) return;
-    let question = rawInput;
-    // Scope to selected source if toggle is on
-    if (scopeToSource && selectedSource) {
-      question = `[Focus on source: "${selectedSource.original_name}" (ID: ${selectedSource.id})] ${question}`;
-    }
+  const handleChat = useCallback(async () => {
+    if (!chatInput.trim() || !currentNotebook) return;
+    const question = chatInput.trim();
     setChatInput("");
-    const userMsg = { role: "user" as const, content: rawInput };
+    const userMsg = { role: "user" as const, content: question };
     const updatedMessages = [...chatMessages, userMsg];
     setChatMessages(updatedMessages);
-    // Persist user message
+    // Persist the clean user message (the source scope is carried via
+    // source_id, not by rewriting the prompt)
     saveChatMessage(currentNotebook.id, "user", question).catch(() => {});
     setChatLoading(true);
     hasStreamedOnceRef.current = true;
@@ -604,7 +647,8 @@ ${src.summary}
         currentNotebook.id,
         question,
         updatedMessages.slice(0, -1).slice(-20),
-        controller.signal
+        controller.signal,
+        scopeToSource ? selectedSource?.id ?? null : null
       );
 
       let accumulated = "";
@@ -779,24 +823,21 @@ ${src.summary}
   if (!currentNotebook) {
     return (
       <div className="flex h-full flex-col bg-(--ui-chat-surface-background) p-6">
-        {/* Header */}
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold text-(--ui-text-primary)">
-              Notebooks
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="inline-flex items-center gap-2 text-xl font-semibold text-(--ui-text-primary)">
+            <NotebookTabs size={16} /> Notebooks
+          </h1>
+          <div className="flex gap-2">
             <button
               onClick={handleCreateNotebook}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-(--ui-accent) px-3.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-(--ui-accent)/90"
+              className="rounded-md bg-(--ui-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
               type="button"
             >
-              <Plus size={14} /> New Notebook
+              + New Notebook
             </button>
             <button
               onClick={onClose}
-              className="rounded-lg border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs text-(--ui-text-secondary) hover:text-(--ui-text-primary) transition-colors"
+              className="rounded-md px-4 py-2 text-sm text-(--ui-text-secondary) hover:text-(--ui-text-primary)"
               type="button"
             >
               Close
@@ -805,49 +846,44 @@ ${src.summary}
         </div>
 
         {loading ? (
-          <div className="flex flex-1 items-center justify-center py-20 text-xs text-(--ui-text-tertiary)">
-            <Loader2 size={16} className="animate-spin text-(--ui-accent) mr-2" /> Loading notebooks...
+          <div className="flex items-center justify-center py-20 text-(--ui-text-tertiary)">
+            Loading notebooks...
           </div>
         ) : notebooks.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
-            <div className="mb-3 text-(--ui-text-tertiary)">
-              <NotebookTabs size={28} />
-            </div>
-            <h3 className="mb-1 text-sm font-semibold text-(--ui-text-primary)">
-              No notebooks yet
-            </h3>
-            <p className="mb-5 max-w-xs text-xs text-(--ui-text-tertiary)">
-              Create a notebook to upload documents, web URLs, or notes for AI-powered Q&A.
-            </p>
+          <div className="flex flex-col items-center justify-center py-20 text-(--ui-text-tertiary)">
+            <div className="mb-4 text-(--ui-text-tertiary)"><NotebookTabs size={48} /></div>
+            <p className="mb-4 text-lg">No notebooks yet</p>
             <button
               onClick={handleCreateNotebook}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-(--ui-accent) px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-(--ui-accent)/90"
+              className="rounded-md bg-(--ui-accent) px-6 py-3 text-sm font-medium text-white hover:opacity-90"
               type="button"
             >
-              <Plus size={14} /> Create your first notebook
+              Create your first notebook
             </button>
           </div>
         ) : (
           <>
-          <div className="relative mb-4">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-(--ui-text-tertiary)" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search notebooks..."
-              className="w-full rounded-lg border border-(--ui-stroke-secondary) bg-transparent pl-9 pr-4 py-2 text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-accent)"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
-                type="button"
-              >
-                <X size={12} />
-              </button>
-            )}
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search notebooks..."
+            className="mb-4 w-full rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+          />
+          <div className="mb-4 flex items-center gap-2">
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as "updated" | "created" | "alpha")}
+              className="rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-xs text-(--ui-text-secondary) outline-none"
+              title="Sort notebooks"
+            >
+              <option value="updated">Sort: Recently updated</option>
+              <option value="created">Sort: Recently created</option>
+              <option value="alpha">Sort: Name A–Z</option>
+            </select>
+            <span className="text-[10px] text-(--ui-text-tertiary)">
+              {notebooks.filter((nb) => nb.pinned).length} pinned
+            </span>
           </div>
-
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {notebooks.filter((nb) => {
               if (!searchQuery) return true;
@@ -855,48 +891,69 @@ ${src.summary}
               if (nb.title.toLowerCase().includes(q)) return true;
               if (nb.source_names?.some((n) => n.toLowerCase().includes(q))) return true;
               return false;
+            }).sort((a, b) => {
+              // Pinned notebooks float to the top
+              const pa = a.pinned ? 1 : 0;
+              const pb = b.pinned ? 1 : 0;
+              if (pa !== pb) return pb - pa;
+              if (sortMode === "alpha") return a.title.localeCompare(b.title);
+              const key = sortMode === "created" ? "created_at" : "updated_at";
+              const ka = new Date(a[key]).getTime() || 0;
+              const kb = new Date(b[key]).getTime() || 0;
+              return kb - ka;
             }).map((nb) => (
               <div
                 key={nb.id}
-                className="group cursor-pointer rounded-lg border border-(--ui-stroke-secondary) p-3.5 transition-colors hover:border-(--ui-accent)/40 hover:bg-(--ui-surface-elevated)"
+                className="group cursor-pointer rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-4 transition-colors hover:border-(--ui-accent)"
                 onClick={() => handleSelectNotebook(nb)}
               >
-                <div className="mb-2.5 flex items-start justify-between gap-2">
-                  <h3 className="truncate text-xs font-semibold text-(--ui-text-primary)">
-                    {nb.title}
+                <div className="mb-2 flex items-start justify-between">
+                  <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-(--ui-text-primary)">
+                    {nb.pinned && <Pin size={12} className="shrink-0 text-(--ui-accent)" />}
+                    <span className="truncate">{nb.title}</span>
                   </h3>
-                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void setNotebookPinned(nb.id, !nb.pinned).catch(() => {});
+                      }}
+                      className={`text-xs ${nb.pinned ? "text-(--ui-accent)" : "text-(--ui-text-tertiary) hover:text-(--ui-accent)"}`}
+                      type="button"
+                      title={nb.pinned ? "Unpin notebook" : "Pin notebook"}
+                    >
+                      <Pin size={14} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDuplicateNotebook(nb.id);
                       }}
-                      className="p-1 text-(--ui-text-tertiary) hover:text-(--ui-accent)"
+                      className="text-xs text-(--ui-text-tertiary) hover:text-(--ui-accent)"
                       type="button"
-                      title="Duplicate"
+                      title="Duplicate notebook"
                     >
-                      <Copy size={12} />
+                      <Copy size={14} />
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteNotebook(nb.id);
                       }}
-                      className="p-1 text-(--ui-text-tertiary) hover:text-red-400"
+                      className="text-xs text-(--ui-text-tertiary) hover:text-red-500"
                       type="button"
-                      title="Delete"
+                      title="Delete notebook"
                     >
-                      <X size={12} />
+                      <X size={14} />
                     </button>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between text-[10px] text-(--ui-text-tertiary)">
-                  <span>
-                    {(nb.source_count ?? 0)} {(nb.source_count ?? 0) === 1 ? "source" : "sources"}
-                  </span>
-                  <span>{formatRelativeTime(nb.created_at)}</span>
-                </div>
+                <p className="text-sm text-(--ui-text-tertiary)">
+                  {(nb.source_count ?? 0)} source{(nb.source_count ?? 0) !== 1 ? "s" : ""}
+                </p>
+                <p className="mt-1 text-xs text-(--ui-text-tertiary)">
+                  {new Date(nb.created_at).toLocaleDateString()}
+                </p>
               </div>
             ))}
           </div>
@@ -920,81 +977,75 @@ ${src.summary}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Left Panel Navigation Header */}
-        <div className="p-3">
+        <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2.5">
           <button
             onClick={() => $currentNotebook.set(null)}
             className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
             type="button"
+            title="Back to notebooks"
           >
-            <ChevronLeft size={14} /> All Notebooks
+            <ChevronLeft size={16} /> All Notebooks
           </button>
-        </div>
-
-        {/* Notebook Title */}
-        <div className="px-3 py-2">
           {editingTitle ? (
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 flex-1 gap-1">
               <input
                 value={titleInput}
                 onChange={(e) => setTitleInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                className="flex-1 rounded border border-(--ui-accent) bg-transparent px-2 py-1 text-xs font-medium text-(--ui-text-primary) outline-none"
+                className="min-w-0 flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2 py-1 text-sm text-(--ui-text-primary) outline-none focus:border-(--ui-accent)"
                 autoFocus
               />
               <button
                 onClick={handleRename}
-                className="text-xs text-(--ui-accent)"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-(--ui-accent) transition-colors hover:bg-(--ui-accent)/10"
                 type="button"
+                title="Save title"
+                aria-label="Save title"
               >
                 <Check size={14} />
               </button>
             </div>
           ) : (
-            <div
-              className="group flex cursor-pointer items-center justify-between gap-2"
+            <button
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left text-sm font-semibold text-(--ui-text-primary) transition-colors hover:bg-(--ui-surface-elevated)"
               onClick={() => {
                 setTitleInput(currentNotebook.title);
                 setEditingTitle(true);
               }}
-              title="Click to edit notebook title"
+              type="button"
+              title="Click to rename"
             >
-              <h2 className="truncate text-xs font-semibold text-(--ui-text-primary) hover:text-(--ui-accent) transition-colors">
-                {currentNotebook.title}
-              </h2>
-              <Pencil size={11} className="shrink-0 text-(--ui-text-tertiary) opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+              <NotebookTabs size={14} className="shrink-0 text-(--ui-accent)" />
+              <span className="truncate">{currentNotebook.title}</span>
+            </button>
           )}
         </div>
 
-        {/* Upload & Source Controls */}
-        <div className="p-3 space-y-2">
-          <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-(--ui-stroke-secondary) px-3 py-2 text-center text-xs text-(--ui-text-secondary) transition-colors ${dragOver ? "border-(--ui-accent) bg-(--ui-accent)/10" : "hover:border-(--ui-accent) hover:text-(--ui-text-primary)"}`}>
-            <Upload size={13} className="text-(--ui-accent)" />
-            <span className="text-xs font-medium">
-              {uploading ? "Uploading..." : "Add File (PDF, MD, TXT)"}
-            </span>
+        {/* Upload controls */}
+        <div className="border-b border-(--ui-stroke-secondary) p-3 space-y-2">
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-3 py-2.5 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent)">
+            <Upload size={14} className="text-(--ui-accent)" /> {uploading ? "Uploading..." : "Add File (PDF, MD, TXT)"}
             <input
               type="file"
               className="hidden"
-              accept=".pdf,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css"
+              accept=".pdf,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.log"
               onChange={handleFileUpload}
+              multiple
               disabled={uploading}
             />
           </label>
-
-          <div className="flex gap-1">
+          <div className="flex gap-1.5">
             <input
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
-              placeholder="Paste URL..."
-              className="flex-1 rounded-lg border border-(--ui-stroke-secondary) bg-transparent px-2.5 py-1 text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-accent)"
+              placeholder="Add URL..."
+              className="flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2.5 py-1.5 text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-accent)"
             />
             <button
               onClick={handleAddUrl}
               disabled={!urlInput.trim()}
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-(--ui-accent) text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-(--ui-accent) text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               type="button"
               title="Add URL"
               aria-label="Add URL"
@@ -1004,9 +1055,9 @@ ${src.summary}
           </div>
         </div>
 
-        {/* Summarize All Action */}
+        {/* Summarize all button + status */}
         {sources.length > 0 && (
-          <div className="px-3 py-1">
+          <div className="border-b border-(--ui-stroke-secondary) p-3">
             <button
               onClick={async () => {
                 if (!currentNotebook) return;
@@ -1014,6 +1065,8 @@ ${src.summary}
                 try {
                   const r = await summarizeNotebook(currentNotebook.id);
                   await loadNotebook(currentNotebook.id);
+                  // Refresh the overview panel so summaries show immediately
+                  await handleLoadOverview();
                   notify({
                     kind: r.summarized > 0 ? "success" : "info",
                     message: r.summarized > 0 ? `Summarized ${r.summarized} source(s)` : "All sources already have summaries",
@@ -1025,61 +1078,66 @@ ${src.summary}
                 }
               }}
               disabled={summarizing}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs font-medium text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary) transition-colors disabled:opacity-50"
+              className="w-full rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-3 py-2 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent) disabled:opacity-50"
               type="button"
             >
-              {summarizing ? (
-                <>
-                  <Loader2 size={12} className="animate-spin text-(--ui-accent)" /> Summarizing...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={12} className="text-(--ui-accent)" /> Summarize Sources
-                </>
-              )}
+              {summarizing ? <span className="flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Summarizing...</span> : <span className="flex items-center gap-1"><Sparkles size={14} /> Summarize Sources</span>}
             </button>
           </div>
         )}
 
-        {/* Re-extract Warning Banner */}
+        {/* Re-extract button (shows when sources have 0 words — failed extraction) */}
         {sources.length > 0 && sources.some((s) => (s.word_count ?? 0) === 0) && (
-          <div className="px-3 py-1">
+          <div className="border-b border-(--ui-stroke-secondary) p-3">
             <button
               onClick={handleReExtract}
               disabled={reExtracting}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400 hover:bg-amber-500/20 transition-all disabled:opacity-50"
+              className="w-full rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/20 disabled:opacity-50"
               type="button"
             >
-              {reExtracting ? (
-                <>
-                  <Loader2 size={12} className="animate-spin" /> Re-extracting...
-                </>
-              ) : (
-                <>
-                  <AlertTriangle size={12} /> Re-extract empty text
-                </>
-              )}
+              {reExtracting ? <span className="flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Re-extracting...</span> : <span className="flex items-center gap-1"><AlertTriangle size={14} /> Re-extract text (sources have 0 words)</span>}
             </button>
           </div>
         )}
 
-        {/* Source List Section */}
+        {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">
+          {sources.length > 0 && (
+            <div className="mb-1 flex items-center gap-1.5 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-2 py-1.5">
+              <Search size={12} className="shrink-0 text-(--ui-text-tertiary)" />
+              <input
+                value={sourceSearchQuery}
+                onChange={(e) => setSourceSearchQuery(e.target.value)}
+                placeholder="Search sources..."
+                className="min-w-0 flex-1 bg-transparent text-[11px] text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary) outline-none"
+              />
+              {sourceSearchQuery && (
+                <button
+                  onClick={() => setSourceSearchQuery("")}
+                  className="shrink-0 text-(--ui-text-tertiary) transition-colors hover:text-(--ui-text-primary)"
+                  type="button"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          )}
           {sources.length > 1 && (
-            <div className="mb-1 flex items-center justify-between px-2 py-1">
-              <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-(--ui-text-tertiary)">
-                <input
-                  type="checkbox"
-                  checked={selectedSources.size === sources.length && sources.length > 0}
-                  onChange={toggleAllSources}
-                  className="accent-(--ui-accent)"
-                />
-                <span>{selectedSources.size > 0 ? `${selectedSources.size} selected` : `Select all (${sources.length})`}</span>
-              </label>
+            <div className="mb-1 flex items-center gap-2 rounded-lg px-2.5 py-1.5">
+              <input
+                type="checkbox"
+                checked={selectedSources.size === sources.length && sources.length > 0}
+                onChange={toggleAllSources}
+                className="accent-(--ui-accent)"
+              />
+              <span className="text-[10px] text-(--ui-text-tertiary)">
+                {selectedSources.size > 0 ? `${selectedSources.size} selected` : `Select all (${sources.length})`}
+              </span>
               {selectedSources.size > 0 && (
                 <button
                   onClick={handleBatchDelete}
-                  className="text-[10px] font-medium text-red-400 hover:underline"
+                  className="ml-auto text-[10px] text-red-400 hover:text-red-300"
                   type="button"
                 >
                   Delete selected
@@ -1093,20 +1151,29 @@ ${src.summary}
                 <FileText size={18} />
               </div>
               <p className="text-xs font-medium text-(--ui-text-secondary)">
-                No sources added
+                No sources yet
               </p>
               <p className="text-[10px] text-(--ui-text-quaternary)">
-                Upload a file or paste a URL above
+                Upload files or add a URL above
               </p>
             </div>
           ) : (
-            sources.map((src) => (
+            sources
+              .filter((src) => {
+                if (!sourceSearchQuery) return true;
+                const q = sourceSearchQuery.toLowerCase();
+                return (
+                  src.original_name.toLowerCase().includes(q) ||
+                  (src.url ?? "").toLowerCase().includes(q)
+                );
+              })
+              .map((src) => (
               <div
                 key={src.id}
-                className={`group flex items-center gap-2 rounded-lg p-2 text-xs cursor-pointer transition-colors ${
+                className={`group flex items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-xs cursor-pointer transition-colors ${
                   selectedSource?.id === src.id
-                    ? "bg-(--ui-accent)/10 text-(--ui-accent)"
-                    : "text-(--ui-text-secondary) hover:bg-(--ui-surface-elevated)"
+                    ? "border-(--ui-accent)/30 bg-(--ui-accent)/10 text-(--ui-accent)"
+                    : "text-(--ui-text-secondary) hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated)"
                 }`}
                 onClick={() => handleSelectSource(src)}
               >
@@ -1117,11 +1184,7 @@ ${src.summary}
                   onChange={() => toggleSourceSelection(src.id)}
                   className="shrink-0 accent-(--ui-accent)"
                 />
-                {src.source_type === "url" ? (
-                  <Link size={13} className="shrink-0 text-(--ui-accent)" />
-                ) : (
-                  <FileText size={13} className="shrink-0 text-(--ui-text-tertiary)" />
-                )}
+                {src.source_type === "url" ? <Link size={14} className="shrink-0 text-(--ui-text-tertiary)" /> : <FileText size={14} className="shrink-0 text-(--ui-text-tertiary)" />}
                 <div className="min-w-0 flex-1">
                   {editingSourceId === src.id ? (
                     <input
@@ -1138,7 +1201,7 @@ ${src.summary}
                     />
                   ) : (
                     <span
-                      className="truncate block font-medium"
+                      className="truncate block"
                       onDoubleClick={(e) => { e.stopPropagation(); handleStartRename(src); }}
                       title="Double-click to rename"
                     >
@@ -1146,40 +1209,39 @@ ${src.summary}
                     </span>
                   )}
                 </div>
-                <span className="shrink-0 text-[10px] text-(--ui-text-tertiary)">
+                <span className="shrink-0 text-[10px] text-(--ui-text-quaternary) whitespace-nowrap">
                   {(src.word_count ?? 0).toLocaleString()}w
                   {(src.word_count ?? 0) === 0 && (
                     <AlertTriangle size={10} className="ml-0.5 inline text-amber-400" title="Extraction failed" />
                   )}
                 </span>
-                <div className="shrink-0 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="shrink-0 flex flex-col gap-0 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "up"); }}
-                    className="p-0.5 text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                     type="button"
                     disabled={sources.indexOf(src) === 0}
                     title="Move up"
-                  ><ChevronUp size={11} /></button>
+                  ><ChevronUp size={10} /></button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMoveSource(src.id, "down"); }}
-                    className="p-0.5 text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                     type="button"
                     disabled={sources.indexOf(src) === sources.length - 1}
                     title="Move down"
-                  ><ChevronDown size={11} /></button>
+                  ><ChevronDown size={10} /></button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id); }}
-                    className="p-0.5 text-(--ui-text-tertiary) hover:text-red-400"
+                    className="text-[10px] text-(--ui-text-tertiary) hover:text-red-500"
                     type="button"
                     title="Remove source"
-                  ><X size={11} /></button>
+                  ><X size={10} /></button>
                 </div>
               </div>
             ))
           )}
         </div>
       </div>
-
       {/* Left resize handle */}
       <div
         onMouseDown={handleResizeStart("left")}
@@ -1191,59 +1253,32 @@ ${src.summary}
       </>
       )}
 
-      {/* Center panel: Chat Workspace */}
-      <div className="flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
-        {/* Workspace Top Toolbar */}
-        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary)/40 px-4 py-2.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-semibold text-xs text-(--ui-text-primary) truncate">
-              {currentNotebook.title}
-            </span>
-            {scopeToSource && selectedSource && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
-                <Search size={11} /> {selectedSource.original_name}
+      {/* Center panel: Chat */}
+      <div className="relative flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
+        {/* Citation hover tooltip */}
+        {hoveredCitation !== null && sources[hoveredCitation] && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-40 w-[26rem] max-w-[85%] -translate-x-1/2 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3 shadow-xl">
+            <div className="mb-1 flex items-center gap-1.5">
+              <FileText size={12} className="shrink-0 text-(--ui-accent)" />
+              <span className="truncate text-xs font-medium text-(--ui-text-primary)">
+                Source {hoveredCitation + 1} · {sources[hoveredCitation].original_name}
               </span>
-            )}
+            </div>
+            <p className="text-[11px] leading-relaxed text-(--ui-text-secondary) line-clamp-4">
+              {sources[hoveredCitation].summary ||
+                "No summary yet — click the citation to open this source."}
+            </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0 text-xs">
-            <button
-              onClick={() => setChatSearchOpen((prev) => !prev)}
-              className="flex items-center gap-1 text-(--ui-text-tertiary) hover:text-(--ui-text-primary) transition-colors"
-              type="button"
-              title="Search chat history (Ctrl+F)"
-            >
-              <Search size={12} /> Search
-            </button>
-            <button
-              onClick={handleExportMarkdown}
-              className="flex items-center gap-1 text-(--ui-text-tertiary) hover:text-(--ui-text-primary) transition-colors"
-              type="button"
-              title="Export as Markdown (Ctrl+E)"
-            >
-              <FileText size={12} /> Export
-            </button>
-            {chatMessages.length > 0 && (
-              <button
-                onClick={handleClearChat}
-                className="flex items-center gap-1 text-(--ui-text-tertiary) hover:text-red-400 transition-colors"
-                type="button"
-                title="Clear chat history (Ctrl+L)"
-              >
-                <X size={12} /> Clear
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Chat Search Bar */}
+        )}
+        {/* Chat search bar */}
         {chatSearchOpen && (
-          <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary)/40 px-4 py-2">
-            <Search size={13} className="text-(--ui-text-tertiary)" />
+          <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2">
+            <span className="text-xs text-(--ui-text-tertiary)"><Search size={14} /></span>
             <input
               autoFocus
               value={chatSearchQuery}
               onChange={(e) => setChatSearchQuery(e.target.value)}
-              placeholder="Search transcript..."
+              placeholder="Search in chat..."
               className="flex-1 bg-transparent text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary)"
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
@@ -1266,35 +1301,29 @@ ${src.summary}
             ><X size={12} /></button>
           </div>
         )}
-
         {/* Chat messages */}
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-4 scroll-smooth">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
           {chatMessages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-              <div className="mb-3 text-(--ui-accent)">
-                <Sparkles size={28} />
-              </div>
-              <h3 className="mb-1 text-sm font-semibold text-(--ui-text-primary)">
-                Ask NotebookLLM Anything
-              </h3>
-              <p className="mb-5 max-w-xs text-xs text-(--ui-text-tertiary)">
-                Synthesize insights or generate notes from your {sources.length} source{sources.length !== 1 ? "s" : ""}
+            <div className="flex h-full flex-col items-center justify-center text-(--ui-text-tertiary)">
+              <div className="mb-3 text-(--ui-text-tertiary)"><MessageCircle size={32} /></div>
+              <p className="mb-4 text-sm">
+                Ask questions about your {sources.length} source{sources.length !== 1 ? "s" : ""}
               </p>
               {sources.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                <div className="grid max-w-md grid-cols-2 gap-2">
                   {[
-                    "Summarize all sources",
-                    "Find contradictions",
-                    "Create an outline",
-                    "Key takeaways",
+                    { icon: <FileText size={16} />, label: "Summarize all sources" },
+                    { icon: <Search size={16} />, label: "Find contradictions" },
+                    { icon: <Clipboard size={16} />, label: "Create an outline" },
                   ].map((starter) => (
                     <button
-                      key={starter}
+                      key={starter.label}
                       type="button"
-                      onClick={() => handleClickSuggestion(starter)}
-                      className="rounded-full border border-(--ui-stroke-secondary) px-3 py-1.5 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary) transition-colors"
+                      onClick={() => handleClickSuggestion(starter.label)}
+                      className="flex items-center gap-2 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-2.5 text-left text-xs text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
                     >
-                      {starter}
+                      <span className="text-sm">{starter.icon}</span>
+                      {starter.label}
                     </button>
                   ))}
                 </div>
@@ -1303,14 +1332,15 @@ ${src.summary}
           ) : (
             chatMessages.map((msg, i) => (
               msg.role === "user" ? (
-                <div key={i} className="group relative ml-16 flex justify-end">
-                  <div className="rounded-2xl bg-(--ui-accent)/15 border border-(--ui-accent)/20 px-4 py-2.5 text-xs text-(--ui-text-primary)">
-                    {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
-                  </div>
-                  <div className="absolute -left-12 top-1 hidden items-center gap-1 group-hover:flex">
+                <div key={i} className="group relative ml-12">
+                    <div className="rounded-lg bg-(--ui-accent)/10 px-4 py-3 text-sm text-(--ui-text-primary)">
+                      {chatSearchQuery ? highlightMatch(msg.content, chatSearchQuery) : msg.content}
+                    </div>
+                    {msg.created_at && <span className="mt-1 block text-right text-[10px] text-(--ui-text-quaternary)">{formatRelativeTime(msg.created_at)}</span>}
+                  <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
-                      className="text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
                       title="Copy message"
                     ><Copy size={12} /></button>
@@ -1319,88 +1349,174 @@ ${src.summary}
                         setChatInput(msg.content);
                         setChatMessages(chatMessages.slice(0, i));
                         hasStreamedOnceRef.current = i > 0;
+                        // Trim persisted history so deleted messages don't resurrect
+                        void truncateChatHistory(currentNotebook.id, i).catch(() => {});
                         chatInputRef.current?.focus();
                       }}
-                      className="text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
-                      title="Edit prompt"
+                      title="Edit & re-send"
                     ><Pencil size={12} /></button>
                   </div>
                 </div>
               ) : (
-                <div key={i} className="group relative mr-8">
-                  {/* Clean, borderless AI assistant response view */}
+                <div key={i} className="group relative mr-12">
                   <div
                     data-slot="aui_assistant-message-content"
-                    className="text-xs text-(--ui-text-primary) leading-relaxed"
+                    className="rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
                     onClick={handleCitationClick}
+                    onMouseOver={handleCitationHover}
+                    onMouseLeave={handleCitationHoverEnd}
                   >
                     <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
                   </div>
-                  <div className="mt-1.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {msg.created_at && <span className="mt-1 block text-[10px] text-(--ui-text-quaternary)">{formatRelativeTime(msg.created_at)}</span>}
+                  <div className="absolute -right-1 top-1 hidden items-center gap-0.5 rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) px-1 py-0.5 group-hover:flex">
                     <button
                       onClick={() => { navigator.clipboard.writeText(msg.content); notify({ kind: "success", message: "Copied" }); }}
-                      className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) flex items-center gap-1"
+                      className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                       type="button"
-                    ><Copy size={11} /> Copy</button>
+                      title="Copy message"
+                    ><Copy size={12} /></button>
                     {i === chatMessages.length - 1 && !chatLoading && (
                       <button
                         onClick={() => {
+                          // Remove last AI message and resend the previous user message
                           const lastUserIdx = chatMessages.findLastIndex((m) => m.role === "user");
                           if (lastUserIdx < 0) return;
                           const retryQ = chatMessages[lastUserIdx].content;
                           setChatMessages(chatMessages.slice(0, lastUserIdx));
                           hasStreamedOnceRef.current = lastUserIdx > 0;
-                          handleChat(retryQ);
+                          // Trim persisted history so the regenerated answer
+                          // replaces the old one instead of stacking
+                          void truncateChatHistory(currentNotebook.id, lastUserIdx).catch(() => {});
+                          setChatInput(retryQ);
                         }}
-                        className="text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary) flex items-center gap-1"
+                        className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
                         type="button"
-                      ><RefreshCw size={11} /> Retry</button>
+                        title="Regenerate response"
+                      ><RefreshCw size={12} /></button>
                     )}
                   </div>
                 </div>
               )
             ))
           )}
-
-          {/* Follow-up suggestions */}
+          {/* Follow-up suggestions after last AI message */}
           {suggestedFollowUps.length > 0 && !chatLoading && (
-            <div className="flex flex-wrap gap-1.5 pt-2">
+            <div className="mr-12 flex flex-wrap gap-1.5 pt-1">
               {suggestedFollowUps.map((q) => (
                 <button
                   key={q}
                   type="button"
                   onClick={() => handleClickSuggestion(q)}
-                  className="rounded-full border border-(--ui-stroke-secondary) px-3 py-1 text-[11px] text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary) transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-1.5 text-[11px] text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:text-(--ui-text-primary)"
                 >
-                  <Zap size={10} className="inline mr-1 text-(--ui-accent)" />{q}
+                  <Zap size={12} className="shrink-0 text-(--ui-accent)" />{q}
                 </button>
               ))}
             </div>
           )}
           {chatLoading && chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.content === "" && (
-            <div className="py-2 text-xs text-(--ui-text-tertiary) flex items-center gap-1.5">
-              <Loader2 size={13} className="animate-spin text-(--ui-accent)" /> Synthesizing answer...
+            <div className="mr-12 rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-tertiary)">
+              <span className="inline-flex gap-1">
+                <span className="animate-pulse">●</span>
+                <span className="animate-pulse" style={{animationDelay: "0.2s"}}>●</span>
+                <span className="animate-pulse" style={{animationDelay: "0.4s"}}>●</span>
+              </span>
             </div>
           )}
         </div>
 
-        {/* Bottom Input Area */}
-        <div className="p-3">
-          <PromptInput
-            value={chatInput}
-            onChange={setChatInput}
-            onSubmit={(val) => handleChat(val)}
-            isLoading={chatLoading}
-            onStop={() => chatStreamAbortRef.current?.abort()}
-            placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
-            fullWidth
-            className="mx-auto"
-          />
+        {/* Chat input */}
+        <div className="border-t border-(--ui-stroke-secondary)/60 p-3">
+          {/* Source scope toggle */}
+          {selectedSource && (
+            <div className="mb-2 flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-(--ui-text-secondary)">
+                <input
+                  type="checkbox"
+                  checked={scopeToSource}
+                  onChange={(e) => setScopeToSource(e.target.checked)}
+                  className="accent-(--ui-accent)"
+                />
+                Ask about <span className="font-medium text-(--ui-text-primary)">{selectedSource.original_name}</span> only
+              </label>
+            </div>
+          )}
+          {chatMessages.length > 0 && (
+            <div className="mb-2 flex justify-end">
+              <button
+                onClick={handleClearChat}
+                className="text-[10px] text-(--ui-text-tertiary) transition-colors hover:text-red-400"
+                type="button"
+              >
+                Clear history
+              </button>
+            </div>
+          )}
+          <div className="flex items-end gap-2 rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/70 p-2 backdrop-blur-md transition-colors duration-200 focus-within:border-(--ui-accent)/60 focus-within:bg-(--ui-surface-elevated)/90">
+            {scopeToSource && selectedSource && (
+              <span className="mb-0.5 inline-flex shrink-0 items-center gap-1 self-center rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
+                <Search size={12} className="shrink-0" /> {selectedSource.original_name}
+              </span>
+            )}
+            <div className="relative min-w-0 flex-1">
+              <textarea
+                ref={chatInputRef}
+                value={chatInput}
+                onChange={(e) => {
+                  setChatInput(e.target.value);
+                  // Auto-resize
+                  const el = e.target;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChat();
+                  }
+                }}
+                placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
+                rows={1}
+                disabled={chatLoading}
+                style={{ maxHeight: "120px" }}
+                className="w-full resize-none border-0 bg-transparent px-2 py-1.5 pr-14 text-sm text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary)"
+              />
+              {chatInput.length > 0 && (
+                <span className="pointer-events-none absolute bottom-2 right-2 text-[10px] text-(--ui-text-quaternary)">
+                  ~{Math.ceil(chatInput.length / 4)} tokens
+                </span>
+              )}
+            </div>
+            {chatLoading ? (
+              <button
+                onClick={() => chatStreamAbortRef.current?.abort()}
+                className="h-9 w-9 shrink-0 rounded-full bg-red-500/15 text-red-400 transition-all hover:bg-red-500/25 active:scale-95"
+                type="button"
+                title="Stop generating"
+                aria-label="Stop generating"
+              >
+                <Square size={13} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                onClick={handleChat}
+                disabled={!chatInput.trim()}
+                className="h-9 w-9 shrink-0 rounded-full bg-(--ui-accent) text-white transition-all hover:bg-(--ui-accent)/90 hover:opacity-100 active:scale-95 disabled:opacity-40"
+                type="button"
+                title="Send"
+                aria-label="Send"
+              >
+                <Send size={15} className="translate-x-px" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Right panel: Source Preview / Overview */}
+      {/* Right panel: Source preview / Overview */}
       {rightWidth > 0 && (
       <>
       {/* Right resize handle */}
@@ -1412,58 +1528,98 @@ ${src.summary}
         <div className="h-8 w-px bg-(--ui-stroke-secondary) group-hover:bg-(--ui-accent)" />
       </div>
       <div
-        className="flex flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)/40"
+        className="flex flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)"
         style={{ width: rightWidth, minWidth: rightWidth }}
       >
-        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary)/40 px-3.5 py-2.5">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-(--ui-text-primary)">
-            {selectedSource ? <FileText size={13} className="text-(--ui-accent)" /> : <Sparkles size={13} className="text-(--ui-accent)" />}
-            {selectedSource ? "Source Preview" : "Notebook Overview"}
+        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-(--ui-text-primary)">
+            {selectedSource ? <FileText size={14} className="text-(--ui-accent)" /> : <Sparkles size={14} className="text-(--ui-accent)" />}
+            {selectedSource ? "Source Preview" : "Overview"}
           </span>
-          <div className="flex items-center gap-1 text-xs">
+          <div className="flex items-center gap-1">
             {!selectedSource && (
               <button
                 onClick={handleLoadOverview}
-                className="flex items-center gap-1 rounded-md px-2 py-1 font-medium text-(--ui-accent) transition-colors hover:bg-(--ui-surface-elevated)"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
                 type="button"
               >
-                <RefreshCw size={12} /> Refresh
+                <RefreshCw size={13} /> Refresh
               </button>
             )}
-            {selectedSource && (
-              <button
-                onClick={() => setSelectedSource(null)}
-                className="rounded-md px-2 py-1 text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
-                type="button"
-              >
-                Overview
-              </button>
-            )}
+            <button
+              onClick={handleExportMarkdown}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
+              type="button"
+              title="Export as Markdown"
+            >
+              <Download size={13} /> Export
+            </button>
           </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-3.5 text-xs text-(--ui-text-secondary)">
+        <div className="flex-1 overflow-y-auto p-3 text-xs text-(--ui-text-secondary) whitespace-pre-wrap">
           {selectedSource ? (
             <div>
-              <h4 className="mb-1.5 font-bold text-xs text-(--ui-text-primary)">
+              <h4 className="mb-2 font-medium text-(--ui-text-primary)">
                 {selectedSource.original_name}
               </h4>
-              <div className="mb-3 flex flex-wrap gap-2 text-[10px] text-(--ui-text-tertiary)">
-                <span>{selectedSource.source_type}</span> •
-                <span>{(selectedSource.word_count ?? 0).toLocaleString()} words</span>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {selectedSource.source_type}
+                </span>
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {(selectedSource.word_count ?? 0).toLocaleString()} words
+                </span>
+                <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                  {(selectedSource.char_count ?? 0).toLocaleString()} chars
+                </span>
+                {(selectedSource.page_count ?? 0) > 0 && (
+                  <span className="inline-flex items-center rounded-full border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-2 py-0.5 text-[10px] text-(--ui-text-secondary)">
+                    {selectedSource.page_count} pages
+                  </span>
+                )}
               </div>
-              {selectedSource.summary && (
-                <div className="mb-3 border-l-2 border-(--ui-accent) pl-2.5 py-1 text-xs text-(--ui-text-secondary)">
-                  <MarkdownTextContent text={selectedSource.summary} isRunning={false} />
+              {selectedSource.url && (
+                <div className="mb-3 flex items-start gap-1.5">
+                  <Link size={12} className="mt-0.5 shrink-0 text-(--ui-text-tertiary)" />
+                  <a
+                    href={selectedSource.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-(--ui-accent) hover:underline break-all"
+                  >
+                    {selectedSource.url}
+                  </a>
                 </div>
               )}
-              <div className="mt-3">
+              {selectedSource.summary && (
+                <div className="mb-3 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
+                    Summary
+                  </div>
+                  <div data-slot="aui_assistant-message-content">
+                    <MarkdownTextContent text={selectedSource.summary} isRunning={false} />
+                  </div>
+                </div>
+              )}
+              <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
+                  {selectedSource.original_name.endsWith(".md") ? "Markdown Preview" : "Extracted Text Preview"}
+                </div>
                 {selectedSource.original_name.endsWith(".md") ? (
-                  <div className="max-h-96 overflow-y-auto text-xs text-(--ui-text-secondary)" data-slot="aui_assistant-message-content">
-                    <MarkdownTextContent text={sourceText || "Loading..."} isRunning={false} />
+                  <div className="nb-md-preview max-h-96 overflow-y-auto text-xs text-(--ui-text-secondary)" data-slot="aui_assistant-message-content">
+                    <MarkdownTextContent text={(sourceText || "Loading...").slice(0, previewLimit)} isRunning={false} />
                   </div>
                 ) : (
-                  <CodeHighlight code={sourceText || ""} filename={selectedSource.original_name} />
+                  <CodeHighlight code={(sourceText || "").slice(0, previewLimit)} filename={selectedSource.original_name} />
+                )}
+                {sourceText.length > previewLimit && (
+                  <button
+                    onClick={() => setPreviewLimit(previewLimit + 5000)}
+                    className="mt-2 w-full rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-2 py-1.5 text-[10px] font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent)"
+                    type="button"
+                  >
+                    Load more ({Math.min(sourceText.length - previewLimit, 5000).toLocaleString()} more chars)
+                  </button>
                 )}
               </div>
             </div>
@@ -1485,34 +1641,40 @@ ${src.summary}
                 </div>
               )}
             </div>
-          )}
-
-          {/* Source Citation Index */}
-          {!selectedSource && sources.length > 0 && (
-            <div className="mt-4 border-t border-(--ui-stroke-secondary)/40 pt-3">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-text-tertiary)">
-                Sources ({sources.length})
+            )}
+            {/* ── References / Cross-reference section (only in overview) */}
+            {!selectedSource && sources.length > 0 && (
+              <div className="mt-4 border-t border-(--ui-stroke-secondary) pt-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
+                  Sources ({sources.length})
+                </div>
+                <div className="space-y-1">
+                  {sources.map((src, idx) => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      onClick={() => handleSelectSource(src)}
+                      className="flex w-full items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition-colors hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated)"
+                    >
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-(--ui-accent)/15 text-[10px] font-bold text-(--ui-accent)">
+                        {idx + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-(--ui-text-primary)">
+                        {src.original_name}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-(--ui-text-tertiary)">
+                        {src.word_count?.toLocaleString() ?? 0}w
+                      </span>
+                      {(citationCounts[idx + 1] ?? 0) > 0 && (
+                        <span className="shrink-0 inline-flex items-center rounded-full bg-(--ui-accent)/15 px-1.5 py-0.5 text-[9px] font-semibold text-(--ui-accent)">
+                          {citationCounts[idx + 1]}× cited
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-1">
-                {sources.map((src, idx) => (
-                  <button
-                    key={src.id}
-                    type="button"
-                    onClick={() => handleSelectSource(src)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-(--ui-surface-elevated)"
-                  >
-                    <span className="text-[10px] font-bold text-(--ui-accent)">{idx + 1}</span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-(--ui-text-primary)">
-                      {src.original_name}
-                    </span>
-                    <span className="shrink-0 text-[10px] text-(--ui-text-tertiary)">
-                      {src.word_count?.toLocaleString() ?? 0}w
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+            )}
         </div>
       </div>
       </>

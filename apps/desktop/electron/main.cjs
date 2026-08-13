@@ -6061,7 +6061,11 @@ ipcMain.handle('anakot:notebook:chat-stream-start', async (event, request) => {
     requestId,
     connection,
     url: `${connection.baseUrl}/api/notebooks/${encodeURIComponent(notebookId)}/chat/stream`,
-    body: JSON.stringify({ message, history: Array.isArray(request?.history) ? request.history : [] }),
+    body: JSON.stringify({
+      message,
+      history: Array.isArray(request?.history) ? request.history : [],
+      source_id: request?.sourceId || null
+    }),
     sender: event.sender,
     req: null,
     started: false

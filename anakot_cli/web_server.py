@@ -10555,8 +10555,10 @@ from anakot_cli.notebooks import (
     save_chat_message as _nb_save_chat,
     load_chat_history as _nb_load_chat,
     clear_chat_history as _nb_clear_chat,
+    truncate_chat_history as _nb_truncate_chat,
     duplicate_notebook as _nb_duplicate,
     rename_source as _nb_rename_source,
+    set_notebook_pinned as _nb_set_pinned,
 )
 
 
@@ -10966,6 +10968,7 @@ async def notebook_get_overview(notebook_id: str, request: Request):
 class NotebookChatRequest(BaseModel):
     message: str
     history: Optional[List[Dict[str, str]]] = None  # [{role, content}, ...]
+    source_id: Optional[str] = None  # scope retrieval to a single source
 
 
 @app.post("/api/notebooks/{notebook_id}/chat")
@@ -10983,7 +10986,9 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
         raise HTTPException(status_code=404, detail="Notebook not found")
 
     # Build retrieval-aware context from the sources most relevant to the question
-    _ctx = _nb_build_chat_context(notebook_id, body.message, user_id=user_id)
+    _ctx = _nb_build_chat_context(
+        notebook_id, body.message, user_id=user_id, source_id=body.source_id
+    )
     if not _ctx or not _ctx[0]:
         raise HTTPException(
             status_code=400,
@@ -11134,7 +11139,11 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
 # ---------------------------------------------------------------------------
 
 async def _notebook_chat_stream_generator(
-    notebook_id: str, message: str, history: list, user_id: str | None = None
+    notebook_id: str,
+    message: str,
+    history: list,
+    user_id: str | None = None,
+    source_id: str | None = None,
 ):
     """Generator that yields SSE chunks for notebook chat."""
     import json as _json
@@ -11145,7 +11154,9 @@ async def _notebook_chat_stream_generator(
         return
 
     # Build retrieval-aware context from the sources most relevant to the question
-    _ctx = _nb_build_chat_context(notebook_id, message, user_id=user_id)
+    _ctx = _nb_build_chat_context(
+        notebook_id, message, user_id=user_id, source_id=source_id
+    )
     if not _ctx or not _ctx[0]:
         yield f"data: {_json.dumps({'error': 'No extracted text in this notebook'})}\n\n"
         return
@@ -11154,8 +11165,20 @@ async def _notebook_chat_stream_generator(
     # Build messages
     source_names = [s["original_name"] for s in nb.get("sources", [])]
     sources_list = ", ".join(source_names)
+    scope_instruction = ""
+    if source_id:
+        for i, src in enumerate(nb.get("sources", [])):
+            if src["id"] == source_id:
+                scope_instruction = (
+                    f"The user is asking about ONE specific source: "
+                    f"[Source {i + 1}] ({src['original_name']}). Answer using "
+                    f"ONLY that source's content below. Never cite other "
+                    f"sources.\n\n"
+                )
+                break
     system_prompt = (
-        f"You are a helpful research assistant. The user has uploaded "
+        scope_instruction
+        + f"You are a helpful research assistant. The user has uploaded "
         f"{len(source_names)} document(s) to a notebook.\n\n"
         f"When citing sources, always use the format [Source N] where N is the "
         f"source number (1-indexed, in the order sources appear below). "
@@ -11345,7 +11368,11 @@ async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, requ
     user_id = _get_session_user_id(request)
     return StreamingResponse(
         _notebook_chat_stream_generator(
-            notebook_id, body.message, body.history or [], user_id=user_id
+            notebook_id,
+            body.message,
+            body.history or [],
+            user_id=user_id,
+            source_id=body.source_id,
         ),
         media_type="text/event-stream",
         headers={
@@ -11405,6 +11432,44 @@ async def notebook_clear_chat_history(notebook_id: str, request: Request):
     return {"ok": True}
 
 
+@app.post("/api/notebooks/{notebook_id}/chat-history/truncate")
+async def notebook_truncate_chat_history(notebook_id: str, request: Request):
+    """Trim chat history to the *keep* oldest messages.
+
+    Called when the user edits/re-sends or regenerates a message so the
+    persisted history matches the trimmed UI thread.
+    """
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    nb = _nb_get(notebook_id, user_id=user_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    body = await request.json()
+    try:
+        keep = int(body.get("keep", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="keep must be an integer")
+    if keep < 0:
+        raise HTTPException(status_code=400, detail="keep must be >= 0")
+    deleted = _nb_truncate_chat(notebook_id, keep, user_id=user_id)
+    return {"ok": True, "deleted": deleted}
+
+
+class NotebookPinRequest(BaseModel):
+    pinned: bool = True
+
+
+@app.post("/api/notebooks/{notebook_id}/pin")
+async def notebook_set_pinned(notebook_id: str, body: NotebookPinRequest, request: Request):
+    """Pin or unpin a notebook (pinned notebooks float to the top of the list)."""
+    _require_token(request)
+    user_id = _get_session_user_id(request)
+    ok = _nb_set_pinned(notebook_id, body.pinned, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    return {"ok": True, "pinned": body.pinned}
+
+
 # ---------------------------------------------------------------------------
 
 class SummarizeRequest(BaseModel):
@@ -11420,7 +11485,9 @@ async def notebook_summarize(notebook_id: str, body: SummarizeRequest, request: 
     """
     _require_token(request)
 
-    nb = _nb_get(notebook_id)
+    user_id = _get_session_user_id(request)
+
+    nb = _nb_get(notebook_id, user_id=user_id)
     if not nb:
         raise HTTPException(status_code=404, detail="Notebook not found")
 
@@ -11465,7 +11532,7 @@ async def notebook_summarize(notebook_id: str, body: SummarizeRequest, request: 
 
     # Determine which sources to summarize
     import sqlite3 as _sq
-    db_path = _nb_root() / notebook_id / "metadata.db"
+    db_path = _nb_root(user_id) / notebook_id / "metadata.db"
     db = _sq.connect(str(db_path))
     db.row_factory = _sq.Row
     if body.source_id:
