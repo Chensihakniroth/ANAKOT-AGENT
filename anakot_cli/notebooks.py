@@ -114,6 +114,13 @@ def _init_db(db: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Migration: add pinned column for notebook pinning (safe to fail if already exists)
+    try:
+        db.execute("ALTER TABLE notebook ADD COLUMN pinned INTEGER DEFAULT 0")
+        db.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
 
 # ---------------------------------------------------------------------------
 # Legacy migration (one-time)
@@ -234,6 +241,7 @@ def list_notebooks(user_id: str | None = None) -> List[Dict[str, Any]]:
                         "updated_at": row["updated_at"],
                         "source_count": source_count,
                         "source_names": source_names,
+                        "pinned": bool(row["pinned"]),
                     }
                 )
             db.close()
@@ -263,8 +271,24 @@ def get_notebook(notebook_id: str, user_id: str | None = None) -> Optional[Dict[
         "title": row["title"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "pinned": bool(row["pinned"]),
         "sources": [dict(s) for s in sources],
     }
+
+
+def set_notebook_pinned(notebook_id: str, pinned: bool, user_id: str | None = None) -> bool:
+    """Pin or unpin a notebook. Returns True if the notebook exists."""
+    _migrate_legacy_notebooks(user_id)
+    db = _get_db(notebook_id, user_id)
+    _init_db(db)
+    cur = db.execute(
+        "UPDATE notebook SET pinned = ? WHERE id = ?",
+        (1 if pinned else 0, notebook_id),
+    )
+    db.commit()
+    changed = cur.rowcount > 0
+    db.close()
+    return changed
 
 
 def delete_notebook(notebook_id: str, user_id: str | None = None) -> bool:
@@ -701,6 +725,7 @@ def build_chat_context(
     message: str,
     user_id: str | None = None,
     max_chars: int = 50_000,
+    source_id: str | None = None,
 ) -> Optional[Tuple[str, str]]:
     """Build a retrieval-aware context block for notebook chat.
 
@@ -711,6 +736,11 @@ def build_chat_context(
     in ``get_notebook()['sources']`` — the same numbering the frontend uses for
     ``[Source N]`` citations.
 
+    If *source_id* is given, only that source's extracted text is considered
+    ("ask about this source only"). The labels keep the source's ORIGINAL
+    position in the notebook, so citations stay consistent with the source
+    list the frontend renders.
+
     Global questions ("summarize this notebook") have no useful query terms, so
     they fall back to an even per-source spread instead of top-k ranking.
 
@@ -718,14 +748,28 @@ def build_chat_context(
     nothing was dropped). Returns ``(None, None)`` when the notebook has no
     extractable text.
     """
-    sources = [s for s in get_source_texts(notebook_id, user_id) if s["text"].strip()]
-    if not sources:
+    all_sources = [s for s in get_source_texts(notebook_id, user_id) if s["text"].strip()]
+    if not all_sources:
         return None, None
+
+    base = 0
+    if source_id:
+        matched = next(
+            (i for i, s in enumerate(all_sources) if s["id"] == source_id),
+            None,
+        )
+        if matched is None:
+            sources = all_sources
+        else:
+            sources = [all_sources[matched]]
+            base = matched
+    else:
+        sources = all_sources
 
     chunks: List[tuple] = []
     for si, s in enumerate(sources):
         for c in chunk_text(s["text"]):
-            chunks.append((si, c))
+            chunks.append((base + si, c))
 
     ranked = rank_chunks(message, chunks)
     ranked.sort(key=lambda x: x[2], reverse=True)
@@ -740,7 +784,7 @@ def build_chat_context(
             text = s["text"]
             if len(text) > budget_per:
                 text = text[:budget_per] + "\n\n[...truncated...]"
-            parts.append(f"--- Source {si + 1}: {s['filename']} ---\n{text}")
+            parts.append(f"--- Source {base + si + 1}: {s['filename']} ---\n{text}")
         return "\n\n".join(parts), ""
 
     # Ranked selection with a per-source cap so one document can't eat the
@@ -751,7 +795,7 @@ def build_chat_context(
     src_used: Dict[int, int] = {}
     omitted = 0
     for si, c, _score in ranked:
-        block = f"--- Source {si + 1}: {sources[si]['filename']} ---\n{c}"
+        block = f"--- Source {si + 1}: {sources[si - base]['filename']} ---\n{c}"
         if used + len(block) > max_chars:
             omitted += 1
             continue
@@ -763,7 +807,7 @@ def build_chat_context(
         src_used[si] = src_used.get(si, 0) + len(block)
     if not parts and ranked:
         si, c, _ = ranked[0]
-        parts.append(f"--- Source {si + 1}: {sources[si]['filename']} ---\n{c}")
+        parts.append(f"--- Source {si + 1}: {sources[si - base]['filename']} ---\n{c}")
     note = (
         f"\n\n[Note: {omitted} of {len(chunks)} passages omitted as less "
         "relevant to the query.]"
@@ -817,6 +861,33 @@ def clear_chat_history(notebook_id: str, user_id: str | None = None) -> None:
     db.execute("DELETE FROM chat_history WHERE notebook_id = ?", (notebook_id,))
     db.commit()
     db.close()
+
+
+def truncate_chat_history(notebook_id: str, keep: int, user_id: str | None = None) -> int:
+    """Trim a notebook's chat history to the *keep* oldest messages.
+
+    Returns the number of messages deleted. ``keep <= 0`` clears everything
+    (same as :func:`clear_chat_history`). Used when the user edits/re-sends or
+    regenerates a message so the SQLite history matches the trimmed UI thread
+    instead of resurrecting deleted messages on the next open.
+    """
+    _migrate_legacy_notebooks(user_id)
+    db = _get_db(notebook_id, user_id)
+    _init_db(db)
+    if keep <= 0:
+        db.execute("DELETE FROM chat_history WHERE notebook_id = ?", (notebook_id,))
+        deleted = db.total_changes
+    else:
+        cur = db.execute(
+            """DELETE FROM chat_history WHERE notebook_id = ? AND id NOT IN (
+                SELECT id FROM chat_history WHERE notebook_id = ? ORDER BY id ASC LIMIT ?
+            )""",
+            (notebook_id, notebook_id, keep),
+        )
+        deleted = cur.rowcount
+    db.commit()
+    db.close()
+    return deleted
 
 
 def rename_source(notebook_id: str, source_id: str, new_name: str, user_id: str | None = None) -> bool:

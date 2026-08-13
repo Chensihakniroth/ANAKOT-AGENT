@@ -54,6 +54,7 @@ declare global {
         notebookId: string
         message: string
         history?: Array<{ role: string; content: string }>
+        sourceId?: string | null
         profile?: string | null
       }) => Promise<{ requestId: string }>
       notebookChatStreamAbort: (requestId: string) => Promise<{ ok: boolean }>

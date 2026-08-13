@@ -27,6 +27,8 @@ import {
   reorderSources,
   renameSource,
   duplicateNotebook,
+  setNotebookPinned,
+  truncateChatHistory,
   openNotebookChatStream,
 } from "./notebook-store";
 import type { Notebook, NotebookSource } from "./notebook-store";
@@ -41,17 +43,20 @@ import {
   ChevronUp,
   Clipboard,
   Copy,
+  Download,
   FileText,
   Link,
   Loader2,
   MessageCircle,
   NotebookTabs,
   Pencil,
+  Pin,
   Plus,
   RefreshCw,
   Search,
   Send,
   Sparkles,
+  Square,
   Upload,
   X,
   Zap,
@@ -100,6 +105,10 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
+  const [sourceSearchQuery, setSourceSearchQuery] = useState("");
+  const [previewLimit, setPreviewLimit] = useState(5000); // chars shown before "Load more"
+  const [hoveredCitation, setHoveredCitation] = useState<number | null>(null);
+  const [sortMode, setSortMode] = useState<"updated" | "created" | "alpha">("updated");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const MIN_PANEL = 40; // px — below this, panel collapses
@@ -107,6 +116,15 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   useEffect(() => {
     loadNotebooks();
+  }, []);
+
+  // Each note is its own session: when the overlay closes (component
+  // unmounts), drop the selected notebook so the next open starts at the
+  // notebook list instead of resuming the last note's conversation.
+  useEffect(() => {
+    return () => {
+      $currentNotebook.set(null);
+    };
   }, []);
 
   // If overlay reopens with notebook already selected (from previous session), reload chat
@@ -184,23 +202,34 @@ export function NotebookView({ onClose }: NotebookViewProps) {
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file || !currentNotebook) return;
-      if (file.size > MAX_FILE_SIZE) {
-        notifyError(new Error(`${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit`), "File too large");
-        e.target.value = "";
-        return;
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0 || !currentNotebook) return;
+      let successCount = 0;
+      for (const file of files) {
+        if (file.size > MAX_FILE_SIZE) {
+          notifyError(new Error(`${(file.size / 1024 / 1024).toFixed(1)}MB exceeds 50MB limit`), `Skipped ${file.name}`);
+          continue;
+        }
+        try {
+          await uploadSource(currentNotebook.id, file);
+          successCount++;
+        } catch (err) {
+          notifyError(err, `Failed to upload ${file.name}`);
+        }
       }
-      await uploadSource(currentNotebook.id, file);
       e.target.value = "";
-      // Auto-summarize sources that don't have summaries
-      setSummarizing(true);
-      summarizeNotebook(currentNotebook.id)
-        .then((r) => {
-          if (r.summarized > 0) loadNotebook(currentNotebook.id);
-        })
-        .catch(() => {})
-        .finally(() => setSummarizing(false));
+      if (successCount > 0) {
+        notify({ kind: "success", message: `Uploaded ${successCount} of ${files.length} file(s)` });
+        await loadNotebook(currentNotebook.id);
+        // Auto-summarize sources that don't have summaries
+        setSummarizing(true);
+        summarizeNotebook(currentNotebook.id)
+          .then((r) => {
+            if (r.summarized > 0) loadNotebook(currentNotebook.id);
+          })
+          .catch(() => {})
+          .finally(() => setSummarizing(false));
+      }
     },
     [currentNotebook]
   );
@@ -446,10 +475,11 @@ ${src.summary}
     async (src: NotebookSource) => {
       setSelectedSource(src);
       setSourceText("");
+      setPreviewLimit(5000);
       if (!currentNotebook) return;
       try {
         const text = await getSourceText(currentNotebook.id, src.id);
-        setSourceText(text.slice(0, 5000));
+        setSourceText(text);
       } catch {
         setSourceText("(unable to load source text)");
       }
@@ -474,6 +504,26 @@ ${src.summary}
     },
     [sources, handleSelectSource]
   );
+
+  // ── Citation hover handlers ─────────────────────────────────
+  const handleCitationHover = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") || "";
+      if (!href.startsWith("citation://")) return;
+      const idx = parseInt(href.replace("citation://", ""), 10) - 1;
+      if (sources[idx]) {
+        setHoveredCitation(idx);
+      }
+    },
+    [sources]
+  );
+
+  const handleCitationHoverEnd = useCallback(() => {
+    setHoveredCitation(null);
+  }, []);
 
   // ── Preprocess text: [Source N] → clickable markdown link ──────────
   const preprocessCitations = useCallback(
@@ -576,16 +626,13 @@ ${src.summary}
 
   const handleChat = useCallback(async () => {
     if (!chatInput.trim() || !currentNotebook) return;
-    let question = chatInput.trim();
-    // Scope to selected source if toggle is on
-    if (scopeToSource && selectedSource) {
-      question = `[Focus on source: "${selectedSource.original_name}" (ID: ${selectedSource.id})] ${question}`;
-    }
+    const question = chatInput.trim();
     setChatInput("");
-    const userMsg = { role: "user" as const, content: chatInput.trim() };
+    const userMsg = { role: "user" as const, content: question };
     const updatedMessages = [...chatMessages, userMsg];
     setChatMessages(updatedMessages);
-    // Persist user message
+    // Persist the clean user message (the source scope is carried via
+    // source_id, not by rewriting the prompt)
     saveChatMessage(currentNotebook.id, "user", question).catch(() => {});
     setChatLoading(true);
     hasStreamedOnceRef.current = true;
@@ -600,7 +647,8 @@ ${src.summary}
         currentNotebook.id,
         question,
         updatedMessages.slice(0, -1).slice(-20),
-        controller.signal
+        controller.signal,
+        scopeToSource ? selectedSource?.id ?? null : null
       );
 
       let accumulated = "";
@@ -821,6 +869,21 @@ ${src.summary}
             placeholder="Search notebooks..."
             className="mb-4 w-full rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
           />
+          <div className="mb-4 flex items-center gap-2">
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as "updated" | "created" | "alpha")}
+              className="rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-xs text-(--ui-text-secondary) outline-none"
+              title="Sort notebooks"
+            >
+              <option value="updated">Sort: Recently updated</option>
+              <option value="created">Sort: Recently created</option>
+              <option value="alpha">Sort: Name A–Z</option>
+            </select>
+            <span className="text-[10px] text-(--ui-text-tertiary)">
+              {notebooks.filter((nb) => nb.pinned).length} pinned
+            </span>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {notebooks.filter((nb) => {
               if (!searchQuery) return true;
@@ -828,6 +891,16 @@ ${src.summary}
               if (nb.title.toLowerCase().includes(q)) return true;
               if (nb.source_names?.some((n) => n.toLowerCase().includes(q))) return true;
               return false;
+            }).sort((a, b) => {
+              // Pinned notebooks float to the top
+              const pa = a.pinned ? 1 : 0;
+              const pb = b.pinned ? 1 : 0;
+              if (pa !== pb) return pb - pa;
+              if (sortMode === "alpha") return a.title.localeCompare(b.title);
+              const key = sortMode === "created" ? "created_at" : "updated_at";
+              const ka = new Date(a[key]).getTime() || 0;
+              const kb = new Date(b[key]).getTime() || 0;
+              return kb - ka;
             }).map((nb) => (
               <div
                 key={nb.id}
@@ -835,10 +908,22 @@ ${src.summary}
                 onClick={() => handleSelectNotebook(nb)}
               >
                 <div className="mb-2 flex items-start justify-between">
-                  <h3 className="font-medium text-(--ui-text-primary)">
-                    {nb.title}
+                  <h3 className="flex min-w-0 items-center gap-1.5 font-medium text-(--ui-text-primary)">
+                    {nb.pinned && <Pin size={12} className="shrink-0 text-(--ui-accent)" />}
+                    <span className="truncate">{nb.title}</span>
                   </h3>
                   <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void setNotebookPinned(nb.id, !nb.pinned).catch(() => {});
+                      }}
+                      className={`text-xs ${nb.pinned ? "text-(--ui-accent)" : "text-(--ui-text-tertiary) hover:text-(--ui-accent)"}`}
+                      type="button"
+                      title={nb.pinned ? "Unpin notebook" : "Pin notebook"}
+                    >
+                      <Pin size={14} />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -892,75 +977,80 @@ ${src.summary}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="border-b border-(--ui-stroke-secondary) p-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2.5">
           <button
             onClick={() => $currentNotebook.set(null)}
-            className="mb-3 flex items-center gap-1 text-sm text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
             type="button"
+            title="Back to notebooks"
           >
-            <ChevronLeft size={14} /> Back
+            <ChevronLeft size={16} /> All Notebooks
           </button>
-        </div>
-
-        {/* Notebook title */}
-        <div className="border-b border-(--ui-stroke-secondary) p-3">
           {editingTitle ? (
-            <div className="flex gap-1">
+            <div className="flex min-w-0 flex-1 gap-1">
               <input
                 value={titleInput}
                 onChange={(e) => setTitleInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                className="flex-1 rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1 text-sm text-(--ui-text-primary)"
+                className="min-w-0 flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2 py-1 text-sm text-(--ui-text-primary) outline-none focus:border-(--ui-accent)"
                 autoFocus
               />
               <button
                 onClick={handleRename}
-                className="text-xs text-(--ui-accent)"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md text-(--ui-accent) transition-colors hover:bg-(--ui-accent)/10"
                 type="button"
+                title="Save title"
+                aria-label="Save title"
               >
                 <Check size={14} />
               </button>
             </div>
           ) : (
-            <h2
-              className="cursor-pointer truncate text-sm font-medium text-(--ui-text-primary) hover:text-(--ui-accent)"
+            <button
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left text-sm font-semibold text-(--ui-text-primary) transition-colors hover:bg-(--ui-surface-elevated)"
               onClick={() => {
                 setTitleInput(currentNotebook.title);
                 setEditingTitle(true);
               }}
+              type="button"
+              title="Click to rename"
             >
-              {currentNotebook.title}
-            </h2>
+              <NotebookTabs size={14} className="shrink-0 text-(--ui-accent)" />
+              <span className="truncate">{currentNotebook.title}</span>
+            </button>
           )}
         </div>
 
         {/* Upload controls */}
         <div className="border-b border-(--ui-stroke-secondary) p-3 space-y-2">
-          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-(--ui-stroke-secondary) px-3 py-2 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary)">
-            <Upload size={14} /> {uploading ? "Uploading..." : "Upload File"}
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-3 py-2.5 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent)">
+            <Upload size={14} className="text-(--ui-accent)" /> {uploading ? "Uploading..." : "Add File (PDF, MD, TXT)"}
             <input
               type="file"
               className="hidden"
-              accept=".pdf,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css"
+              accept=".pdf,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.log"
               onChange={handleFileUpload}
+              multiple
               disabled={uploading}
             />
           </label>
-          <div className="flex gap-1">
+          <div className="flex gap-1.5">
             <input
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
               placeholder="Add URL..."
-              className="flex-1 rounded border border-(--ui-stroke-secondary) bg-transparent px-2 py-1 text-xs text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+              className="flex-1 rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2.5 py-1.5 text-xs text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-accent)"
             />
             <button
               onClick={handleAddUrl}
               disabled={!urlInput.trim()}
-              className="rounded bg-(--ui-accent) px-2 py-1 text-xs text-white disabled:opacity-50"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-(--ui-accent) text-white transition-opacity hover:opacity-90 disabled:opacity-40"
               type="button"
+              title="Add URL"
+              aria-label="Add URL"
             >
-              +
+              <Plus size={15} />
             </button>
           </div>
         </div>
@@ -975,6 +1065,8 @@ ${src.summary}
                 try {
                   const r = await summarizeNotebook(currentNotebook.id);
                   await loadNotebook(currentNotebook.id);
+                  // Refresh the overview panel so summaries show immediately
+                  await handleLoadOverview();
                   notify({
                     kind: r.summarized > 0 ? "success" : "info",
                     message: r.summarized > 0 ? `Summarized ${r.summarized} source(s)` : "All sources already have summaries",
@@ -986,10 +1078,10 @@ ${src.summary}
                 }
               }}
               disabled={summarizing}
-              className="w-full rounded-md border border-(--ui-stroke-secondary) px-3 py-2 text-xs text-(--ui-text-secondary) hover:border-(--ui-accent) hover:text-(--ui-text-primary) disabled:opacity-50"
+              className="w-full rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-3 py-2 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent) disabled:opacity-50"
               type="button"
             >
-              {summarizing ? <span className="flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Summarizing...</span> : <span className="flex items-center gap-1"><Sparkles size={14} /> Summarize All Sources</span>}
+              {summarizing ? <span className="flex items-center gap-1"><Loader2 size={14} className="animate-spin" /> Summarizing...</span> : <span className="flex items-center gap-1"><Sparkles size={14} /> Summarize Sources</span>}
             </button>
           </div>
         )}
@@ -1010,8 +1102,29 @@ ${src.summary}
 
         {/* Source list */}
         <div className="flex-1 overflow-y-auto p-2">
+          {sources.length > 0 && (
+            <div className="mb-1 flex items-center gap-1.5 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-2 py-1.5">
+              <Search size={12} className="shrink-0 text-(--ui-text-tertiary)" />
+              <input
+                value={sourceSearchQuery}
+                onChange={(e) => setSourceSearchQuery(e.target.value)}
+                placeholder="Search sources..."
+                className="min-w-0 flex-1 bg-transparent text-[11px] text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary) outline-none"
+              />
+              {sourceSearchQuery && (
+                <button
+                  onClick={() => setSourceSearchQuery("")}
+                  className="shrink-0 text-(--ui-text-tertiary) transition-colors hover:text-(--ui-text-primary)"
+                  type="button"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          )}
           {sources.length > 1 && (
-            <div className="mb-1 flex items-center gap-2 px-2 py-1">
+            <div className="mb-1 flex items-center gap-2 rounded-lg px-2.5 py-1.5">
               <input
                 type="checkbox"
                 checked={selectedSources.size === sources.length && sources.length > 0}
@@ -1033,8 +1146,11 @@ ${src.summary}
             </div>
           )}
           {sources.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <p className="mb-2 text-xs text-(--ui-text-tertiary)">
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+              <div className="flex size-10 items-center justify-center rounded-full bg-(--ui-surface-elevated) text-(--ui-text-tertiary)">
+                <FileText size={18} />
+              </div>
+              <p className="text-xs font-medium text-(--ui-text-secondary)">
                 No sources yet
               </p>
               <p className="text-[10px] text-(--ui-text-quaternary)">
@@ -1042,13 +1158,22 @@ ${src.summary}
               </p>
             </div>
           ) : (
-            sources.map((src) => (
+            sources
+              .filter((src) => {
+                if (!sourceSearchQuery) return true;
+                const q = sourceSearchQuery.toLowerCase();
+                return (
+                  src.original_name.toLowerCase().includes(q) ||
+                  (src.url ?? "").toLowerCase().includes(q)
+                );
+              })
+              .map((src) => (
               <div
                 key={src.id}
-                className={`group flex items-center gap-2 rounded p-2 text-xs cursor-pointer transition-colors ${
+                className={`group flex items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-xs cursor-pointer transition-colors ${
                   selectedSource?.id === src.id
-                    ? "bg-(--ui-accent)/10 text-(--ui-accent)"
-                    : "text-(--ui-text-secondary) hover:bg-(--ui-surface-elevated)"
+                    ? "border-(--ui-accent)/30 bg-(--ui-accent)/10 text-(--ui-accent)"
+                    : "text-(--ui-text-secondary) hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated)"
                 }`}
                 onClick={() => handleSelectSource(src)}
               >
@@ -1129,7 +1254,22 @@ ${src.summary}
       )}
 
       {/* Center panel: Chat */}
-      <div className="flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
+      <div className="relative flex flex-1 flex-col min-w-0 bg-(--ui-chat-surface-background)">
+        {/* Citation hover tooltip */}
+        {hoveredCitation !== null && sources[hoveredCitation] && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-40 w-[26rem] max-w-[85%] -translate-x-1/2 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3 shadow-xl">
+            <div className="mb-1 flex items-center gap-1.5">
+              <FileText size={12} className="shrink-0 text-(--ui-accent)" />
+              <span className="truncate text-xs font-medium text-(--ui-text-primary)">
+                Source {hoveredCitation + 1} · {sources[hoveredCitation].original_name}
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-(--ui-text-secondary) line-clamp-4">
+              {sources[hoveredCitation].summary ||
+                "No summary yet — click the citation to open this source."}
+            </p>
+          </div>
+        )}
         {/* Chat search bar */}
         {chatSearchOpen && (
           <div className="flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2">
@@ -1209,6 +1349,8 @@ ${src.summary}
                         setChatInput(msg.content);
                         setChatMessages(chatMessages.slice(0, i));
                         hasStreamedOnceRef.current = i > 0;
+                        // Trim persisted history so deleted messages don't resurrect
+                        void truncateChatHistory(currentNotebook.id, i).catch(() => {});
                         chatInputRef.current?.focus();
                       }}
                       className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
@@ -1223,6 +1365,8 @@ ${src.summary}
                     data-slot="aui_assistant-message-content"
                     className="rounded-lg bg-(--ui-surface-elevated) px-4 py-3 text-sm text-(--ui-text-secondary)"
                     onClick={handleCitationClick}
+                    onMouseOver={handleCitationHover}
+                    onMouseLeave={handleCitationHoverEnd}
                   >
                     <MarkdownTextContent text={preprocessCitations(msg.content)} isRunning={chatLoading && i === chatMessages.length - 1} />
                   </div>
@@ -1243,6 +1387,9 @@ ${src.summary}
                           const retryQ = chatMessages[lastUserIdx].content;
                           setChatMessages(chatMessages.slice(0, lastUserIdx));
                           hasStreamedOnceRef.current = lastUserIdx > 0;
+                          // Trim persisted history so the regenerated answer
+                          // replaces the old one instead of stacking
+                          void truncateChatHistory(currentNotebook.id, lastUserIdx).catch(() => {});
                           setChatInput(retryQ);
                         }}
                         className="rounded p-0.5 text-[10px] text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
@@ -1282,7 +1429,7 @@ ${src.summary}
         </div>
 
         {/* Chat input */}
-        <div className="border-t border-(--ui-stroke-secondary) p-3">
+        <div className="border-t border-(--ui-stroke-secondary)/60 p-3">
           {/* Source scope toggle */}
           {selectedSource && (
             <div className="mb-2 flex items-center gap-2">
@@ -1301,20 +1448,20 @@ ${src.summary}
             <div className="mb-2 flex justify-end">
               <button
                 onClick={handleClearChat}
-                className="text-[10px] text-(--ui-text-tertiary) hover:text-red-400"
+                className="text-[10px] text-(--ui-text-tertiary) transition-colors hover:text-red-400"
                 type="button"
               >
                 Clear history
               </button>
             </div>
           )}
-          <div className="flex gap-2">
+          <div className="flex items-end gap-2 rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/70 p-2 backdrop-blur-md transition-colors duration-200 focus-within:border-(--ui-accent)/60 focus-within:bg-(--ui-surface-elevated)/90">
             {scopeToSource && selectedSource && (
-              <span className="self-center rounded bg-(--ui-accent)/15 px-1.5 py-0.5 text-[10px] font-medium text-(--ui-accent)">
-                <Search size={14} className="shrink-0 text-(--ui-accent)" /> {selectedSource.original_name}
+              <span className="mb-0.5 inline-flex shrink-0 items-center gap-1 self-center rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
+                <Search size={12} className="shrink-0" /> {selectedSource.original_name}
               </span>
             )}
-            <div className="relative flex-1">
+            <div className="relative min-w-0 flex-1">
               <textarea
                 ref={chatInputRef}
                 value={chatInput}
@@ -1335,10 +1482,10 @@ ${src.summary}
                 rows={1}
                 disabled={chatLoading}
                 style={{ maxHeight: "120px" }}
-                className="w-full resize-none rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 pr-16 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
+                className="w-full resize-none border-0 bg-transparent px-2 py-1.5 pr-14 text-sm text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary)"
               />
               {chatInput.length > 0 && (
-                <span className="absolute bottom-2 right-2 text-[10px] text-(--ui-text-quaternary)">
+                <span className="pointer-events-none absolute bottom-2 right-2 text-[10px] text-(--ui-text-quaternary)">
                   ~{Math.ceil(chatInput.length / 4)} tokens
                 </span>
               )}
@@ -1346,19 +1493,23 @@ ${src.summary}
             {chatLoading ? (
               <button
                 onClick={() => chatStreamAbortRef.current?.abort()}
-                className="rounded-md border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20"
+                className="h-9 w-9 shrink-0 rounded-full bg-red-500/15 text-red-400 transition-all hover:bg-red-500/25 active:scale-95"
                 type="button"
+                title="Stop generating"
+                aria-label="Stop generating"
               >
-                Stop
+                <Square size={13} fill="currentColor" />
               </button>
             ) : (
               <button
                 onClick={handleChat}
                 disabled={!chatInput.trim()}
-                className="rounded-md bg-(--ui-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="h-9 w-9 shrink-0 rounded-full bg-(--ui-accent) text-white transition-all hover:bg-(--ui-accent)/90 hover:opacity-100 active:scale-95 disabled:opacity-40"
                 type="button"
+                title="Send"
+                aria-label="Send"
               >
-                Send
+                <Send size={15} className="translate-x-px" />
               </button>
             )}
           </div>
@@ -1380,27 +1531,28 @@ ${src.summary}
         className="flex flex-col bg-(--ui-chat-surface-background) border-l border-(--ui-stroke-secondary)"
         style={{ width: rightWidth, minWidth: rightWidth }}
       >
-        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) p-3">
-          <span className="text-xs font-medium text-(--ui-text-secondary)">
+        <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) px-3 py-2.5">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-(--ui-text-primary)">
+            {selectedSource ? <FileText size={14} className="text-(--ui-accent)" /> : <Sparkles size={14} className="text-(--ui-accent)" />}
             {selectedSource ? "Source Preview" : "Overview"}
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             {!selectedSource && (
               <button
                 onClick={handleLoadOverview}
-                className="text-xs text-(--ui-accent) hover:underline"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-(--ui-text-secondary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
                 type="button"
               >
-                Refresh
+                <RefreshCw size={13} /> Refresh
               </button>
             )}
             <button
               onClick={handleExportMarkdown}
-              className="text-xs text-(--ui-text-tertiary) hover:text-(--ui-text-primary)"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
               type="button"
               title="Export as Markdown"
             >
-              📥 Export
+              <Download size={13} /> Export
             </button>
           </div>
         </div>
@@ -1440,7 +1592,7 @@ ${src.summary}
                 </div>
               )}
               {selectedSource.summary && (
-                <div className="mb-3 rounded border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-3">
+                <div className="mb-3 rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) p-3">
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
                     Summary
                   </div>
@@ -1449,16 +1601,25 @@ ${src.summary}
                   </div>
                 </div>
               )}
-              <div className="rounded border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3">
+              <div className="rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background) p-3">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-(--ui-accent)">
                   {selectedSource.original_name.endsWith(".md") ? "Markdown Preview" : "Extracted Text Preview"}
                 </div>
                 {selectedSource.original_name.endsWith(".md") ? (
-                  <div className="max-h-96 overflow-y-auto text-xs text-(--ui-text-secondary)" data-slot="aui_assistant-message-content">
-                    <MarkdownTextContent text={sourceText || "Loading..."} isRunning={false} />
+                  <div className="nb-md-preview max-h-96 overflow-y-auto text-xs text-(--ui-text-secondary)" data-slot="aui_assistant-message-content">
+                    <MarkdownTextContent text={(sourceText || "Loading...").slice(0, previewLimit)} isRunning={false} />
                   </div>
                 ) : (
-                  <CodeHighlight code={sourceText || ""} filename={selectedSource.original_name} />
+                  <CodeHighlight code={(sourceText || "").slice(0, previewLimit)} filename={selectedSource.original_name} />
+                )}
+                {sourceText.length > previewLimit && (
+                  <button
+                    onClick={() => setPreviewLimit(previewLimit + 5000)}
+                    className="mt-2 w-full rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 px-2 py-1.5 text-[10px] font-medium text-(--ui-text-secondary) transition-colors hover:border-(--ui-accent) hover:bg-(--ui-accent)/5 hover:text-(--ui-accent)"
+                    type="button"
+                  >
+                    Load more ({Math.min(sourceText.length - previewLimit, 5000).toLocaleString()} more chars)
+                  </button>
                 )}
               </div>
             </div>
@@ -1467,9 +1628,17 @@ ${src.summary}
               {overview ? (
                 <MarkdownTextContent text={overview} isRunning={false} />
               ) : (
-                <p className="text-center text-(--ui-text-tertiary)">
-                  Click "Refresh" to load overview
-                </p>
+                <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-(--ui-surface-elevated) text-(--ui-text-tertiary)">
+                    <Sparkles size={18} />
+                  </div>
+                  <p className="text-xs text-(--ui-text-secondary)">
+                    No overview yet
+                  </p>
+                  <p className="text-[10px] text-(--ui-text-tertiary)">
+                    Click Refresh to generate one
+                  </p>
+                </div>
               )}
             </div>
             )}
@@ -1485,7 +1654,7 @@ ${src.summary}
                       key={src.id}
                       type="button"
                       onClick={() => handleSelectSource(src)}
-                      className="flex w-full items-center gap-2 rounded border border-transparent px-2 py-1.5 text-left hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated) transition-colors"
+                      className="flex w-full items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition-colors hover:border-(--ui-stroke-secondary) hover:bg-(--ui-surface-elevated)"
                     >
                       <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-(--ui-accent)/15 text-[10px] font-bold text-(--ui-accent)">
                         {idx + 1}

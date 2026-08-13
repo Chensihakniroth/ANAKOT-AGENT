@@ -32,6 +32,7 @@ export interface Notebook {
   sources: NotebookSource[];
   created_at: string;
   updated_at: string;
+  pinned?: boolean;
 }
 
 export interface NotebookOverview {
@@ -143,6 +144,25 @@ export async function duplicateNotebook(
   // Reload the full list to get correct source_counts
   await loadNotebooks();
   return data;
+}
+
+/** Pin or unpin a notebook (pinned notebooks float to the top of the list) */
+export async function setNotebookPinned(
+  notebookId: string,
+  pinned: boolean
+): Promise<void> {
+  await fetchJSON<{ ok: boolean }>(`${API}/notebooks/${notebookId}/pin`, {
+    method: "POST",
+    body: { pinned },
+  });
+  // Update local state
+  $notebooks.set(
+    $notebooks.get().map((n) => (n.id === notebookId ? { ...n, pinned } : n))
+  );
+  const cur = $currentNotebook.get();
+  if (cur?.id === notebookId) {
+    $currentNotebook.set({ ...cur, pinned });
+  }
 }
 
 /** Rename a source */
@@ -326,6 +346,26 @@ export async function clearChatHistory(
   );
 }
 
+/**
+ * Trim a notebook's persisted chat history to the *keep* oldest messages.
+ * Used when the user edits/re-sends or regenerates a message so the SQLite
+ * history matches the trimmed UI thread (otherwise deleted messages
+ * resurrect on the next notebook open).
+ */
+export async function truncateChatHistory(
+  notebookId: string,
+  keep: number
+): Promise<number> {
+  const res = await fetchJSON<{ ok: boolean; deleted: number }>(
+    `${API}/notebooks/${notebookId}/chat-history/truncate`,
+    {
+      method: "POST",
+      body: { keep },
+    }
+  );
+  return res.deleted ?? 0;
+}
+
 /** Reorder sources within a notebook */
 export async function reorderSources(
   notebookId: string,
@@ -378,12 +418,14 @@ export async function openNotebookChatStream(
   notebookId: string,
   message: string,
   history: Array<{ role: string; content: string }>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  sourceId?: string | null
 ): Promise<NotebookStreamReader> {
   const { requestId } = await window.anakotDesktop.notebookChatStreamStart({
     notebookId,
     message,
     history,
+    sourceId: sourceId ?? null,
   });
 
   let buffer: Array<string> = [];
