@@ -1,0 +1,90 @@
+# =============================================================================
+# Desktop GUI CI  (Robot A)
+# -----------------------------------------------------------------------------
+# Runs on every push/PR that touches the desktop GUI. It answers one question:
+# "Did this change break the desktop app?" by:
+#   1. running the renderer unit tests (vitest, in a fake browser/jsdom)
+#   2. compiling the renderer for real (vite build)
+#   3. compiling the installer's frontend (the Tauri setup wizard)
+#   4. cargo-checking the installer's Rust (catches Rust errors fast,
+#      without doing a full, slow Tauri build)
+# Note: apps/desktop ESLint is currently broken (hermes-parser was orphaned
+# during the Hermes->Anakot rebrand), so type-check (type-check.yml) + these
+# tests are the real safety net, not lint.
+# =============================================================================
+
+name: Desktop GUI CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/bootstrap-installer/**'
+      - 'apps/shared/**'
+      - '.github/workflows/desktop-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/bootstrap-installer/**'
+      - 'apps/shared/**'
+      - '.github/workflows/desktop-ci.yml'
+
+# Read-only repo access is all this checker needs.
+permissions:
+  contents: read
+
+# Don't run two copies of this on the same branch at once; cancel the old one.
+concurrency:
+  group: desktop-gui-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-gui:
+    name: Desktop GUI (vitest + renderer build + installer build + cargo check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out your code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm   # speeds up future installs by caching node_modules
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Install Rust (for the installer)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: apps/bootstrap-installer/src-tauri
+
+      # (1) Renderer unit tests. jsdom = a fake browser so React components
+      # can be tested without a real window.
+      - name: Desktop renderer tests (vitest)
+        run: npm run test:ui -w apps/desktop
+
+      # (2) Real "does the GUI compile" signal: vite build of the renderer.
+      # Standalone vite build skips the native-dep staging that the full
+      # `npm run build` script does (which can fail in CI), keeping this fast
+      # and reliable. If you ever want the full script, swap to
+      # `npm run build -w apps/desktop` and verify stage-native-deps passes.
+      - name: Desktop renderer build (vite)
+        run: npx vite build
+        working-directory: apps/desktop
+
+      # (3) The installer (Tauri setup wizard) frontend must also compile.
+      - name: Bootstrap installer frontend build
+        run: npm run build -w apps/bootstrap-installer
+
+      # (4) Catch Rust breakage in the installer without a full Tauri build.
+      - name: Cargo check (installer Rust)
+        run: cargo check
+        working-directory: apps/bootstrap-installer/src-tauri
