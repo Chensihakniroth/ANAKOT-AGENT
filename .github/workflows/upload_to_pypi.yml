@@ -5,7 +5,9 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - 'v20*'  # CalVer tags: v2026.5.15, v2026.5.15.2, etc.
+      # Strict CalVer only (e.g. v2026.5.15). A bare 'v20' does NOT match
+      # this glob (it has no dot), so a stray tag can never fire a publish.
+      - 'v2*.*'
   workflow_dispatch:
     inputs:
       confirm_tag:
