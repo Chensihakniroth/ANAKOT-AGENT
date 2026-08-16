@@ -1,11 +1,15 @@
 # =============================================================================
 # Desktop Release  (Robot B)
 # -----------------------------------------------------------------------------
-# Builds + signs the desktop installers and attaches them to the GitHub
-# Release page. Fires when you cut a CalVer tag (e.g. v2026.8.14) — which
-# scripts/release.py does for you — or when you publish a release manually.
+# Builds the desktop installers (Windows UNSIGNED — free, no Azure cert) and
+# attaches them to the GitHub Release page. Fires when you cut a CalVer tag
+# (e.g. v2026.8.14) — which scripts/release.py does for you — or when you
+# publish a release manually.
 #
-#   - Windows: built + signed with your existing Azure certificate (OIDC).
+#   - Windows: built UNSIGNED (free — no Azure cert/OIDC). Users get a
+#             SmartScreen "unrecognized publisher" warning, but it installs
+#             and runs. Re-add Azure Trusted Signing steps later for a signed
+#             build.
 #   - Linux:   built (AppImage + Deb), no signing needed.
 #   - macOS:   included but DISABLED (if: false) — it needs a paid Apple
 #              developer cert + 5 repo secrets. Flip it on once you have those.
@@ -33,12 +37,11 @@ jobs:
   # Windows installer (NSIS), signed via Azure
   # ---------------------------------------------------------------------------
   windows:
-    name: Windows installer (NSIS, signed)
+    name: Windows installer (NSIS, unsigned)
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:
       contents: write       # upload to the Release
-      id-token: write       # Azure OIDC federated signing
     steps:
       - name: Check out your code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -60,30 +63,15 @@ jobs:
         with:
           workspaces: apps/bootstrap-installer/src-tauri
 
-      - name: Build the installer
+      - name: Build the installer (unsigned — free alternative)
         run: npm run tauri:build
         working-directory: apps/bootstrap-installer
 
-      - name: Azure login (OIDC, no stored secret)
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Sign Anakot-Setup.exe with Azure Artifact Signing
-        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2
-        with:
-          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
-          # Sign both the raw exe and the bundled NSIS installer.
-          files-folder: ${{ github.workspace }}\apps\bootstrap-installer\src-tauri\target\release
-          files-folder-filter: exe
-          files-folder-recurse: true
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+      # NOTE: Windows installer is built UNSIGNED (free alternative — no Azure
+      # cert/OIDC needed). Users get a SmartScreen "unrecognized publisher"
+      # warning, but it installs and runs. To sign later, set up Azure Trusted
+      # Signing + the AZURE_* secrets/vars and re-add the azure/login +
+      # azure/artifact-signing-action steps here.
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
