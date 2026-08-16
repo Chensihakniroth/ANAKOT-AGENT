@@ -56,16 +56,13 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Sessions directory & channel cache
 # ---------------------------------------------------------------------------
 
 def _get_sessions_dir() -> Path:
     """Return the sessions directory using ANAKOT_HOME."""
-    try:
-        from anakot_constants import get_anakot_home
-        return get_anakot_home() / "sessions"
-    except ImportError:
-        return Path(os.environ.get("ANAKOT_HOME", Path.home() / ".anakot")) / "sessions"
+    from anakot_constants import get_anakot_home
+    return get_anakot_home() / "sessions"
 
 
 def _get_session_db():
@@ -97,13 +94,8 @@ def _load_sessions_index() -> dict:
 
 def _load_channel_directory() -> dict:
     """Load the cached channel directory for available targets."""
-    try:
-        from anakot_constants import get_anakot_home
-        directory_file = get_anakot_home() / "channel_directory.json"
-    except ImportError:
-        directory_file = Path(
-            os.environ.get("ANAKOT_HOME", Path.home() / ".anakot")
-        ) / "channel_directory.json"
+    from anakot_constants import get_anakot_home
+    directory_file = get_anakot_home() / "channel_directory.json"
 
     if not directory_file.exists():
         return {}
@@ -361,11 +353,8 @@ class EventBridge:
             self._cached_sessions_index = _load_sessions_index()
 
         # Check if state.db has changed
-        try:
-            from anakot_constants import get_anakot_home
-            db_file = get_anakot_home() / "state.db"
-        except ImportError:
-            db_file = Path(os.environ.get("ANAKOT_HOME", Path.home() / ".anakot")) / "state.db"
+        from anakot_constants import get_anakot_home
+        db_file = get_anakot_home() / "state.db"
 
         try:
             db_mtime = db_file.stat().st_mtime if db_file.exists() else 0.0

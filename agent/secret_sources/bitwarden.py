@@ -46,6 +46,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from anakot_constants import get_anakot_home
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,10 +91,10 @@ def _disk_cache_path(home_path: Optional[Path] = None) -> Path:
     """Return the disk cache path under anakot_home/cache/.
 
     `home_path` is what `load_anakot_dotenv()` already resolved; falling back
-    to `$ANAKOT_HOME` / `~/.anakot` keeps direct callers working too.
+    to `get_anakot_home()` keeps direct callers working too.
     """
     if home_path is None:
-        home_path = Path(os.getenv("ANAKOT_HOME", Path.home() / ".anakot"))
+        home_path = get_anakot_home()
     return home_path / "cache" / _DISK_CACHE_BASENAME
 
 

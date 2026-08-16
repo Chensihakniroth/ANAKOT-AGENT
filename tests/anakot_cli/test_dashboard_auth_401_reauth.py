@@ -142,7 +142,7 @@ class TestApi401Envelope:
         body = r.json()
         assert body["error"] == "unauthenticated"
         assert "login_url" in body
-        assert body["login_url"].startswith("/login")
+        assert body["login_url"] == "/"
 
     def test_invalid_cookie_returns_session_expired_envelope(self, gated_app):
         gated_app.cookies.set(SESSION_AT_COOKIE, "garbage")
@@ -150,7 +150,7 @@ class TestApi401Envelope:
         assert r.status_code == 401
         body = r.json()
         assert body["error"] == "session_expired"
-        assert body["login_url"].startswith("/login")
+        assert body["login_url"] == "/"
 
     def test_invalid_cookie_clears_dead_cookie(self, gated_app):
         """Dead-cookie cleanup — Phase 6 requirement so the browser
@@ -178,7 +178,7 @@ class TestApi401Envelope:
         # ``login_url`` is the bare ``/login`` (no ``next=``) — the
         # post-callback landing falls back to "/" rather than the API
         # URL.
-        assert body["login_url"] == "/login"
+        assert body["login_url"] == "/"
         assert "next=" not in body["login_url"]
 
     def test_login_url_drops_next_for_analytics_path(self, gated_app):
@@ -188,7 +188,7 @@ class TestApi401Envelope:
         up staring at JSON post-callback."""
         r = gated_app.get("/api/analytics/models?days=30")
         body = r.json()
-        assert body["login_url"] == "/login"
+        assert body["login_url"] == "/"
         assert "next=" not in body["login_url"]
 
 
@@ -285,19 +285,22 @@ class TestHtmlRedirectNext:
     def test_deep_html_path_redirects_with_next(self, gated_app):
         r = gated_app.get("/sessions", follow_redirects=False)
         assert r.status_code == 302
-        assert r.headers["location"] == "/login?next=%2Fsessions"
+        assert r.headers["location"] == "/?next=%2Fsessions"
 
-    def test_root_path_redirects_with_next(self, gated_app):
-        r = gated_app.get("/", follow_redirects=False)
-        assert r.headers["location"] in ("/login", "/login?next=%2F")
+    def test_root_path_serves_spa_without_redirect(self, gated_app):
+        # Root is the public SPA shell (login UI is client-side) — it is
+        # NOT redirected to a login page. Unauthenticated users are served
+        # the SPA, which renders its own login screen.
+        r = gated_app.get("/")
+        assert r.status_code == 200
 
     def test_login_loop_avoided(self, gated_app):
-        """A request to /login itself must not produce ``?next=/login``
-        because that'd be a loop after re-auth."""
-        # /login is on the public allowlist so it doesn't go through the
-        # 401 path. But sanity: the page renders.
-        r = gated_app.get("/login")
-        assert r.status_code == 200
+        # /login is no longer a route — the gate bounces an unauthenticated
+        # request for it to the SPA root with next=/login (so the SPA
+        # re-renders its login screen rather than looping).
+        r = gated_app.get("/login", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/?next=%2Flogin"
 
     def test_auth_loop_avoided(self, gated_app):
         """A failed cookie on /auth/me (auth-required path) must drop
@@ -359,7 +362,11 @@ class TestNextSameOriginValidation:
             def __init__(self, path):
                 self.url = type("URL", (), {"path": path, "query": ""})()
 
-        assert _safe_next_target(FakeRequest("/login")) == ""
+        # The OAuth login page is now the SPA root (`/`), not `/login`, so
+        # `/login` is no longer a loop target and is NOT special-cased by
+        # _safe_next_target. `/auth/login` and `/api/auth/me` ARE still
+        # rejected (they'd bounce back through the gate).
+        assert _safe_next_target(FakeRequest("/login")) == "%2Flogin"
         assert _safe_next_target(FakeRequest("/auth/login")) == ""
         assert _safe_next_target(FakeRequest("/api/auth/me")) == ""
 
@@ -431,48 +438,18 @@ class TestAuthCallbackNext:
     PKCE-cookie carriage produces the correct landing.
     """
 
-    def _drive_oauth_via_login(
-        self, gated_app, *, next_path: str = "",
-        expect_next_in_button: bool = True,
-    ):
-        """Walk /login → /auth/login → IDP-bounce → /auth/callback like
-        a real browser. ``next_path`` is the path the gate would have
-        encoded for the user; nothing about the callback URL is
-        smuggled. ``expect_next_in_button`` controls whether the
-        rendered /login page is expected to thread next= into the
-        provider button — False for cases where the same-origin
-        validator drops the value (e.g. //evil.com, /login)."""
-        login_path = "/login"
+    def _drive_oauth_via_login(self, gated_app, *, next_path: str = ""):
+        """Walk the OAuth round trip like a real browser, without parsing
+        the (client-side-rendered) login page. The fork serves the login UI
+        from the SPA root (`/`) and starts the OAuth flow at
+        ``/auth/login?provider=stub&next=<path>``; drive that endpoint
+        directly. ``next=`` is carried in the PKCE cookie, not the HTML
+        button, so there is nothing to extract from the page.
+        """
+        login_url = "/auth/login?provider=stub"
         if next_path:
-            login_path = f"/login?next={quote(next_path, safe='')}"
-        r_login = gated_app.get(login_path, follow_redirects=False)
-        assert r_login.status_code == 200
-        # Click the stub provider button. Real browsers parse the HTML;
-        # we extract the href the page emitted, so a regression that
-        # forgets to thread next= through the button will surface here.
-        body = r_login.text
-        # Each provider button is emitted as an <a class="provider-btn"
-        # href="/auth/login?provider=stub..."> line.
-        marker = 'href="'
-        i = body.find('class="provider-btn"')
-        assert i != -1, "no provider button in /login HTML"
-        h = body.find(marker, i) + len(marker)
-        j = body.find('"', h)
-        href = body[h:j]
-        # Critical: the href must carry next= for the PKCE round trip.
-        # values, the validator drops them at the /auth/login boundary
-        # and the button href must NOT carry the rogue value.
-        if next_path and expect_next_in_button:
-            assert "next=" in href, (
-                f"login button dropped next= (href={href!r})"
-            )
-        if next_path and not expect_next_in_button:
-            assert "next=" not in href, (
-                f"login button leaked rejected next= "
-                f"(next_path={next_path!r}, href={href!r})"
-            )
-
-        r_to_idp = gated_app.get(href, follow_redirects=False)
+            login_url += f"&next={quote(next_path, safe='')}"
+        r_to_idp = gated_app.get(login_url, follow_redirects=False)
         assert r_to_idp.status_code == 302
         # Stub IDP "returns" code+state on the callback URL — same shape
         # as a real IDP. Critical: we do NOT append next= here.
@@ -507,7 +484,6 @@ class TestAuthCallbackNext:
         # the user lands at "/".
         r = self._drive_oauth_via_login(
             gated_app, next_path="//evil.com/steal",
-            expect_next_in_button=False,
         )
         assert r.status_code == 302
         assert r.headers["location"] == "/"
@@ -515,7 +491,6 @@ class TestAuthCallbackNext:
     def test_callback_rejects_login_loop(self, gated_app):
         r = self._drive_oauth_via_login(
             gated_app, next_path="/login",
-            expect_next_in_button=False,
         )
         assert r.status_code == 302
         assert r.headers["location"] == "/"
@@ -525,12 +500,13 @@ class TestAuthCallbackNext:
         rogue ``next=`` query parameter, the server reads from the PKCE
         cookie (server-set) and ignores the URL value. This pins the
         fix against a regression that re-introduces the URL read."""
-        # Drive a clean login with no next=.
-        r_login = gated_app.get("/login", follow_redirects=False)
-        assert r_login.status_code == 200
+        # Drive a clean login with no next= via the OAuth start endpoint
+        # (the fork's login UI is client-side, so there is no server-
+        # rendered /login page to GET).
         r_to_idp = gated_app.get(
             "/auth/login?provider=stub", follow_redirects=False
         )
+        assert r_to_idp.status_code == 302
         state = r_to_idp.headers["location"].split("state=")[1]
         # Attacker appends next=/internal-admin to the callback URL.
         r = gated_app.get(
@@ -539,7 +515,7 @@ class TestAuthCallbackNext:
             follow_redirects=False,
         )
         assert r.status_code == 302
-        # No next= was in the PKCE cookie, so landing must be "/" —
+        # No next= was in the PKCE cookie, so landing must be "/"
         # NOT /internal-admin.
         assert r.headers["location"] == "/"
 

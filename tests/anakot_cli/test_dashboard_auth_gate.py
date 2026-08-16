@@ -144,22 +144,25 @@ def test_start_server_insecure_public_sets_auth_required_false(monkeypatch):
 
 
 def test_start_server_public_without_insecure_records_auth_required(monkeypatch):
-    """Public bind without --insecure: the gate engages and auth_required=True.
+    """Public bind without --insecure: the gate engages (auth_required=True).
 
-    With no providers registered, this fails closed with SystemExit. The
-    flag-stashing happens BEFORE the exit so the rest of the system can
-    branch on it. (See task 3.5 tests below for the with-provider path.)
+    The built-in password provider is auto-registered whenever the gate
+    engages and no password provider is present, so the dashboard always
+    has at least one auth method and start_server proceeds (it does NOT
+    fail closed). The flag-stashing happens before any binding work so the
+    rest of the system can branch on it.
     """
-    from anakot_cli.dashboard_auth import clear_providers
+    from anakot_cli.dashboard_auth import clear_providers, list_providers
     clear_providers()
     _stub_uvicorn_run(monkeypatch)
     web_server.app.state.auth_required = None
-    with pytest.raises(SystemExit):
-        web_server.start_server(
-            host="0.0.0.0", port=9119,
-            open_browser=False, allow_public=False,
-        )
+    web_server.start_server(
+        host="0.0.0.0", port=9119,
+        open_browser=False, allow_public=False,
+    )
     assert web_server.app.state.auth_required is True
+    # The auto-registered password provider guarantees the gate can engage.
+    assert any(p.name == "password" for p in list_providers())
 
 
 # ---------------------------------------------------------------------------
@@ -194,48 +197,46 @@ def test_start_server_gate_with_provider_proceeds_and_sets_proxy_headers(monkeyp
         clear_providers()
 
 
-def test_start_server_gate_without_provider_fails_closed(monkeypatch):
-    """No providers + gate would activate → SystemExit with a clear message."""
-    from anakot_cli.dashboard_auth import clear_providers
+def test_start_server_auto_registers_password_provider(monkeypatch):
+    """A public bind with no providers registered still proceeds.
+
+    start_server auto-registers the built-in password provider whenever the
+    gate engages, so the "zero providers → fail closed" path is no longer
+    reachable in practice — the dashboard always has a password login. This
+    pins that the auto-registration actually happens (and the bind does NOT
+    raise SystemExit).
+    """
+    from anakot_cli.dashboard_auth import clear_providers, list_providers
 
     clear_providers()
     _stub_uvicorn_run(monkeypatch)
     web_server.app.state.auth_required = None
-    with pytest.raises(SystemExit, match=r"no auth providers"):
-        web_server.start_server(
-            host="0.0.0.0", port=9119,
-            open_browser=False, allow_public=False,
-        )
+    web_server.start_server(
+        host="0.0.0.0", port=9119,
+        open_browser=False, allow_public=False,
+    )
+    assert web_server.app.state.auth_required is True
+    assert any(p.name == "password" for p in list_providers())
 
 
-def test_start_server_surfaces_nous_skip_reason_when_unconfigured(monkeypatch):
-    """When the bundled callmemo plugin loaded but skipped registration (no
-    env vars set), the gate's fail-closed message should surface the
-    plugin's LAST_SKIP_REASON so the operator knows the config fix is
-    'set ANAKOT_DASHBOARD_OAUTH_CLIENT_ID', not 'install a plugin'."""
+def test_callmemo_plugin_records_skip_reason_when_unconfigured(monkeypatch):
+    """The bundled callmemo plugin records a human-readable LAST_SKIP_REASON
+    when no client_id is configured, so operators know the config fix is
+    'set ANAKOT_DASHBOARD_OAUTH_CLIENT_ID' rather than 'install a plugin'.
+
+    The gate's auto-registered password provider means this skip reason is no
+    longer surfaced via a fail-closed SystemExit (the dashboard still binds
+    with password auth), so we assert the plugin-level behaviour directly.
+    """
     from anakot_cli.dashboard_auth import clear_providers
-    from plugins.dashboard_auth import nous as nous_plugin
+    from plugins.dashboard_auth import callmemo as callmemo_plugin
 
-    # Simulate the plugin running and skipping for "no client_id".
     clear_providers()
-    _stub_uvicorn_run(monkeypatch)
     monkeypatch.delenv("ANAKOT_DASHBOARD_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("ANAKOT_DASHBOARD_PORTAL_URL", raising=False)
     from unittest.mock import MagicMock
-    nous_plugin.register(MagicMock())  # populates LAST_SKIP_REASON
-    assert "ANAKOT_DASHBOARD_OAUTH_CLIENT_ID" in nous_plugin.LAST_SKIP_REASON
-
-    web_server.app.state.auth_required = None
-    with pytest.raises(SystemExit) as exc_info:
-        web_server.start_server(
-            host="0.0.0.0", port=9119,
-            open_browser=False, allow_public=False,
-        )
-    # The error message embeds the plugin's specific skip reason rather
-    # than the generic "Install the default callmemo provider" boilerplate.
-    msg = str(exc_info.value)
-    assert "ANAKOT_DASHBOARD_OAUTH_CLIENT_ID" in msg
-    assert "nous:" in msg
+    callmemo_plugin.register(MagicMock())  # populates LAST_SKIP_REASON
+    assert "ANAKOT_DASHBOARD_OAUTH_CLIENT_ID" in callmemo_plugin.LAST_SKIP_REASON
 
 
 def test_start_server_loopback_keeps_proxy_headers_off(monkeypatch):

@@ -1535,7 +1535,9 @@ def _ensure_tui_node() -> None:
     if not helper.is_file():
         return
 
-    anakot_home = os.environ.get("ANAKOT_HOME") or str(Path.home() / ".anakot")
+    from anakot_constants import get_anakot_home
+
+    anakot_home = str(get_anakot_home())
     try:
         # Helper writes logs to stderr; we ask bash to print `command -v node`
         # on stdout once ensure_node succeeds. Subshell PATH edits don't leak

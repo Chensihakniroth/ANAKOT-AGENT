@@ -10,20 +10,14 @@ from typing import Optional
 
 def _anakot_home_path() -> Path:
     """Resolve the active ANAKOT_HOME (profile-aware) without circular imports."""
-    try:
-        from anakot_constants import get_anakot_home  # local import to avoid cycles
-        return get_anakot_home()
-    except Exception:
-        return Path(os.path.expanduser("~/.anakot"))
+    from anakot_constants import get_anakot_home
+    return get_anakot_home()
 
 
 def _anakot_root_path() -> Path:
     """Resolve the Anakot root dir (always the parent of any profile, never per-profile)."""
-    try:
-        from anakot_constants import get_default_anakot_root  # local import to avoid cycles
-        return get_default_anakot_root()
-    except Exception:
-        return Path(os.path.expanduser("~/.anakot"))
+    from anakot_constants import get_default_anakot_root
+    return get_default_anakot_root()
 
 
 def build_write_denied_paths(home: str) -> set[str]:

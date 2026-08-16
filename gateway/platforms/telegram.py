@@ -12,11 +12,14 @@ import dataclasses
 import json
 import logging
 import os
+from pathlib import Path
 import tempfile
 import html as _html
 import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Any
+
+from anakot_constants import get_anakot_home
 
 logger = logging.getLogger(__name__)
 
@@ -3630,8 +3633,8 @@ class TelegramAdapter(BasePlatformAdapter):
             await query.answer(text=f"Unknown verb: {verb}")
             return
         script_name, extra_args, success_label, is_state_verb = entry
-
-        script_path = _Path.home() / ".anakot" / "scripts" / "gmail-triage" / script_name
+ 
+        script_path = get_anakot_home() / "scripts" / "gmail-triage" / script_name
         if not script_path.exists():
             await query.answer(text=f"❌ {script_name} missing")
             logger.error("[%s] gmail-triage script missing: %s", self.name, script_path)

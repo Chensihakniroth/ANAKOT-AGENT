@@ -203,6 +203,7 @@ def apply_migration(
 
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
+    # ruamel.yaml RoundTripConstructor derives from SafeConstructor (safe from arbitrary object instantiation).
     with config_path.open("r", encoding="utf-8") as fh:
         doc = yaml.load(fh)
 

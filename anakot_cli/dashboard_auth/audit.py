@@ -20,6 +20,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from anakot_constants import get_anakot_home
+
 _log = logging.getLogger(__name__)
 _write_lock = threading.Lock()
 
@@ -45,20 +47,11 @@ class AuditEvent(enum.Enum):
     REFRESH_FAILURE = "refresh_failure"
     REVOKE = "revoke"
     SESSION_VERIFY_FAILURE = "session_verify_failure"
-    WS_TICKET_MINTED = "ws_ticket_minted"
-    WS_TICKET_REJECTED = "ws_ticket_rejected"
-    USER_ROLE_CHANGED = "user_role_changed"
 
 
 def _resolve_log_path() -> Path:
-    """``$ANAKOT_HOME/logs/dashboard-auth.log`` with the standard fallback.
-
-    Mirrors ``anakot_constants.get_anakot_home`` semantics: env var wins,
-    else ``~/.anakot``. A local copy avoids an import cycle with the
-    middleware which lives below ``anakot_cli``.
-    """
-    home = os.environ.get("ANAKOT_HOME") or str(Path.home() / ".anakot")
-    return Path(home) / "logs" / "dashboard-auth.log"
+    """Return ``$ANAKOT_HOME/logs/dashboard-auth.log``."""
+    return get_anakot_home() / "logs" / "dashboard-auth.log"
 
 
 def audit_log(event: AuditEvent, **fields: Any) -> None:

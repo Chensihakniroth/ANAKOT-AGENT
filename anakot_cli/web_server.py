@@ -11746,11 +11746,11 @@ def start_server(
             # is misleading when the provider IS installed but unconfigured.
             skip_reasons: list[str] = []
             try:
-                from plugins.dashboard_auth import nous as _nous_plugin
+                from plugins.dashboard_auth import callmemo as _callmemo_plugin
 
-                if _nous_plugin.LAST_SKIP_REASON:
+                if _callmemo_plugin.LAST_SKIP_REASON:
                     skip_reasons.append(
-                        f"  • nous: {_nous_plugin.LAST_SKIP_REASON}"
+                        f"  • callmemo: {_callmemo_plugin.LAST_SKIP_REASON}"
                     )
             except Exception:
                 pass
@@ -11772,7 +11772,7 @@ def start_server(
                 f"Refusing to bind dashboard to {host} — the OAuth auth "
                 f"gate engages on non-loopback binds, but no auth providers "
                 f"are registered and no bundled plugin reported a reason "
-                f"(was the dashboard_auth/nous plugin removed?).\n"
+                f"(was the dashboard_auth/callmemo plugin removed?).\n"
                 f"Install a DashboardAuthProvider plugin, or pass --insecure "
                 f"to skip the auth gate (NOT recommended on untrusted "
                 f"networks)."

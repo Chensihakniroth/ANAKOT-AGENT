@@ -128,9 +128,12 @@ def test_gated_auth_providers_is_public(gated_app):
 
 
 def test_gated_login_html_is_public_and_lists_providers(gated_app):
-    """``/login`` no longer exists — the SPA handles login at ``/`` instead."""
-    r = gated_app.get("/login")
-    assert r.status_code == 404
+    # /login no longer exists as a route — the SPA handles login at /.
+    # An unauthenticated GET /login is bounced to the SPA root by the
+    # auth gate (with next= pointing back at /login so it re-renders).
+    r = gated_app.get("/login", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == "/?next=%2Flogin"
 
 
 def test_gated_static_asset_path_is_public(gated_app):
@@ -236,10 +239,12 @@ def test_invalid_cookie_returns_401_on_api(gated_app):
 
 def test_invalid_cookie_redirects_on_html(gated_app):
     gated_app.cookies.set(SESSION_AT_COOKIE, "garbage")
-    r = gated_app.get("/", follow_redirects=False)
+    # / is the public SPA shell, so it is served (200) regardless of the
+    # dead cookie — the SPA renders its own login UI. A non-public SPA
+    # route like /sessions is what the gate actually bounces.
+    r = gated_app.get("/sessions", follow_redirects=False)
     assert r.status_code == 302
-    # Phase 6: gate carries a ``next=`` so post-login bounces back to /.
-    assert r.headers["location"] in ("/login", "/login?next=%2F")
+    assert r.headers["location"] == "/?next=%2Fsessions"
 
 
 def test_logout_clears_cookies_and_redirects_to_login(gated_app):
@@ -253,7 +258,7 @@ def test_logout_clears_cookies_and_redirects_to_login(gated_app):
     # Now log out.
     r = gated_app.post("/auth/logout", follow_redirects=False)
     assert r.status_code == 302
-    assert r.headers["location"] == "/login"
+    assert r.headers["location"] == "/"
     set_cookies = r.headers.get_list("set-cookie")
     assert any(
         c.startswith("anakot_session_at=") and "Max-Age=0" in c
@@ -325,9 +330,10 @@ def test_gated_zero_providers_login_page_is_gone():
     web_server.app.state.auth_required = True
     try:
         client = TestClient(web_server.app, base_url="https://fly-app.fly.dev")
-        r = client.get("/login")
-        # /login route no longer exists — SPA handles login at /
-        assert r.status_code == 404
+        r = client.get("/login", follow_redirects=False)
+        # /login route no longer exists — the gate bounces to the SPA root.
+        assert r.status_code == 302
+        assert r.headers["location"] == "/?next=%2Flogin"
     finally:
         clear_providers()
         web_server.app.state.auth_required = prev_required

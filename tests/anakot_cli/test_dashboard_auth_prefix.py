@@ -109,10 +109,10 @@ class TestGateRedirectsCarryPrefix:
             follow_redirects=False,
         )
         assert r.status_code == 302
-        # /login redirect must include the prefix or the browser will
-        # follow it to mission-control.tilos.com/login (which the proxy
+        # The login redirect must include the prefix or the browser will
+        # follow it to mission-control.tilos.com/ (which the proxy
         # doesn't route to the dashboard).
-        assert r.headers["location"].startswith("/anakot/login"), (
+        assert r.headers["location"].startswith("/anakot/"), (
             f"Location header lost prefix: {r.headers['location']!r}"
         )
 
@@ -126,7 +126,7 @@ class TestGateRedirectsCarryPrefix:
         body = r.json()
         # SPA does window.location.assign(body.login_url); this MUST
         # include the prefix.
-        assert body["login_url"].startswith("/anakot/login"), (
+        assert body["login_url"].startswith("/anakot/"), (
             f"401 envelope login_url lost prefix: {body['login_url']!r}"
         )
 
@@ -136,7 +136,7 @@ class TestGateRedirectsCarryPrefix:
         proxy at all."""
         r = gated_app_direct.get("/sessions", follow_redirects=False)
         assert r.status_code == 302
-        assert r.headers["location"] == "/login?next=%2Fsessions"
+        assert r.headers["location"] == "/?next=%2Fsessions"
 
     def test_malformed_prefix_header_is_ignored(self, gated_app_proxied):
         """A hostile proxy injects ``X-Forwarded-Prefix: <script>``;
@@ -149,7 +149,7 @@ class TestGateRedirectsCarryPrefix:
         )
         assert r.status_code == 302
         assert "<script>" not in r.headers["location"]
-        assert r.headers["location"].startswith("/login")
+        assert r.headers["location"].startswith("/")
 
 
 # ---------------------------------------------------------------------------

@@ -46,6 +46,8 @@ import re
 from pathlib import Path as _Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from anakot_constants import get_anakot_home
+
 # Heavy google-cloud + googleapiclient imports are deferred to first
 # adapter use. Importing them eagerly here added ~110ms wall and ~33MB
 # RSS to *every* CLI invocation (the plugin loader imports this module at
@@ -521,11 +523,7 @@ class GoogleChatAdapter(BasePlatformAdapter):
         # active side-threads survive gateway restarts (the bug that
         # made the in-memory version of this heuristic flaky for
         # multi-restart sessions).
-        try:
-            from anakot_constants import get_anakot_home as _get_anakot_home
-            _anakot_home = _get_anakot_home()
-        except (ModuleNotFoundError, ImportError):
-            _anakot_home = _Path.home() / ".anakot"
+        _anakot_home = get_anakot_home()
         self._thread_count_store = _ThreadCountStore(
             _anakot_home / "google_chat_thread_counts.json"
         )
@@ -689,8 +687,7 @@ class GoogleChatAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
     def _bot_id_cache_path(self) -> _Path:
         """Location where the resolved bot user_id is cached across restarts."""
-        base = os.getenv("ANAKOT_HOME", str(_Path.home() / ".anakot"))
-        return _Path(base) / "google_chat_bot_id.json"
+        return get_anakot_home() / "google_chat_bot_id.json"
 
     def _load_cached_bot_id(self) -> Optional[str]:
         path = self._bot_id_cache_path()

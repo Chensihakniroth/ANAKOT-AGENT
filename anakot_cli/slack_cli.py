@@ -130,12 +130,9 @@ def slack_manifest_command(args) -> int:
     if write_target is not None:
         if isinstance(write_target, bool) and write_target:
             # --write with no value → default location
-            try:
-                from anakot_constants import get_anakot_home
+            from anakot_constants import get_anakot_home
 
-                target = Path(get_anakot_home()) / "slack-manifest.json"
-            except Exception:
-                target = Path(os.environ.get("ANAKOT_HOME") or str(Path.home() / ".anakot")) / "slack-manifest.json"
+            target = get_anakot_home() / "slack-manifest.json"
         else:
             target = Path(write_target).expanduser()
         target.parent.mkdir(parents=True, exist_ok=True)
