@@ -85,6 +85,19 @@ jobs:
         run: npm run build -w apps/bootstrap-installer
 
       # (4) Catch Rust breakage in the installer without a full Tauri build.
+      # The Tauri v2 crate's build scripts (glib-sys, webkit2gtk-sys, ...) need
+      # the GTK/WebKit system libraries, which ubuntu-latest does NOT ship — so
+      # cargo check fails with "glib-2.0 not found" unless we install them.
+      - name: Install Linux system dependencies (Tauri)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev
+
       - name: Cargo check (installer Rust)
         run: cargo check
         working-directory: apps/bootstrap-installer/src-tauri
