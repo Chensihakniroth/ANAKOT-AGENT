@@ -1,16 +1,21 @@
 """Regression for #21454: re-running install.sh on a symlinked prior install.
 
-Older versions of ``install.sh`` created ``$command_link_dir/anakot`` as a
-symlink to the pip-generated entry point at ``$ANAKOT_BIN`` (i.e.
+Older versions of ``install.sh`` created ``$link_dir/anakot`` as a
+symlink to the pip-generated entry point at ``$anakot_bin`` (i.e.
 ``venv/bin/anakot``). When ``setup_path()`` later switched to writing a bash
-shim with ``cat > "$command_link_dir/anakot" <<EOF``, the redirect followed
+shim with ``cat > "$link_dir/anakot" <<EOF``, the redirect followed
 the existing symlink and overwrote the pip entry point with the shim. The
-shim's ``exec "$ANAKOT_BIN" "$@"`` then self-recursed and ``anakot`` hung on
+shim's ``exec "$anakot_bin" "$@"`` then self-recursed and ``anakot`` hung on
 every invocation.
 
-These tests pin the fix: ``setup_path()`` must remove ``$command_link_dir/anakot``
+These tests pin the fix: ``setup_path()`` must remove ``$link_dir/anakot``
 before writing through the redirect, so the shim is created as a regular file
-in ``command_link_dir`` and the venv entry point is left intact.
+in ``link_dir`` and the venv entry point is left intact.
+
+The fork resolves the link dir through ``get_command_link_dir()`` (exposed as
+``$link_dir``) and writes the launcher from ``$anakot_bin``, so the behavioral
+repro below drives the extracted block with those names rather than the old
+``$command_link_dir`` / ``$ANAKOT_BIN`` globals.
 """
 
 from __future__ import annotations
@@ -27,10 +32,15 @@ INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
 
 def _extract_setup_path_shim_block() -> str:
-    """Return the install.sh shim-write block used by setup_path()."""
+    """Return the install.sh shim-write block used by setup_path().
+
+    The fork renamed the link-dir variable from ``$command_link_dir`` to
+    ``$link_dir`` (resolved via ``get_command_link_dir()``), so the pattern
+    must track the current spelling.
+    """
     text = INSTALL_SH.read_text()
     match = re.search(
-        r"(?P<block>mkdir -p \"\$command_link_dir\".*?chmod \+x \"\$command_link_dir/anakot\")",
+        r"(?P<block>mkdir -p \"\$link_dir\".*?chmod \+x \"\$link_dir/anakot\")",
         text,
         re.DOTALL,
     )
@@ -43,10 +53,10 @@ def _extract_setup_path_shim_block() -> str:
 def test_setup_path_shim_block_removes_old_link_before_writing() -> None:
     """Static guard: the rm must precede the cat heredoc, not follow it."""
     block = _extract_setup_path_shim_block()
-    rm_idx = block.find('rm -f "$command_link_dir/anakot"')
-    cat_idx = block.find('cat > "$command_link_dir/anakot" <<EOF')
+    rm_idx = block.find('rm -f "$link_dir/anakot"')
+    cat_idx = block.find('cat > "$link_dir/anakot" <<EOF')
     assert rm_idx != -1, (
-        "setup_path() must `rm -f` $command_link_dir/anakot before the "
+        "setup_path() must `rm -f` $link_dir/anakot before the "
         "`cat >` heredoc, otherwise an existing symlink (left by older "
         "installs) will be followed and the pip entry point overwritten. "
         "See #21454."
@@ -67,8 +77,8 @@ def test_re_running_setup_path_block_preserves_pip_entry_point(tmp_path: Path) -
           local_bin/anakot       <- symlink → ../venv/bin/anakot  (old install)
 
     Then we run the exact shim-write block from setup_path() with
-    ``ANAKOT_BIN`` and ``command_link_dir`` pointed at this fixture. The fix
-    requires that, after the run:
+    ``anakot_bin`` and ``get_command_link_dir`` pointed at this fixture. The
+    fix requires that, after the run:
 
       * ``venv/bin/anakot`` still contains its original pip-script body
       * ``local_bin/anakot`` is a regular file (not a symlink) holding the shim
@@ -89,8 +99,19 @@ def test_re_running_setup_path_block_preserves_pip_entry_point(tmp_path: Path) -
     assert shim_path.is_symlink()
 
     block = _extract_setup_path_shim_block()
-    # Drive the block with the real env vars setup_path() sets.
-    script = f'set -e\nANAKOT_BIN={pip_entry!s}\ncommand_link_dir={command_link_dir!s}\n{block}\n'
+    # Drive the current block: setup_path() resolves the link dir via
+    # get_command_link_dir() and writes the launcher from $anakot_bin.
+    # Override the resolver and point $anakot_bin at the preserved pip entry.
+    # The block declares `local link_dir`, so wrap it in a function to keep
+    # `local` valid under `bash -c`.
+    pip_entry_posix = pip_entry.as_posix()
+    script = (
+        f'set -e\n'
+        f'anakot_bin={pip_entry_posix}\n'
+        f'get_command_link_dir() {{ echo {command_link_dir.as_posix()}; }}\n'
+        f'run_block() {{\n{block}\n}}\n'
+        f'run_block\n'
+    )
     result = subprocess.run(
         ["bash", "-c", script],
         capture_output=True,
@@ -111,12 +132,12 @@ def test_re_running_setup_path_block_preserves_pip_entry_point(tmp_path: Path) -
     # The shim path itself must now be a regular file holding the launcher.
     assert shim_path.exists()
     assert not shim_path.is_symlink(), (
-        "command_link_dir/anakot must be replaced with a regular file, not "
+        "link_dir/anakot must be replaced with a regular file, not "
         "left as a symlink — otherwise the next install will stomp again."
     )
     shim_text = shim_path.read_text()
     assert "unset PYTHONPATH" in shim_text
     assert "unset PYTHONHOME" in shim_text
-    assert f'exec "{pip_entry}"' in shim_text
+    assert f'exec "{pip_entry_posix}"' in shim_text
     shim_mode = shim_path.stat().st_mode
     assert shim_mode & stat.S_IXUSR, "shim must be user-executable"

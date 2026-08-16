@@ -8,9 +8,11 @@ few lines later, aborting the entire image build. The fix replaces every
 existence-based check that guards a subsequent ``< /dev/tty`` redirect with
 an open-based probe so the skip kicks in correctly.
 
-This module covers all three affected functions: ``run_setup_wizard()``
-(the reproducer in #16746), ``install_system_packages()`` (the apt sudo
-prompt fallback), and ``maybe_start_gateway()`` (the gateway-install gate).
+This module covers the affected function: ``run_setup_wizard()`` (the
+reproducer in #16746). The fork removed ``maybe_start_gateway`` and
+``install_system_packages`` no longer redirects stdin from ``/dev/tty``
+(it uses a sudo capability check instead), so only ``run_setup_wizard()``
+retains the open-based ``/dev/tty`` gate.
 """
 
 from __future__ import annotations
@@ -23,9 +25,11 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 
-# Every function in scripts/install.sh that previously gated on a bare
-# ``[ -e /dev/tty ]`` check before redirecting stdin from ``/dev/tty``.
-GATED_FUNCTIONS = ("run_setup_wizard", "install_system_packages", "maybe_start_gateway")
+# Every function in scripts/install.sh that gates on a bare ``[ -e /dev/tty ]``
+# check before redirecting stdin from ``/dev/tty``. In the fork only
+# run_setup_wizard() does this; install_system_packages() uses a sudo
+# capability check and maybe_start_gateway() was removed.
+GATED_FUNCTIONS = ("run_setup_wizard",)
 
 
 def _extract_function_body(name: str) -> str:
@@ -51,11 +55,13 @@ def test_tty_gate_does_not_use_existence_only_check(fn_name: str) -> None:
     # Cover ``[ -e /dev/tty ]``, ``[ -e "/dev/tty" ]``, ``test -e /dev/tty``
     # and friends, with arbitrary surrounding whitespace.
     pattern = re.compile(
-        r"""(
+        r"""
+        (
             \[\s*-e\s+["']?/dev/tty["']?\s*\]
             |
             \btest\s+-e\s+["']?/dev/tty["']?
-        )""",
+        )
+        """,
         re.VERBOSE,
     )
     match = pattern.search(body)
