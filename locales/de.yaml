@@ -298,7 +298,7 @@ gateway:
     not_git_repo:            "✗ Kein Git-Repository — Update nicht möglich."
     anakot_cmd_not_found:    "✗ Der Befehl `anakot` konnte nicht gefunden werden. Anakot läuft, aber der Update-Befehl konnte das ausführbare Programm weder im PATH noch über den aktuellen Python-Interpreter finden. Versuchen Sie, `anakot update` manuell im Terminal auszuführen."
     start_failed:            "✗ Update konnte nicht gestartet werden: {error}"
- starting: " Anakot-Update wird gestartet… Ich streame den Fortschritt hier."
+    starting: " Anakot-Update wird gestartet… Ich streame den Fortschritt hier."
 
   usage:
     rate_limits:              "⏱️ **Ratenlimits:** {state}"

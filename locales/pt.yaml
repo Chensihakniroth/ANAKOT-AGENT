@@ -298,7 +298,7 @@ gateway:
     not_git_repo:            "✗ Não é um repositório git — não é possível atualizar."
     anakot_cmd_not_found:    "✗ Não foi possível localizar o comando `anakot`. O Anakot está em execução, mas o comando de atualização não conseguiu encontrar o executável no PATH nem através do interpretador Python atual. Tenta executar `anakot update` manualmente no teu terminal."
     start_failed:            "✗ Falha ao iniciar a atualização: {error}"
- starting: " A iniciar a atualização do Anakot… Vou transmitir o progresso aqui."
+    starting: " A iniciar a atualização do Anakot… Vou transmitir o progresso aqui."
 
   usage:
     rate_limits:              "⏱️ **Limites de taxa:** {state}"

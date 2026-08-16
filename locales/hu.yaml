@@ -298,7 +298,7 @@ gateway:
     not_git_repo:            "✗ Nem git-tárhely — frissítés nem lehetséges."
     anakot_cmd_not_found:    "✗ Nem sikerült megtalálni a `anakot` parancsot. A Anakot fut, de a frissítőparancs nem találta a futtatható fájlt a PATH-on vagy a jelenlegi Python interpreteren keresztül. Próbáld futtatni a `anakot update` parancsot manuálisan a terminálban."
     start_failed:            "✗ Nem sikerült elindítani a frissítést: {error}"
- starting: " Anakot frissítés indítása… A folyamatot itt fogom közvetíteni."
+    starting: " Anakot frissítés indítása… A folyamatot itt fogom közvetíteni."
 
   usage:
     rate_limits:              "⏱️ **Sebességkorlátok:** {state}"

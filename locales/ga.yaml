@@ -302,7 +302,7 @@ gateway:
     not_git_repo:            "✗ Ní stór git é seo — ní féidir nuashonrú."
     anakot_cmd_not_found:    "✗ Níorbh fhéidir an t-ordú `anakot` a aimsiú. Tá Anakot ag rith, ach níorbh fhéidir leis an ordú nuashonraithe an inrite a aimsiú ar PATH ná tríd an léirmhínitheoir Python reatha. Bain triail as `anakot update` a rith de láimh i do theirminéal."
     start_failed:            "✗ Theip ar nuashonrú a thosú: {error}"
- starting: " Ag tosú nuashonrú Anakot… Cuirfidh mé an dul chun cinn ar shruth anseo."
+    starting: " Ag tosú nuashonrú Anakot… Cuirfidh mé an dul chun cinn ar shruth anseo."
 
   usage:
     rate_limits:              "⏱️ **Teorainneacha Ráta:** {state}"

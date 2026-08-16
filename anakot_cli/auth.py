@@ -536,6 +536,45 @@ def resolve_callmemo_runtime_credentials(
     return {}
 
 
+def get_nous_auth_status() -> Dict[str, Any]:
+    """Stub: callmemo Portal auth was removed in the Anakot fork.
+
+    Returns an empty status so doctor/status/web_server display "not logged in"
+    instead of crashing on the deleted upstream auth flow.
+    """
+    return {}
+
+
+def resolve_nous_access_token(
+    *,
+    refresh_skew_seconds: float = 120.0,
+    **kwargs: Any,
+) -> Any:
+    """Stub: callmemo Portal auth was removed in the Anakot fork."""
+    return None
+
+
+def _nous_invoke_jwt_is_usable(
+    token: str,
+    *,
+    scope: Any = None,
+    expires_at: Any = None,
+    **kwargs: Any,
+) -> bool:
+    """Stub: callmemo Portal auth was removed in the Anakot fork."""
+    return False
+
+
+def _nous_shared_store_path() -> Optional[str]:
+    """Stub: callmemo Portal auth was removed in the Anakot fork."""
+    return None
+
+
+def persist_nous_credentials(*args: Any, **kwargs: Any) -> None:
+    """Stub: callmemo Portal auth was removed in the Anakot fork."""
+    return None
+
+
 def _is_terminal_nous_refresh_error(exc: Exception) -> bool:
     """Stub: no-op, always returns False."""
     return False
