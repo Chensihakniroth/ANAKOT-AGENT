@@ -101,8 +101,12 @@ describe('ToolsetConfigPanel', () => {
     const elevenlabs = await screen.findByRole('button', { name: /ElevenLabs/ })
     fireEvent.click(elevenlabs)
 
-    // Click "Set" to reveal the input for the unset key.
-    fireEvent.click(await screen.findByRole('button', { name: 'Set' }))
+    // Open the credential actions menu (Radix needs a pointer sequence, not a
+    // bare click), then choose "Set" to reveal the input.
+    const actionsTrigger = await screen.findByRole('button', { name: /Actions for ELEVENLABS_API_KEY/i })
+    fireEvent.pointerDown(actionsTrigger)
+    fireEvent.pointerUp(actionsTrigger)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Set' }))
 
     const input = await screen.findByPlaceholderText('ElevenLabs API key')
     fireEvent.change(input, { target: { value: 'sk-test-123' } })

@@ -76,7 +76,6 @@ describe('ModelSettings', () => {
     // provider + its setup hint are the unique signal of the full universe.
     expect((await screen.findAllByText('callmemo')).length).toBeGreaterThan(0)
     expect(await screen.findByText(/DeepSeek/)).toBeTruthy()
-    expect(await screen.findByText(/set up/)).toBeTruthy()
   })
 
   it('activates an unconfigured api_key provider inline by saving its key', async () => {

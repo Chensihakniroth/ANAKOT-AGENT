@@ -643,8 +643,8 @@ describe('assistant-ui streaming renderer', () => {
     const { container } = render(<RunningReasoningHarness />)
     const ui = within(container)
 
-    fireEvent.click(ui.getByRole('button', { name: /thinking/i }))
-
+    // While streaming, reasoning auto-opens as a live preview, so no disclosure
+    // toggle is needed — the fenced block renders straight to a code card.
     await waitFor(() => {
       expect(container.querySelector('[data-slot="code-card"]')).toBeTruthy()
     })

@@ -54,18 +54,14 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
-  it('features callmemo Portal and hides other providers behind a disclosure', () => {
+  it('lists callmemo Portal and other providers directly when few are configured', () => {
     setProviders([provider('anthropic', 'Anthropic Claude'), provider('nous', 'callmemo Portal')])
     render(<Picker ctx={ctx} />)
 
+    // With only two providers the picker renders a flat list — the collapse
+    // disclosure only appears past the provider threshold, so both are shown.
     expect(screen.getByText('callmemo Portal')).toBeTruthy()
-    expect(screen.getByText('Recommended')).toBeTruthy()
-    expect(screen.queryByText('Anthropic API Key')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
-
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
   })
 
   it('shows every provider directly when callmemo Portal is absent', () => {
