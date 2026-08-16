@@ -89,3 +89,21 @@ export function failDesktopBoot(message: string) {
     visible: true
   })
 }
+
+export function clearDesktopBootError() {
+  const current = $desktopBoot.get()
+
+  if (!current.error) {
+    return
+  }
+
+  $desktopBoot.set({
+    ...current,
+    error: null,
+    phase: 'renderer.ready',
+    progress: 100,
+    running: false,
+    timestamp: Date.now(),
+    visible: false
+  })
+}

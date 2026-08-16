@@ -7,6 +7,7 @@ import { isGatewayReauthRequired, resolveGatewayWsUrl } from '@/lib/gateway-ws-u
 import {
   $desktopBoot,
   applyDesktopBootProgress,
+  clearDesktopBootError,
   completeDesktopBoot,
   failDesktopBoot,
   setDesktopBootStep
@@ -33,6 +34,11 @@ import {
   setSessionsLoading
 } from '@/store/session'
 import type { RpcEvent } from '@/types/anakot'
+
+// After this many failed post-boot reconnect attempts (~45s of exponential
+// backoff), surface a recoverable boot error so the user escapes the endless
+// CONNECTING screen (BootFailureOverlay → local gateway / retry / sign-in).
+const RECOVERABLE_ERROR_AFTER_ATTEMPTS = 6
 
 interface GatewayBootOptions {
   handleGatewayEvent: (event: RpcEvent) => void
@@ -171,6 +177,14 @@ export function useGatewayBoot({
       // 1s, 2s, 4s … capped at 15s.
       const delay = Math.min(15_000, 1_000 * 2 ** Math.min(reconnectAttempt, 4))
       reconnectAttempt += 1
+
+      // Escape hatch: once a post-boot reconnect has failed long enough, surface
+      // a recoverable boot error so the user isn't stuck on CONNECTING with no
+      // way out (BootFailureOverlay → local gateway / retry / sign-in).
+      if (bootCompleted && reconnectAttempt >= RECOVERABLE_ERROR_AFTER_ATTEMPTS && !$desktopBoot.get().error) {
+        failDesktopBoot(translateNow('boot.errors.gatewayReconnectFailed'))
+      }
+
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null
         void attemptReconnect()
@@ -218,6 +232,7 @@ export function useGatewayBoot({
         reconnectAttempt = 0
         reauthNotified = false
         clearReconnectTimer()
+        clearDesktopBootError()
       } else if (bootCompleted && (st === 'closed' || st === 'error')) {
         // The socket dropped after a healthy boot (typically sleep/wake). Try
         // to bring it back instead of leaving the composer stuck disabled.
