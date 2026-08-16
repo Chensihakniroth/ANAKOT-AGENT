@@ -1,3 +1,6 @@
+import React from 'react'
+import { vi } from 'vitest'
+
 // =============================================================================
 // Vitest jsdom environment polyfills
 // -----------------------------------------------------------------------------
@@ -54,3 +57,15 @@ if (typeof globalThis.IntersectionObserver !== 'function') {
     }
   } as unknown as typeof IntersectionObserver
 }
+
+// -----------------------------------------------------------------------------
+// react-shiki (syntax highlighter) cannot run in the headless jsdom CI sandbox
+// — it needs WASM/network to load TextMate grammars & themes and hangs on a
+// placeholder ("Code · tsc") instead of rendering the code. Unit tests only
+// care about OUR rendering (the CodeCard wrapper, copy button, fences), not
+// shiki's tokens, so mock it to emit the code text synchronously.
+// -----------------------------------------------------------------------------
+vi.mock('react-shiki', () => ({
+  default: ({ children }: { children?: React.ReactNode }) =>
+    React.createElement('code', { className: 'block whitespace-pre' }, children),
+}))

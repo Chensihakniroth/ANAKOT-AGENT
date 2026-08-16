@@ -635,7 +635,11 @@ describe('assistant-ui streaming renderer', () => {
       expect(container.querySelector('[data-slot="code-card"]')).toBeTruthy()
     })
 
-    expect(container.textContent).toContain('const answer = 42')
+    // The fenced block streams in progressively — wait for the full code to
+    // land (the highlighter is mocked in jsdom, so this is deterministic).
+    await waitFor(() => {
+      expect(container.textContent).toContain('const answer = 42')
+    })
     expect(container.textContent).not.toContain('```ts')
   })
 
@@ -649,7 +653,9 @@ describe('assistant-ui streaming renderer', () => {
       expect(container.querySelector('[data-slot="code-card"]')).toBeTruthy()
     })
 
-    expect(container.querySelector('[data-slot="aui_reasoning-text"]')?.textContent).toContain('const answer = 42')
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="aui_reasoning-text"]')?.textContent).toContain('const answer = 42')
+    })
     expect(container.textContent).not.toContain('```ts')
   })
 
