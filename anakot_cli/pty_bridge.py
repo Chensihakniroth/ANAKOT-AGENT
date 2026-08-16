@@ -199,7 +199,10 @@ class _PosixPtyBridge:
         if self._closed:
             return
         self._closed = True
-        for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGKILL):
+        for _sig_name in ("SIGHUP", "SIGTERM", "SIGKILL"):
+            sig = getattr(signal, _sig_name, None)
+            if sig is None:
+                continue
             if not self._proc.isalive():
                 break
             try:

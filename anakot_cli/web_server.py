@@ -11676,7 +11676,7 @@ def _ensure_repo_readonly_for_web_server() -> None:
         return
 
     # Check if we're running as root — if so, chmod is meaningless
-    if os.geteuid() == 0:
+    if getattr(os, "geteuid", None) is not None and os.geteuid() == 0:
         _log.warning(
             "Running as root — chmod 555 on %s would be bypassed by root "
             "privileges. Switch to a non-root user in your Dockerfile.",
