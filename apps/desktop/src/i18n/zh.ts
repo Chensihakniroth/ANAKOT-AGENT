@@ -58,7 +58,8 @@ export const zh: Translations = {
       backendStopped: '后端已停止',
       desktopBootFailed: '桌面启动失败',
       gatewaySignInRequired: '需要登录网关',
-      ipcBridgeUnavailable: '桌面 IPC 桥不可用。'
+      gatewayReconnectFailed: '多次尝试后仍无法连接网关。你可以切换到本地网关或重试。',
+      ipcBridgeUnavailable: '桌面 IPC 桥不可用。',
     },
     failure: {
       title: 'Anakot 无法启动',

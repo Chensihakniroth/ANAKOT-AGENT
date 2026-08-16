@@ -10970,6 +10970,8 @@ class NotebookChatRequest(BaseModel):
     history: Optional[List[Dict[str, str]]] = None  # [{role, content}, ...]
     source_id: Optional[str] = None  # scope retrieval to a single source (legacy)
     source_ids: Optional[List[str]] = None  # scope retrieval to specific sources (union)
+    model: Optional[str] = None  # explicitly chosen model (overrides aux/default)
+    provider: Optional[str] = None  # provider slug for the chosen model
 
 
 @app.post("/api/notebooks/{notebook_id}/chat")
@@ -11040,6 +11042,14 @@ async def notebook_chat(notebook_id: str, body: NotebookChatRequest, request: Re
                 "default": nb_aux.get("model", ""),
                 "base_url": nb_aux.get("base_url", ""),
             }
+
+    # Explicit user-selected model from the NotebookLLM composer picker.
+    if body.provider and body.model:
+        model_cfg = {
+            "provider": body.provider,
+            "default": body.model,
+            "base_url": "",
+        }
 
     provider_name = (model_cfg.get("provider") or "").strip().lower()
     base_url = (model_cfg.get("base_url") or "").rstrip("/")
@@ -11146,6 +11156,8 @@ async def _notebook_chat_stream_generator(
     user_id: str | None = None,
     source_id: str | None = None,
     source_ids: list[str] | None = None,
+    model: str | None = None,
+    provider: str | None = None,
 ):
     """Generator that yields SSE chunks for notebook chat."""
     import json as _json
@@ -11232,6 +11244,16 @@ async def _notebook_chat_stream_generator(
                 "default": nb_aux.get("model", ""),
                 "base_url": nb_aux.get("base_url", ""),
             }
+
+    # Explicit user-selected model from the NotebookLLM composer picker.
+    # When both are supplied we honor them over the aux/default slot so the
+    # user can chat with any configured, working model.
+    if provider and model:
+        model_cfg = {
+            "provider": provider,
+            "default": model,
+            "base_url": "",
+        }
 
     provider_name = (model_cfg.get("provider") or "").strip().lower()
     base_url = (model_cfg.get("base_url") or "").rstrip("/")
@@ -11390,6 +11412,8 @@ async def notebook_chat_stream(notebook_id: str, body: NotebookChatRequest, requ
             user_id=user_id,
             source_id=body.source_id,
             source_ids=body.source_ids,
+            model=body.model,
+            provider=body.provider,
         ),
         media_type="text/event-stream",
         headers={

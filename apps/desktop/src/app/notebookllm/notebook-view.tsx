@@ -3,6 +3,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
+import { $currentModel, setCurrentModel } from "@/store/session";
+import { getGlobalModelOptions } from "@/anakot";
 import {
   $notebooks,
   $currentNotebook,
@@ -34,11 +36,13 @@ import {
 import type { Notebook, NotebookSource } from "./notebook-store";
 import { MarkdownTextContent } from "@/components/assistant-ui/markdown-text";
 import { CodeHighlight } from "./code-highlight";
+import { PromptInput } from "@/components/ui/ai-chat-input";
 import { notify, notifyError } from "@/store/notifications";
 import {
   AlertTriangle,
   Check,
   ChevronLeft,
+  ChevronRight,
   ChevronDown,
   ChevronUp,
   Clipboard,
@@ -54,9 +58,7 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Send,
   Sparkles,
-  Square,
   Upload,
   X,
   Zap,
@@ -80,7 +82,7 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [chatLoading, setChatLoading] = useState(false);
   const chatStreamAbortRef = useRef<AbortController | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const chatInputRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
   const hasStreamedOnceRef = useRef(false);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -99,6 +101,11 @@ export function NotebookView({ onClose }: NotebookViewProps) {
   const [leftWidth, setLeftWidth] = useState(256); // px, 0 = collapsed
   const [rightWidth, setRightWidth] = useState(288); // px, 0 = collapsed
   const [dragging, setDragging] = useState<"left" | "right" | null>(null);
+
+  // Remember each panel's last non-collapsed width so a collapsed panel can be
+  // restored to a usable size when re-opened via the edge rail / toggle button.
+  const lastLeftWidth = useRef(256);
+  const lastRightWidth = useRef(288);
   const [scopeEnabled, setScopeEnabled] = useState(false);
   const [scopedSourceIds, setScopedSourceIds] = useState<string[]>([]);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
@@ -626,9 +633,21 @@ ${src.summary}
     if (currentNotebook) handleLoadOverview();
   }, [currentNotebook, handleLoadOverview]);
 
-  const handleChat = useCallback(async () => {
-    if (!chatInput.trim() || !currentNotebook) return;
-    const question = chatInput.trim();
+  // Ensure a default model is selected so the NotebookLLM model picker
+  // (the real Anakot picker) is never rendered disabled on a fresh session.
+  useEffect(() => {
+    if ($currentModel.get()) return;
+    getGlobalModelOptions()
+      .then((opts) => {
+        const first = opts?.providers?.flatMap((p) => p.models ?? [])[0];
+        if (first) setCurrentModel(first);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleChat = useCallback(async (explicitText?: string, model?: string | null, provider?: string | null) => {
+    const question = (explicitText ?? chatInput).trim();
+    if (!question || !currentNotebook) return;
     setChatInput("");
     const userMsg = { role: "user" as const, content: question };
     const updatedMessages = [...chatMessages, userMsg];
@@ -650,7 +669,9 @@ ${src.summary}
         question,
         updatedMessages.slice(0, -1).slice(-20),
         controller.signal,
-        scopeEnabled && scopedSourceIds.length > 0 ? scopedSourceIds : null
+        scopeEnabled && scopedSourceIds.length > 0 ? scopedSourceIds : null,
+        model,
+        provider
       );
 
       let accumulated = "";
@@ -770,6 +791,19 @@ ${src.summary}
     setDragging(which);
   }, []);
 
+  // Collapse / expand helpers — let users toggle panels without precise dragging,
+  // and restore a collapsed panel to its last usable width (min 240px).
+  const expandLeft = useCallback(() => setLeftWidth(Math.max(lastLeftWidth.current, 240)), []);
+  const expandRight = useCallback(() => setRightWidth(Math.max(lastRightWidth.current, 240)), []);
+  const collapseLeft = useCallback(() => {
+    lastLeftWidth.current = leftWidth || lastLeftWidth.current;
+    setLeftWidth(0);
+  }, [leftWidth]);
+  const collapseRight = useCallback(() => {
+    lastRightWidth.current = rightWidth || lastRightWidth.current;
+    setRightWidth(0);
+  }, [rightWidth]);
+
   useEffect(() => {
     if (!dragging) return;
     const container = containerRef.current;
@@ -779,10 +813,12 @@ ${src.summary}
       const rect = container.getBoundingClientRect();
       if (dragging === "left") {
         const newW = Math.max(0, Math.min(e.clientX - rect.left, 400));
-        setLeftWidth(newW < MIN_PANEL ? 0 : newW);
+        if (newW < MIN_PANEL) setLeftWidth(0);
+        else { lastLeftWidth.current = newW; setLeftWidth(newW); }
       } else if (dragging === "right") {
         const newW = Math.max(0, Math.min(rect.right - e.clientX, 400));
-        setRightWidth(newW < MIN_PANEL ? 0 : newW);
+        if (newW < MIN_PANEL) setRightWidth(0);
+        else { lastRightWidth.current = newW; setRightWidth(newW); }
       }
     };
 
@@ -872,16 +908,20 @@ ${src.summary}
             className="mb-4 w-full rounded-md border border-(--ui-stroke-secondary) bg-transparent px-4 py-2 text-sm text-(--ui-text-primary) placeholder:text-(--ui-text-tertiary)"
           />
           <div className="mb-4 flex items-center gap-2">
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value as "updated" | "created" | "alpha")}
-              className="rounded-md border border-(--ui-stroke-secondary) bg-transparent px-2 py-1.5 text-xs text-(--ui-text-secondary) outline-none"
-              title="Sort notebooks"
-            >
-              <option value="updated">Sort: Recently updated</option>
-              <option value="created">Sort: Recently created</option>
-              <option value="alpha">Sort: Name A–Z</option>
-            </select>
+            <div className="relative flex-1">
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as "updated" | "created" | "alpha")}
+                className="w-full appearance-none rounded-lg border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated) px-3 py-2 pr-9 text-xs font-medium text-(--ui-text-secondary) outline-none transition-colors hover:border-(--ui-accent) focus:border-(--ui-accent) focus:ring-2 focus:ring-(--ui-accent)/30"
+                title="Sort notebooks"
+                style={{ colorScheme: "dark" }}
+              >
+                <option value="updated" className="bg-(--ui-surface-elevated) text-(--ui-text-primary)">Sort: Recently updated</option>
+                <option value="created" className="bg-(--ui-surface-elevated) text-(--ui-text-primary)">Sort: Recently created</option>
+                <option value="alpha" className="bg-(--ui-surface-elevated) text-(--ui-text-primary)">Sort: Name A–Z</option>
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-(--ui-text-tertiary)" />
+            </div>
             <span className="text-[10px] text-(--ui-text-tertiary)">
               {notebooks.filter((nb) => nb.pinned).length} pinned
             </span>
@@ -970,7 +1010,7 @@ ${src.summary}
   return (
     <div ref={containerRef} className={`relative flex h-full bg-(--ui-chat-surface-background) ${dragging ? "select-none cursor-col-resize" : ""}`}>
       {/* Left panel: Source list */}
-      {leftWidth > 0 && (
+      {leftWidth > 0 ? (
       <>
       <div
         className={`flex flex-col border-r border-(--ui-stroke-secondary) transition-colors ${dragOver ? "bg-(--ui-accent)/5 ring-2 ring-inset ring-(--ui-accent)/50" : ""}`}
@@ -1021,6 +1061,15 @@ ${src.summary}
               <span className="truncate">{currentNotebook.title}</span>
             </button>
           )}
+          <button
+            onClick={collapseLeft}
+            className="ml-auto flex size-7 shrink-0 items-center justify-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
+            type="button"
+            title="Collapse sources panel"
+            aria-label="Collapse sources panel"
+          >
+            <ChevronLeft size={16} />
+          </button>
         </div>
 
         {/* Upload controls */}
@@ -1252,7 +1301,17 @@ ${src.summary}
       >
         <div className="h-8 w-px bg-(--ui-stroke-secondary) group-hover:bg-(--ui-accent)" />
       </div>
-      </>
+      </> 
+      ) : (
+      <button
+        type="button"
+        onClick={expandLeft}
+        title="Show sources panel"
+        aria-label="Show sources panel"
+        className="flex w-6 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 border-r border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-accent)/10 hover:text-(--ui-accent)"
+      >
+        <ChevronRight size={16} />
+      </button>
       )}
 
       {/* Center panel: Chat */}
@@ -1477,69 +1536,29 @@ ${src.summary}
               </button>
             </div>
           )}
-          <div className="flex items-end gap-2 rounded-xl border border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/70 p-2 backdrop-blur-md transition-colors duration-200 focus-within:border-(--ui-accent)/60 focus-within:bg-(--ui-surface-elevated)/90">
-            {scopeEnabled && scopedSourceIds.length > 0 && (
-              <span className="mb-0.5 inline-flex shrink-0 items-center gap-1 self-center rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
-                <Search size={12} className="shrink-0" /> {scopedSourceIds.length} source{scopedSourceIds.length > 1 ? "s" : ""} scoped
-              </span>
-            )}
-            <div className="relative min-w-0 flex-1">
-              <textarea
-                ref={chatInputRef}
-                value={chatInput}
-                onChange={(e) => {
-                  setChatInput(e.target.value);
-                  // Auto-resize
-                  const el = e.target;
-                  el.style.height = "auto";
-                  el.style.height = Math.min(el.scrollHeight, 120) + "px";
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleChat();
-                  }
-                }}
-                placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
-                rows={1}
-                disabled={chatLoading}
-                style={{ maxHeight: "120px" }}
-                className="w-full resize-none border-0 bg-transparent px-2 py-1.5 pr-14 text-sm text-(--ui-text-primary) outline-none placeholder:text-(--ui-text-tertiary)"
-              />
-              {chatInput.length > 0 && (
-                <span className="pointer-events-none absolute bottom-2 right-2 text-[10px] text-(--ui-text-quaternary)">
-                  ~{Math.ceil(chatInput.length / 4)} tokens
-                </span>
-              )}
-            </div>
-            {chatLoading ? (
-              <button
-                onClick={() => chatStreamAbortRef.current?.abort()}
-                className="h-9 w-9 shrink-0 rounded-full bg-red-500/15 text-red-400 transition-all hover:bg-red-500/25 active:scale-95"
-                type="button"
-                title="Stop generating"
-                aria-label="Stop generating"
-              >
-                <Square size={13} fill="currentColor" />
-              </button>
-            ) : (
-              <button
-                onClick={handleChat}
-                disabled={!chatInput.trim()}
-                className="h-9 w-9 shrink-0 rounded-full bg-(--ui-accent) text-white transition-all hover:bg-(--ui-accent)/90 hover:opacity-100 active:scale-95 disabled:opacity-40"
-                type="button"
-                title="Send"
-                aria-label="Send"
-              >
-                <Send size={15} className="translate-x-px" />
-              </button>
-            )}
-          </div>
+          {scopeEnabled && scopedSourceIds.length > 0 && (
+            <span className="mb-1.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-(--ui-accent)/15 px-2 py-0.5 text-[10px] font-medium text-(--ui-accent)">
+              <Search size={12} className="shrink-0" /> {scopedSourceIds.length} source{scopedSourceIds.length > 1 ? "s" : ""} scoped
+            </span>
+          )}
+          <PromptInput
+            ref={chatInputRef}
+            value={chatInput}
+            onChange={setChatInput}
+            onSubmit={(value, opts) => handleChat(value, opts?.model, opts?.provider)}
+            isLoading={chatLoading}
+            onStop={() => chatStreamAbortRef.current?.abort()}
+            disabled={chatLoading || !currentNotebook}
+            placeholder={chatLoading ? "Waiting for response..." : "Ask about your sources..."}
+            fullWidth
+            maxAttachments={0}
+            gateway={null}
+          />
         </div>
       </div>
 
       {/* Right panel: Source preview / Overview */}
-      {rightWidth > 0 && (
+      {rightWidth > 0 ? (
       <>
       {/* Right resize handle */}
       <div
@@ -1554,6 +1573,15 @@ ${src.summary}
         style={{ width: rightWidth, minWidth: rightWidth }}
       >
         <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) px-3 py-2.5">
+          <button
+            onClick={collapseRight}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-surface-elevated) hover:text-(--ui-text-primary)"
+            type="button"
+            title="Collapse panel"
+            aria-label="Collapse panel"
+          >
+            <ChevronRight size={16} />
+          </button>
           <span className="flex items-center gap-1.5 text-sm font-semibold text-(--ui-text-primary)">
             {selectedSource ? <FileText size={14} className="text-(--ui-accent)" /> : <Sparkles size={14} className="text-(--ui-accent)" />}
             {selectedSource ? "Source Preview" : "Overview"}
@@ -1699,7 +1727,17 @@ ${src.summary}
             )}
         </div>
       </div>
-      </>
+      </> 
+      ) : (
+      <button
+        type="button"
+        onClick={expandRight}
+        title="Show panel"
+        aria-label="Show panel"
+        className="flex w-6 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 border-l border-(--ui-stroke-secondary) bg-(--ui-surface-elevated)/40 text-(--ui-text-tertiary) transition-colors hover:bg-(--ui-accent)/10 hover:text-(--ui-accent)"
+      >
+        <ChevronLeft size={16} />
+      </button>
       )}
 
       {confirmDialogJSX}

@@ -56,7 +56,8 @@ declare global {
         history?: Array<{ role: string; content: string }>
         sourceIds?: string[] | null
         profile?: string | null
-        sourceIds?: string[] | null
+        model?: string | null
+        provider?: string | null
       }) => Promise<{ requestId: string }>
       notebookChatStreamAbort: (requestId: string) => Promise<{ ok: boolean }>
       onNotebookChatStreamData: (cb: (event: NotebookChatStreamEvent) => void) => () => void

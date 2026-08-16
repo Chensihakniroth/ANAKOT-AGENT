@@ -58,7 +58,8 @@ export const en: Translations = {
       backendStopped: 'Backend stopped',
       desktopBootFailed: 'Desktop boot failed',
       gatewaySignInRequired: 'Gateway sign-in required',
-      ipcBridgeUnavailable: 'Desktop IPC bridge is unavailable.'
+      gatewayReconnectFailed: 'Could not reach the Anakot gateway after several attempts. Switch to a local gateway or retry.',
+      ipcBridgeUnavailable: 'Desktop IPC bridge is unavailable.',
     },
     failure: {
       title: "Anakot couldn't start",

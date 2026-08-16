@@ -3,6 +3,10 @@
 import * as React from "react";
 import { useRef, useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { useStore } from "@nanostores/react";
+import type { AnakotGateway } from "@/anakot";
+import { ModelSelector } from "@/app/chat/composer/model-selector";
+import { $currentModel, $currentProvider } from "@/store/session";
 
 // ----------------------------------------------------------------------
 // Transition Physics
@@ -293,7 +297,7 @@ function AttachmentGalleryModal({
 export interface PromptInputProps {
   onSubmit?: (
     value: string,
-    meta: { model: string; effort: string; attachments: File[] }
+    meta: { model: string; provider?: string; attachments: File[] }
   ) => void;
   onStop?: () => void;
   isLoading?: boolean;
@@ -301,6 +305,7 @@ export interface PromptInputProps {
   fullWidth?: boolean;
   placeholder?: string;
   className?: string;
+  gateway?: AnakotGateway | null;
   models?: string[];
   efforts?: string[];
   defaultValue?: string;
@@ -319,6 +324,7 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
       fullWidth = false,
       placeholder = "Ask anything",
       className,
+      gateway,
       models = ["GPT 5.5", "Opus 4.8", "Gemini 3.5 Flash", "Composer 2.5", "GLM 5.2"],
       efforts = ["Low", "Medium", "Max Effort"],
       defaultValue = "",
@@ -334,6 +340,11 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
     const [selectedModel, setSelectedModel] = useState(models[0]);
     const [effortIndex, setEffortIndex] = useState(1);
     const [isModelSelectOpen, setIsModelSelectOpen] = useState(false);
+
+    // Real model picker (Anakot original) reads the global current model so
+    // the NotebookLLM composer can target any configured, working model.
+    const currentModel = useStore($currentModel);
+    const currentProvider = useStore($currentProvider);
 
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [activeAttachment, setActiveAttachment] = useState<{ attachment: Attachment; rect: DOMRect } | null>(null);
@@ -615,7 +626,9 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
     const handleSubmit = () => {
       if (value.trim() === "" && !hasAttachments) return;
       setIsSmoothResize(false);
-      onSubmit?.(value, { model: selectedModel, effort: efforts[effortIndex], attachments: attachments.map((a) => a.file) });
+      const effectiveModel = gateway !== undefined ? currentModel : selectedModel;
+      const effectiveProvider = gateway !== undefined ? currentProvider : efforts[effortIndex];
+      onSubmit?.(value, { model: effectiveModel, provider: effectiveProvider, attachments: attachments.map((a) => a.file) });
       handleValueChange("");
       attachments.forEach((a) => URL.revokeObjectURL(a.url));
       setAttachments([]);
@@ -845,6 +858,10 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
                 expanded && !isRecording ? "opacity-100 blur-0 translate-y-0 pointer-events-auto" : "opacity-0 blur-sm translate-y-2 pointer-events-none"
               )}
             >
+              {gateway !== undefined ? (
+                <ModelSelector gateway={gateway} />
+              ) : (
+                <>
               <div className="relative">
                 <button
                   type="button"
@@ -912,6 +929,8 @@ export const PromptInput = React.forwardRef<HTMLDivElement, PromptInputProps>(
                 <DynamicBarsIcon level={efforts[effortIndex]} />
                 <span className="text-xs font-semibold select-none transition-colors"><MorphingText text={efforts[effortIndex]} /></span>
               </button>
+                </>
+              )}
 
               <button
                 type="button" onMouseDown={(e) => e.preventDefault()} onClick={openFileChooser} disabled={attachments.length >= maxAttachments}

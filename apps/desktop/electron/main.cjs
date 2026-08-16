@@ -6065,7 +6065,9 @@ ipcMain.handle('anakot:notebook:chat-stream-start', async (event, request) => {
       message,
       history: Array.isArray(request?.history) ? request.history : [],
       source_id: request?.sourceId || null,
-      source_ids: Array.isArray(request?.sourceIds) ? request.sourceIds : null
+      source_ids: Array.isArray(request?.sourceIds) ? request.sourceIds : null,
+      model: request?.model || null,
+      provider: request?.provider || null
     }),
     sender: event.sender,
     req: null,
