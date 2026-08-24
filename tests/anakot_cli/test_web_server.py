@@ -3608,12 +3608,12 @@ class TestPluginAPIAuth:
         """Auth must be plugin-agnostic, not kanban-specific.
 
         The middleware fix is at the gate level (no per-plugin allowlist),
-        so any plugin's API surface — kanban, anakot-achievements, future
-        plugins — must require the session token. Hit a non-kanban plugin
-        path to lock that in.
+        so any plugin's API surface — kanban or future plugins — must require
+        the session token. The arbitrary-namespace check below proves the gate
+        is plugin-agnostic; we also hit a real mounted plugin route up front.
         """
-        # Real plugin path (anakot-achievements is loaded by default).
-        resp = self.client.get("/api/plugins/anakot-achievements/overview")
+        # Real plugin path (kanban's dashboard API is mounted by default).
+        resp = self.client.get("/api/plugins/kanban/board")
         assert resp.status_code == 401
         # Same for an arbitrary plugin namespace that doesn't even exist —
         # the middleware should 401 before routing decides 404, so an

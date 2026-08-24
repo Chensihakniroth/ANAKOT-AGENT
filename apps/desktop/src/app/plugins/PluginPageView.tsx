@@ -10,7 +10,6 @@ import { Suspense, lazy } from 'react'
 import { useLocation } from 'react-router-dom'
 
 import { PluginPage } from './PluginPage'
-import { AchievementsView } from './AchievementsView'
 import { KanbanView } from './KanbanView'
 import { PluginScope } from './PluginScope'
 import { usePlugins } from './usePlugins'
@@ -50,19 +49,6 @@ export function PluginPageView({ onClose }: PluginPageViewProps) {
   }
 
   // Dedicated wrapper views for plugins that need special layout handling
-  if (pluginName === 'anakot-achievements') {
-    return (
-      <Suspense fallback={<PluginLoadingShell label={pluginLabel} onClose={onClose} />}>
-        <div className="flex h-full flex-col">
-          <PluginHeader label={pluginLabel} onClose={onClose} />
-          <div className="min-h-0 flex-1">
-            <AchievementsView />
-          </div>
-        </div>
-      </Suspense>
-    )
-  }
-
   if (pluginName === 'kanban') {
     return (
       <Suspense fallback={<PluginLoadingShell label={pluginLabel} onClose={onClose} />}>
