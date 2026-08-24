@@ -2,21 +2,21 @@ import type { ChangeEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
+import {
+  getAnakotConfigDefaults,
+  getAnakotConfigRecord,
+  getAnakotConfigSchema,
+  getElevenLabsVoices,
+  saveAnakotConfig
+} from '@/anakot'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  getElevenLabsVoices,
-  getAnakotConfigDefaults,
-  getAnakotConfigRecord,
-  getAnakotConfigSchema,
-  saveAnakotConfig
-} from '@/anakot'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
-import type { ConfigFieldSchema, AnakotConfigRecord } from '@/types/anakot'
+import type { AnakotConfigRecord, ConfigFieldSchema } from '@/types/anakot'
 
 import { CONTROL_TEXT, EMPTY_SELECT_VALUE, FIELD_DESCRIPTIONS, FIELD_LABELS, SECTIONS } from './constants'
 import { fieldCopyForSchemaKey } from './field-copy'
@@ -283,7 +283,8 @@ export function ConfigSettings({
   }
 
   const handlePersonalityChange = async (value: string) => {
-    if (!gateway) return
+    if (!gateway) {return}
+
     try {
       const displayCfg = (config as Record<string, unknown>)?.display as Record<string, unknown> | undefined
       const sessionId = (displayCfg as Record<string, unknown>)?.session_id as string | undefined
@@ -389,25 +390,25 @@ export function ConfigSettings({
       {activeSectionId === 'obsidian' && (
         <div className="mb-6 rounded-lg border border-[var(--color-border)] p-4">
           <ListRow
-            title={FIELD_LABELS['obsidian.vault_path'] ?? 'Obsidian Vault Path'}
-            description={FIELD_DESCRIPTIONS['obsidian.vault_path'] ?? 'Path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory for markdown notes and their connections.'}
             action={
               <div className="flex items-center gap-2">
                 <Input
                   className={cn('w-80', CONTROL_TEXT)}
+                  onChange={e => updateConfig(setNested(config, 'obsidian.vault_path', e.target.value))}
                   placeholder="C:\Users\You\Documents\Obsidian Vault"
                   value={String(getNested(config, 'obsidian.vault_path') || '')}
-                  onChange={e => updateConfig(setNested(config, 'obsidian.vault_path', e.target.value))}
                 />
                 <button
-                  type="button"
                   className="shrink-0 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-secondary)]"
                   onClick={() => {
                     const path = String(getNested(config, 'obsidian.vault_path') || '')
+
                     if (!path) {
                       notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path first.' })
+
                       return
                     }
+
                     // Send IPC to main process to validate path
                     window.anakotDesktop?.api?.({
                       path: '/api/obsidian/validate-path',
@@ -423,21 +424,25 @@ export function ConfigSettings({
                       notify({ kind: 'error', title: 'Validation Failed', message: 'Could not validate path. Check the path exists.' })
                     })
                   }}
+                  type="button"
                 >
                   Test
                 </button>
                 <button
-                  type="button"
                   className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                   onClick={() => {
                     const path = String(getNested(config, 'obsidian.vault_path') || '')
+
                     if (!path) {
                       notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path to your Obsidian vault folder.' })
+
                       return
                     }
+
                     // Validate path format (basic check)
                     if (!path.includes('\\') && !path.includes('/')) {
                       notify({ kind: 'error', title: 'Invalid Path', message: 'The path does not look valid. Please enter a valid folder path.' })
+
                       return
                     }
                     void (async () => {
@@ -450,15 +455,18 @@ export function ConfigSettings({
                       }
                     })()
                   }}
+                  type="button"
                 >
                   Save
                 </button>
               </div>
             }
+            description={FIELD_DESCRIPTIONS['obsidian.vault_path'] ?? 'Path to your Obsidian vault folder. The Markdown Library scans this directory for markdown notes and their connections.'}
+            title={FIELD_LABELS['obsidian.vault_path'] ?? 'Obsidian Vault Path'}
             wide
           />
           <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            Enter the full path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory.
+            Enter the full path to your Obsidian vault folder. The Markdown Library scans this directory.
           </p>
         </div>
       )}

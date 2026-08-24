@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePlugins } from './usePlugins'
-import { KnowledgeGraphView } from './KnowledgeGraphView'
+
 import { StarmapView } from '@/app/starmap'
+
+import { MarkdownLibraryView } from './MarkdownLibraryView'
+import { usePlugins } from './usePlugins'
 
 const LOCAL_PLUGINS = [
   {
-    name: 'knowledge-graph',
-    label: 'Knowledge Graph',
-    description: 'Visualize Obsidian vault notes and their connections',
+    name: 'markdown-library',
+    label: 'Markdown Library',
+    description: 'Browse and read your Obsidian vault notes',
     version: '1.0.0',
-    tab: { path: '__local__knowledge-graph' },
+    tab: { path: '__local__markdown-library' },
     kind: 'local',
   },
   {
@@ -30,11 +32,11 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
 
   const allManifests = [...manifests, ...LOCAL_PLUGINS]
 
-  if (activeLocalPlugin === 'knowledge-graph') {
+  if (activeLocalPlugin === 'markdown-library') {
     return (
       <div className="flex h-full flex-col">
         <div className="flex-1 min-h-0">
-          <KnowledgeGraphView onClose={onOverlayClose} />
+          <MarkdownLibraryView onClose={onOverlayClose} />
         </div>
       </div>
     )
@@ -68,9 +70,9 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
                 return (
                   <li key={m.name}>
                     <button
-                      type="button"
                       className="w-full text-left rounded-lg border border-[var(--color-border)] p-4 shadow-sm bg-[var(--color-bg-primary)] transition-colors hover:bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-tertiary)] cursor-pointer"
                       onClick={() => setActiveLocalPlugin(m.name)}
+                      type="button"
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -88,8 +90,8 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
                           <span className="text-xs text-[var(--color-text-tertiary)]">
                             v{m.version}
                           </span>
-                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         </div>
                       </div>
@@ -99,12 +101,13 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
               }
 
               const isRegistered = plugins.some(p => p.manifest.name === m.name)
+
               return (
                 <li key={m.name}>
                   <button
-                    type="button"
                     className="w-full text-left rounded-lg border border-[var(--color-border)] p-4 shadow-sm bg-[var(--color-bg-primary)] transition-colors hover:bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-tertiary)] cursor-pointer"
                     onClick={() => navigate(m.tab.path)}
+                    type="button"
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -126,8 +129,8 @@ export function PluginsView({ onClose: onOverlayClose }: { onClose?: () => void 
                         <span className="text-xs text-[var(--color-text-tertiary)]">
                           v{m.version}
                         </span>
-                        <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        <svg className="h-4 w-4 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </div>
                     </div>

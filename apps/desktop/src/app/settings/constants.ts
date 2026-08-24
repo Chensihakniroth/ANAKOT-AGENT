@@ -14,8 +14,8 @@ import {
 } from '@/lib/icons'
 import type { ThemeMode } from '@/themes/context'
 
-import type { DesktopConfigSection } from './types'
 import { defineFieldCopy } from './field-copy'
+import type { DesktopConfigSection } from './types'
 
 // Provider group definitions used to fold raw env-var names like
 // ``XAI_API_KEY`` into a single "xAI" card with a friendly label, short
@@ -437,7 +437,7 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
       'When Anakot updates itself from the app (no terminal prompt), keep local source edits (stash) or throw them away (discard). Terminal updates always ask.'
   },
   obsidian: {
-    vaultPath: 'Path to your Obsidian vault folder. The Knowledge Graph panel will scan this directory for markdown notes and their [[WikiLink]] connections.'
+    vaultPath: 'Path to your Obsidian vault folder. The Markdown Library scans this directory for markdown notes and their [[WikiLink]] connections.'
   }
 })
 
@@ -545,7 +545,7 @@ export const SECTIONS: DesktopConfigSection[] = [
   },
   {
     id: 'obsidian',
-    label: 'Knowledge Graph',
+    label: 'Markdown Library',
     icon: Sparkles,
     keys: ['obsidian.vault_path']
   },
