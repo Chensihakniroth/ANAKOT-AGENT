@@ -109,6 +109,17 @@ TOOLSETS = {
         "tools": ["x_search"],
         "includes": []
     },
+
+    "scrapling": {
+        "description": (
+            "In-process, key-free web scraping & crawling via Scrapling "
+            "(https://github.com/D4Vinci/Scrapling). Scrape a URL or crawl a "
+            "site; adaptive selectors survive site redesigns. Off by default; "
+            "enable in Settings → Tool Backends or the Skills panel."
+        ),
+        "tools": ["scrapling_scrape", "scrapling_crawl"],
+        "includes": []
+    },
     
     "vision": {
         "description": "Image analysis and vision tools",

@@ -1,0 +1,8 @@
+name: scrapling
+version: 1.0.0
+description: "Native, key-free web scraping & crawling via Scrapling (https://github.com/D4Vinci/Scrapling, BSD-3). Two tools: scrapling_scrape (fetch a URL or extract by CSS selector, http/stealth/dynamic) and scrapling_crawl (crawl a site collecting selector matches). Off by default — enable in Settings → Tool Backends or the Skills panel, then pip install scrapling."
+author: callmemo
+kind: backend
+provides_tools:
+  - scrapling_scrape
+  - scrapling_crawl
