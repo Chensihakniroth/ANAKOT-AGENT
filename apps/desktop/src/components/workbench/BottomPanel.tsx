@@ -1,6 +1,5 @@
 import { useStore } from '@nanostores/react'
 import { Codicon } from '@/components/ui/codicon'
-import { cn } from '@/lib/utils'
 import { $bottomPanelTab, $bottomPanelOpen, setBottomPanelTab, setBottomPanelOpen, type BottomPanelTabId } from '@/store/workbench'
 import { TerminalTab, type TerminalTabHandle } from '@/app/right-sidebar/terminal'
 import { MultiTerminalPanel } from '@/app/right-sidebar/terminal/multi-terminal'
@@ -8,6 +7,15 @@ import { $currentCwd } from '@/store/session'
 import { $gitLog } from '@/store/git-log'
 import { GitOutputPanel } from './GitOutputPanel'
 import { useEffect, useState, useCallback, useRef } from 'react'
+
+// Slim default height + drag-to-collapse thresholds (VS Code-style bottom panel).
+const SLIM_PANEL_HEIGHT = 200
+const PANEL_MIN_HEIGHT = 80
+const PANEL_MAX_HEIGHT = 600
+// Dragging the open panel's top edge below this height collapses (closes) it.
+// Kept equal to PANEL_MIN_HEIGHT so the panel visibly shrinks to this size and
+// then snaps closed — there is no "dead zone" where it gets stuck open.
+const PANEL_COLLAPSE_THRESHOLD = 80
 
 import { $activeTerminalTab, updateTerminalTabShell } from '@/store/terminal-tabs'
 
@@ -32,10 +40,11 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
     (activeTerminalTab?.shell as ShellType) ?? 'powershell'
   )
   const [showShellPicker, setShowShellPicker] = useState(false)
-  const [panelHeight, setPanelHeight] = useState(300)
+  const [panelHeight, setPanelHeight] = useState(SLIM_PANEL_HEIGHT)
   const resizeRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
+  const dragStartRef = useRef<{ y: number; height: number; opening: boolean; moved: boolean }>({ y: 0, height: 0, opening: false, moved: false })
   const terminalRef = useRef<TerminalTabHandle>(null)
 
   // Direct DOM resize during drag — bypasses React entirely for smooth 60fps resizing.
@@ -49,60 +58,83 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
     }
   }, [activeTerminalTab?.id, activeTerminalTab?.shell])
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Unified drag handler for the panel edge. `opening` = dragging up from the
+  // collapsed toggle bar (grow from 0); otherwise we resize the open panel and
+  // collapse it if dragged below PANEL_COLLAPSE_THRESHOLD.
+  const beginDrag = useCallback((e: React.MouseEvent, opening: boolean) => {
     e.preventDefault()
     isDraggingRef.current = true
-    const startY = e.clientY
-    const startHeight = panelHeight
+    dragStartRef.current = { y: e.clientY, height: opening ? 0 : panelHeight, opening, moved: false }
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return
-      const delta = startY - e.clientY
-      const newHeight = Math.max(120, Math.min(600, startHeight + delta))
-      // Direct DOM update — no React re-render during drag
-      if (panelRef.current) {
-        panelRef.current.style.height = newHeight + 'px'
-      }
+    if (opening) {
+      setBottomPanelOpen(true)
+      setPanelHeight(0)
+      if (panelRef.current) panelRef.current.style.height = '0px'
     }
 
-    const handleMouseUp = () => {
+    const onMove = (ev: MouseEvent) => {
+      if (!isDraggingRef.current) return
+      const { y, height, opening: isOpening } = dragStartRef.current
+      const delta = y - ev.clientY // dragging up → positive
+      if (Math.abs(delta) > 3) dragStartRef.current.moved = true
+      let next = height + delta
+
+      if (!isOpening && next <= PANEL_COLLAPSE_THRESHOLD) {
+        // Collapse (close) the panel once dragged small enough.
+        isDraggingRef.current = false
+        setBottomPanelOpen(false)
+        setPanelHeight(SLIM_PANEL_HEIGHT)
+        if (panelRef.current) panelRef.current.style.height = '0px'
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        return
+      }
+
+      next = Math.max(isOpening ? 0 : PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, next))
+      if (panelRef.current) panelRef.current.style.height = next + 'px'
+    }
+
+    const onUp = () => {
       if (!isDraggingRef.current) return
       isDraggingRef.current = false
-      // Commit final height to React state
-      if (panelRef.current) {
-        const finalHeight = parseInt(panelRef.current.style.height, 10)
-        if (!isNaN(finalHeight)) {
-          setPanelHeight(finalHeight)
-        }
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      if (!panelRef.current) return
+      const finalH = parseInt(panelRef.current.style.height, 10)
+      if (isNaN(finalH) || finalH <= 0) {
+        // Click-to-open or a negligible drag → settle on the slim default.
+        setPanelHeight(SLIM_PANEL_HEIGHT)
+      } else {
+        setPanelHeight(Math.max(PANEL_MIN_HEIGHT, finalH))
       }
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
     }
 
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }, [panelHeight])
 
   const panel = (
     <div
       ref={panelRef}
-      className="shrink-0 flex flex-col border-t border-(--ui-stroke-secondary)"
+      className="shrink-0 flex flex-col"
       style={{
         height: isOpen ? panelHeight + 'px' : '0px',
         overflow: 'hidden',
         minWidth: 0,
       }}
     >
-      {/* Resize handle */}
+      {/* Resize handle — slim 1px hairline (4px grab area), no thick border */}
       <div
         ref={resizeRef}
-        className="cursor-ns-resize bg-transparent hover:bg-(--ui-stroke-secondary) active:bg-primary/30 transition-colors"
+        className="group relative cursor-ns-resize"
         style={{ height: '4px', flexShrink: 0 }}
-        onMouseDown={handleMouseDown}
-      />
+        onMouseDown={e => beginDrag(e, false)}
+      >
+        <div className="absolute inset-x-0 top-0 h-px bg-(--ui-stroke-secondary) opacity-30 transition-opacity group-hover:opacity-70" />
+      </div>
 
-      {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-(--ui-stroke-secondary) bg-(--ui-tab-inactive-background) px-2" style={{ flexShrink: 0 }}>
+      {/* Tab bar — seamless, no border / no fill so it doesn't read as a thick divider */}
+      <div className="flex items-center justify-between bg-transparent px-1.5" style={{ flexShrink: 0 }}>
         <div className="flex items-center gap-0.5">
           {BOTTOM_TABS.map(tab => {
             const logCount = tab.id === 'output' ? $gitLog.get().length : 0
@@ -204,16 +236,11 @@ export function BottomPanel({ onAddSelectionToChat }: BottomPanelProps) {
       {panel}
       {/* Toggle bar — overlaid on top when collapsed, shown below panel when open */}
       {!isOpen && (
-        <div className="flex h-7 shrink-0 items-center justify-end border-t border-(--ui-stroke-secondary) bg-(--ui-statusbar-background) px-2">
-          <button
-            className="flex items-center gap-1 text-[0.65rem] text-muted-foreground hover:text-foreground"
-            onClick={() => setBottomPanelOpen(true)}
-            type="button"
-          >
-            <Codicon name="chevron-up" size="0.75rem" />
-            Panel
-          </button>
-        </div>
+        <div
+          className="h-1.5 shrink-0 cursor-ns-resize"
+          onMouseDown={e => beginDrag(e, true)}
+          title="Drag up to open panel"
+        />
       )}
     </>
   )
