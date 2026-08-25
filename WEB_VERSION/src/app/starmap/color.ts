@@ -1,4 +1,4 @@
-import { BLACK, MODE_DEFAULTS } from './constants'
+import { BLACK, GOLD_DAY, GOLD_NIGHT, MODE_DEFAULTS } from './constants'
 import { clamp } from './geometry'
 import type { Palette, Rgb } from './types'
 
@@ -91,18 +91,15 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
   return { b: Math.round((b + m) * 255), g: Math.round((g + m) * 255), r: Math.round((r + m) * 255) }
 }
 
-// Complementary ink: rotate the source hue (the theme primary) and keep it vivid
-// so memories read as a distinct color from skills, in any theme.
-function complementaryInk(c: Rgb): Rgb {
-  const [h, s, l] = rgbToHsl(c)
-
-  return hslToRgb(h + 165, Math.max(s, 0.5), clamp(l, 0.5, 0.7))
-}
-
-// Memory ink: the complementary hue muted toward the overlay background so it
-// reads as a distinct-but-quiet color (fake alpha), not a loud full-sat pop.
+// Memory ink: naga-jade — hue-locked to ~168° (the serpent's gem tone) so
+// memories always read as jade against the gold structure, whatever the skin's
+// primary. Muted toward the overlay background just enough to stay quiet
+// (fake alpha) without sinking into it.
 export function memoryInkFor(primary: Rgb, bg: Rgb): Rgb {
-  return mixRgb(complementaryInk(primary), bg, 0.45)
+  const [, s, l] = rgbToHsl(primary)
+  const jade = hslToRgb(168, Math.max(s * 0.9, 0.42), clamp(l, 0.52, 0.7))
+
+  return mixRgb(jade, bg, 0.3)
 }
 
 // Resolve the theme-derived palette once per theme change — the resolveRgb probe
@@ -121,18 +118,24 @@ export function computePalette(canvas: HTMLCanvasElement): Palette {
       (darkTheme ? '#000' : '#fff')
   )
 
+  // Fixed gold-leaf accent — the gilding that ties the ceiling together.
+  const gold = darkTheme ? GOLD_NIGHT : GOLD_DAY
+
   return {
-    // Band tint derives from the theme primary so rings read consistently in
-    // both modes (foreground ink would go white on dark / black on light).
-    bandInk: mixRgb(primary, base, darkTheme ? 0.3 : 0),
+    // Band tint derives from the gilding so the inter-ring shells read as warm
+    // sandstone washes in both modes.
+    bandInk: gold,
     base,
     bg,
     c: MODE_DEFAULTS[darkTheme ? 'dark' : 'light'],
     chipBg: darkTheme ? 'rgba(0,0,0,0.72)' : 'rgba(255,255,255,0.85)',
     darkTheme,
+    gold,
     inkInv: darkTheme ? 'rgba(0,0,0,1)' : 'rgba(255,255,255,1)',
     memoryInk: memoryInkFor(primary, bg),
     primary,
-    skillInk: mixRgb(primary, base, darkTheme ? 0.12 : 0.18)
+    // Skill orbs burn as golden lamps — mixed a touch toward base so they sit
+    // IN the scene instead of glaring.
+    skillInk: mixRgb(gold, base, darkTheme ? 0.06 : 0.14)
   }
 }

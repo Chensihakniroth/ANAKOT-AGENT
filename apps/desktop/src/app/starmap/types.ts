@@ -4,7 +4,7 @@ import type { StarmapGraph, StarmapNode } from '@/global.d'
 
 export type MemoryCard = StarmapGraph['memory'][number]
 
-export type Shape = 'circle' | 'diamond' | 'hexagon' | 'square' | 'triangle'
+export type Shape = 'apsara' | 'circle' | 'diamond' | 'hexagon' | 'square' | 'triangle'
 
 export interface Viewport {
   k: number
@@ -65,6 +65,8 @@ export interface Palette {
   c: GraphParams
   chipBg: string
   darkTheme: boolean
+  // Gold-leaf accent — gilding for the Meru core, lit bands and focus halos.
+  gold: Rgb
   inkInv: string
   memoryInk: Rgb
   primary: Rgb

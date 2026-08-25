@@ -1,15 +1,18 @@
 import { darken, luminance, mixRgb, rgba } from './color'
 import {
+  KBACH_BEAD_GAP,
+  KBACH_BOW,
   LIT_BAND_ALPHA,
   NODE_SHAPE,
   ORB_DARKEN,
+  RING_ECHO_PX,
   RING_INNER,
   RING_PARAMS,
   TILT,
   WHITE,
   WHITEISH_SHEEN
 } from './constants'
-import { clamp, fitScale, nodeRadius, recencyInk, shapePath } from './geometry'
+import { clamp, fitScale, hash, nodeRadius, recencyInk, shapePath } from './geometry'
 import { countLabel, ellipsize, metaBadges, nodeFooter, wrapText } from './text'
 import type {
   FadeBuckets,
@@ -61,9 +64,10 @@ const ease = (t: number): number => {
   return u * u * (3 - 2 * u)
 }
 
-// EVE-style warp arrival for node births: the star streaks outward fast, then
-// decelerates hard (exponential ease-out) and drops onto its ring — like a ship
-// dropping out of warp. WARP_FROM is how deep toward the core it launches from.
+// EVE-style warp arrival, retold: the apsara ASCENDS — streaking up from the
+// sanctuary floor toward her register on the ceiling, decelerating hard
+// (exponential ease-out) as she settles into place. WARP_FROM is how deep
+// toward the Meru core she rises from.
 const WARP_FROM = 0.32
 
 const warpIn = (t: number): number => {
@@ -78,9 +82,10 @@ const warpIn = (t: number): number => {
 const RING_BIRTH = { down: 0.055, up: 0.032 }
 const NODE_BIRTH = { down: 0.11, up: 0.075 }
 
-// Glyph pool for the empty-core scramble: Matrix-style half-width katakana plus
-// a few digits/symbols for the "digital rain / decoding" look.
-const SCRAMBLE_CHARS = 'ﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾜﾝｦｱｳｴｵｶｷｹｺｻｼｽｾﾀﾁﾂﾃﾅﾆﾇﾈ0123456789:.=*+<>Ξ╳'
+// Glyph pool for the empty-core scramble: Khmer consonants — the empty ceiling
+// reads as a sacred inscription being decoded, not missing data. Independent
+// consonants only (no stacked subscripts) so system Khmer fonts render cleanly.
+const SCRAMBLE_CHARS = 'កខគឃងចឆជឈញដឋឌឍណតថទធនបផពភមយរលវសហឡអ'
 
 // Sphere-sprite atlas: a lit orb is the same picture at every size, so we render
 // each distinct (ink, sheen, darken) appearance ONCE into an offscreen sprite and
@@ -201,7 +206,7 @@ export function drawScene(scene: Scene): DrawResult {
 
   const erec = (rec: number) => (frontier > 0 ? clamp(rec / frontier, 0, 1) : 1)
   const { h, w } = size
-  const { bandInk, base, bg, c, chipBg, darkTheme, inkInv, memoryInk, skillInk } = palette
+  const { bandInk, base, bg, c, chipBg, darkTheme, gold, inkInv, memoryInk, skillInk } = palette
   const { bandAlpha, lightSize, ringAlpha, sheen } = RING_PARAMS[darkTheme ? 'dark' : 'light']
 
   let animating = false
@@ -269,6 +274,17 @@ export function drawScene(scene: Scene): DrawResult {
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
+
+  // Lamplight — a faint gilded glow rising from the sanctuary core, so the
+  // ceiling reads as lit by Meru rather than flat-lit. Barely there (≤5% alpha).
+  const lampX = projX(0)
+  const lampY = projY(0)
+  const lamp = ctx.createRadialGradient(lampX, lampY, 0, lampX, lampY, Math.max(w, h) * 0.55)
+
+  lamp.addColorStop(0, rgba(gold, darkTheme ? 0.05 : 0.045))
+  lamp.addColorStop(1, rgba(gold, 0))
+  ctx.fillStyle = lamp
+  ctx.fillRect(0, 0, w, h)
 
   ctx.globalAlpha = 1
 
@@ -379,10 +395,25 @@ export function drawScene(scene: Scene): DrawResult {
       return
     }
 
+    const drawR = ringDrawR[i] ?? rg.r
     ctx.strokeStyle = shade(ringAlphaNow)
     ctx.beginPath()
-    ctx.arc(0, 0, ringDrawR[i] ?? rg.r, 0, Math.PI * 2)
+    ctx.arc(0, 0, drawR, 0, Math.PI * 2)
     ctx.stroke()
+
+    // Carved-register echo — an inner gilded hairline, like a chiseled groove
+    // running just inside every ceiling register.
+    const echoGap = RING_ECHO_PX / vp.k
+
+    if (drawR > echoGap * 4) {
+      ctx.strokeStyle = rgba(gold, ringAlphaNow * 0.55)
+      ctx.lineWidth = (c.ringWidth * 0.6) / vp.k
+      ctx.beginPath()
+      ctx.arc(0, 0, drawR - echoGap, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.lineWidth = c.ringWidth / vp.k
+      ctx.strokeStyle = shade(ringAlphaNow)
+    }
   })
   ctx.setLineDash([])
 
@@ -450,15 +481,25 @@ export function drawScene(scene: Scene): DrawResult {
       continue
     }
 
+    // Kbach scrollwork: every route bows into a gentle arc — sign stable per
+    // link via hash — stroked as a beaded dotted chain (round caps), like the
+    // pearl-string borders framing temple murals. Lit (focused) routes go solid.
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const len = Math.hypot(dx, dy) || 1
+    const bow = (hash(key) % 2 ? 1 : -1) * len * KBACH_BOW
+
     ctx.strokeStyle = shade(linkAlpha)
-    ctx.setLineDash(lit || !c.lineDashed ? [] : [c.lineDash, c.lineDash])
+    ctx.setLineDash(lit || !c.lineDashed ? [] : [0.5, KBACH_BEAD_GAP])
+    ctx.lineCap = lit ? 'butt' : 'round'
     ctx.lineWidth = lit ? 1.5 : c.lineWidth
     ctx.beginPath()
     ctx.moveTo(x1, y1)
-    ctx.lineTo(x2, y2)
+    ctx.quadraticCurveTo((x1 + x2) / 2 - (dy / len) * bow, (y1 + y2) / 2 + (dx / len) * bow, x2, y2)
     ctx.stroke()
   }
 
+  ctx.lineCap = 'butt'
   ctx.setLineDash([])
 
   // Nodes: the node layer paints pure ink (focused node + neighbors); the date
@@ -522,8 +563,14 @@ export function drawScene(scene: Scene): DrawResult {
     }
 
     if (isFocus) {
+      // Gilded halo — a double-struck gold-leaf ring, like gilding laid over
+      // stone to mark the figure you're reading.
       ctx.globalAlpha = 1
-      ctx.strokeStyle = rgba(nodeInk, 1)
+      ctx.strokeStyle = rgba(gold, 0.35)
+      ctx.lineWidth = 3.6
+      shapePath(ctx, shape, sx, sy, r + 5.5)
+      ctx.stroke()
+      ctx.strokeStyle = rgba(gold, 1)
       ctx.lineWidth = 1.4
       shapePath(ctx, shape, sx, sy, r + 4)
       ctx.stroke()
@@ -734,17 +781,73 @@ export function drawScene(scene: Scene): DrawResult {
 // glyph size tracks the camera. Bump for denser, drop for sparser.
 const SCRAMBLE_RADIUS = 6
 
+// The inscription field fills only this fraction of the core disk — the rim
+// stays quiet so the Meru mandala's petal ring reads instead of drowning in
+// glyphs.
+const SCRAMBLE_FIELD = 0.8
+
 // Glyph size (px) is clamped to this band: the font grows with the camera but
 // never balloons on a big/zoomed-in core — past the ceiling the core fills with
 // MORE, smaller glyphs instead of fewer huge ones — and stays legible when tiny.
 const SCRAMBLE_CELL_MIN = 5
 const SCRAMBLE_CELL_MAX = 13
 
-// The empty-core scramble: a tilted, Matrix-style decoding-glyph field laid on
-// the disk plane (rows squashed by TILT, clipped to the core ellipse) so the
-// empty center reads as "computing", not missing. PURELY decorative — the glyphs
-// are a seeded PRNG field, never derived from nodes/memories. Drawn live each
-// frame on top of the cached static scene, since it's the only animated layer.
+// Mount Meru mandala — the sanctuary's centre anchor. Three mountain tiers
+// (hairline gold) inside a slowly turning ring of twelve lotus petals. Purely
+// decorative; sits under the inscription field and turns at ~3 rad/min so the
+// ceiling feels alive without demanding attention.
+function drawMeru(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  t: number,
+  gold: Rgb,
+  darkTheme: boolean
+): void {
+  const a = darkTheme ? 0.15 : 0.18
+
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(t * 0.05)
+  ctx.lineWidth = 1
+
+  // The three tiers of the cosmic mountain.
+  ctx.strokeStyle = rgba(gold, a)
+
+  for (const f of [0.34, 0.56, 0.78]) {
+    ctx.beginPath()
+    ctx.arc(0, 0, rx * f, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+
+  // Twelve lotus petals between the outer tier and the rim.
+  const ri = rx * 0.6
+  const ro = rx * 0.97
+  const n = 12
+  const half = (Math.PI / n) * 0.55
+
+  ctx.strokeStyle = rgba(gold, a * 1.3)
+
+  for (let i = 0; i < n; i += 1) {
+    const ang = (i / n) * Math.PI * 2
+    const rm = ri + (ro - ri) * 0.72
+
+    ctx.beginPath()
+    ctx.moveTo(Math.cos(ang - half) * ri, Math.sin(ang - half) * ri)
+    ctx.quadraticCurveTo(Math.cos(ang - half * 0.45) * rm, Math.sin(ang - half * 0.45) * rm, Math.cos(ang) * ro, Math.sin(ang) * ro)
+    ctx.quadraticCurveTo(Math.cos(ang + half * 0.45) * rm, Math.sin(ang + half * 0.45) * rm, Math.cos(ang + half) * ri, Math.sin(ang + half) * ri)
+    ctx.stroke()
+  }
+
+  ctx.restore()
+}
+
+// The empty-core scramble: a Khmer inscription field laid on the ceiling plane,
+// clipped to the core disk, so the empty center reads as "decoding a sacred
+// text", not missing. PURELY decorative — the glyphs are a seeded PRNG field,
+// never derived from nodes/memories. Drawn live each frame on top of the
+// (cached) static scene, since it's the only animated layer.
 export function drawScramble({
   ctx,
   dpr,
@@ -758,7 +861,7 @@ export function drawScramble({
   rings: Ring[]
   vp: Viewport
 }): void {
-  const { bg, darkTheme, primary } = palette
+  const { bg, darkTheme, gold } = palette
   const projX = (wx: number) => wx * vp.k + vp.x
   const projY = (wy: number) => wy * vp.k * TILT + vp.y
 
@@ -801,13 +904,16 @@ export function drawScramble({
   // cells, no vertical squish), but the field is clipped to the disk's ELLIPSE
   // (vertical extent = coreRx * TILT), so it sits on the tilted plane while the
   // glyphs themselves stay un-squished. Fewer rows fit vertically — that's it.
-  const coreRy = coreRx * TILT
+  const coreRy = (coreRx * TILT) * SCRAMBLE_FIELD
   const half = Math.max(3, Math.round(coreRx / cell))
   const now = performance.now()
   const t = now / 1000 // seconds, for the travelling-glow highlight
 
+  // The Mount Meru mandala underlies the inscription field.
+  drawMeru(ctx, coreX, coreY, coreRx, t, gold, darkTheme)
+
   ctx.save()
-  ctx.font = `${cell}px "JetBrains Mono", "Hiragino Sans", "Noto Sans JP", ui-monospace, monospace`
+  ctx.font = `${cell}px "Khmer UI", "Noto Sans Khmer", "Leelawadee UI", "MoolBoran", ui-sans-serif, sans-serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
 
@@ -829,7 +935,7 @@ export function drawScramble({
 
     for (let k = kMin; k <= kMax; k += 1) {
       const sx = k * cell + scroll // screen-space x relative to the core center
-      const nx = sx / coreRx
+      const nx = sx / (coreRx * SCRAMBLE_FIELD)
       const d2 = nx * nx + ny * ny
 
       if (d2 > 1) {
@@ -848,13 +954,13 @@ export function drawScramble({
       const phase = (seed & 7) * 0.35
       const glow = Math.sin(nx * 4.5 + t * 1.3 + phase) * Math.sin(ny * 4.5 - t * 0.9 + phase)
       const pop = 1 + clamp((glow - 0.25) / 0.75, 0, 1) * 2.6
-      const a = clamp((darkTheme ? 0.22 : 0.3) * edge * flick * rowDim * pop, 0, 0.9)
+      const a = clamp((darkTheme ? 0.17 : 0.26) * edge * flick * rowDim * pop, 0, 0.9)
 
       if (a < 0.02) {
         continue
       }
 
-      ctx.fillStyle = rgba(primary, a)
+      ctx.fillStyle = rgba(gold, a)
       ctx.fillText(ch, coreX + sx, coreY + r * cell)
     }
   }

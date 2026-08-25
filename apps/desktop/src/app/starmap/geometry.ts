@@ -62,6 +62,37 @@ export function shapePath(ctx: CanvasRenderingContext2D, shape: Shape, x: number
     return
   }
 
+  if (shape === 'apsara') {
+    // Celestial dancer silhouette, tuned to read at ~6px: a bold circular
+    // crown-knot head floating over a pinched waist and a pleated, twin-
+    // scalloped skirt — circle-over-flare survives tiny sizes; grace returns
+    // when zoomed.
+    const u = (px: number, py: number): [number, number] => [x + px * r, y + py * r]
+    const q = (c1x: number, c1y: number, c2x: number, c2y: number) => {
+      const [ex, ey] = u(c2x, c2y)
+      const [cx, cy] = u(c1x, c1y)
+
+      ctx.quadraticCurveTo(cx, cy, ex, ey)
+    }
+
+    // Body: shoulders tuck under the head, waist pinches, skirt flares wide.
+    ctx.moveTo(...u(-0.14, -0.28))
+    q(-0.2, -0.1, -0.1, 0.02) // → pinched waist, left
+    q(-0.32, 0.16, -0.64, 0.72) // skirt edge → left hem tip
+    q(-0.33, 0.9, 0, 0.82) // hem scallop → centre point
+    q(0.33, 0.9, 0.64, 0.72) // hem centre → right hem tip
+    q(0.32, 0.16, 0.1, 0.02) // right skirt edge → waist
+    q(0.2, -0.1, 0.14, -0.28) // waist → right shoulder
+    ctx.closePath()
+
+    // Head: a true circular crown-knot — a separate subpath that unions with
+    // the body on fill, so the head always reads as its own shape.
+    ctx.moveTo(...u(0.24, -0.42))
+    ctx.arc(x, y - 0.42 * r, 0.24 * r, 0, Math.PI * 2)
+
+    return
+  }
+
   const pts = shape === 'diamond' ? 4 : shape === 'triangle' ? 3 : 6
   // Diamond/triangle point up; hexagon is flat-topped.
   const rot = shape === 'hexagon' ? Math.PI / 6 : -Math.PI / 2

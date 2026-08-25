@@ -18,8 +18,24 @@ export const BLACK: Rgb = { b: 0, g: 0, r: 0 }
 export const AGE_GRADIENT = { mid: 0.52, midInk: 0.74, newInk: 0.95, oldInk: 0.42, reach: 1 }
 
 // Node glyph per kind — pure path geometry (the seam a future sprite/instanced
-// renderer would bake from).
-export const NODE_SHAPE: Record<StarmapNode['kind'], Shape> = { memory: 'diamond', skill: 'circle' }
+// renderer would bake from). Skills are golden lamp orbs; memories are apsara
+// silhouettes — the celestial dancers carved across Angkor's ceilings.
+export const NODE_SHAPE: Record<StarmapNode['kind'], Shape> = { memory: 'apsara', skill: 'circle' }
+
+// Gold-leaf accents, fixed (not theme-derived): gilding reads against any skin,
+// bright on lacquer-dark, antique on parchment-light. *_CSS mirrors these for
+// DOM chrome (the legend) so it always matches the canvas.
+export const GOLD_NIGHT: Rgb = { b: 106, g: 196, r: 235 }
+export const GOLD_DAY: Rgb = { b: 46, g: 124, r: 170 }
+export const GOLD_CSS = { dark: '#ebc46a', light: '#aa7c2e' } as const
+
+// Kbach scrollwork: link arcs bow by this fraction of their length, alternating
+// sign per link (stable via hash), and stroke as a beaded dotted chain.
+export const KBACH_BOW = 0.14
+export const KBACH_BEAD_GAP = 3.6
+
+// Carved-register echo: an inner hairline inset from each ring outline (screen px).
+export const RING_ECHO_PX = 3
 
 // Darken the orb body so a bright primary doesn't swallow the sheen (the
 // highlight is computed from the original ink, so it still reads).
@@ -35,20 +51,20 @@ export const LIT_BAND_ALPHA = 0.04
 
 export const MODE_DEFAULTS: Record<'dark' | 'light', GraphParams> = {
   dark: {
-    lineAlpha: 0.24,
+    lineAlpha: 0.28,
     lineDash: 1.5,
     lineDashed: true,
-    lineWidth: 0.5,
+    lineWidth: 0.7,
     ringAlpha: 0.1,
     ringDash: 4,
     ringDashed: false,
     ringWidth: 1.5
   },
   light: {
-    lineAlpha: 0.18,
+    lineAlpha: 0.22,
     lineDash: 1.5,
     lineDashed: true,
-    lineWidth: 0.5,
+    lineWidth: 0.65,
     ringAlpha: 0.06,
     ringDash: 4,
     ringDashed: false,

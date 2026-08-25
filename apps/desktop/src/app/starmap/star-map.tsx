@@ -6,8 +6,8 @@ import { useThemeEpoch } from '@/hooks/use-theme-epoch'
 import { createDoubleTapDetector, isSmartZoomWheel } from '@/lib/trackpad-gestures'
 import type { StarmapGraph } from '@/global.d'
 
-import { computePalette, memoryInkFor, resolveRgb, rgba } from './color'
-import { RING_OUTER, TILT, ZOOM_MAX, ZOOM_MIN } from './constants'
+import { computePalette, luminance, memoryInkFor, resolveRgb, rgba } from './color'
+import { GOLD_CSS, RING_OUTER, TILT, ZOOM_MAX, ZOOM_MIN } from './constants'
 import { clamp, distToSegmentSq, fitScale, fitViewport, nodeRadius } from './geometry'
 import { NodeContextMenu, type NodeMenuTarget } from './node-context-menu'
 import { drawScene, drawScramble } from './render'
@@ -159,9 +159,11 @@ export function StarMap({
   // Increments on every theme repaint (shared hook) so the legend swatch and the
   // canvas palette re-resolve against the freshly-painted CSS custom properties.
   const themeEpoch = useThemeEpoch()
-  // Memory's swatch color — the same complementary-of-primary the canvas uses,
-  // so the legend matches the rendered diamonds exactly.
+  // Memory's swatch color — the same naga-jade the canvas uses, so the legend
+  // matches the rendered apsaras exactly.
   const [memoryColor, setMemoryColor] = useState('var(--theme-secondary)')
+  // Skill's swatch — the fixed gold-leaf the orbs burn with (dark/light aware).
+  const [goldColor, setGoldColor] = useState<string>(GOLD_CSS.light)
 
   // Time scrubber: reveal 1 = the whole map (idle default); lower values hide
   // not-yet-reached nodes so playing/scrubbing "builds it up". revealRef feeds
@@ -478,6 +480,13 @@ export function StarMap({
         style.getPropertyValue('--background').trim() || style.getPropertyValue('--dt-background').trim() || '#000'
 
       setMemoryColor(rgba(memoryInkFor(resolveRgb(val), resolveRgb(bgVal)), 0.9))
+
+      // The canvas derives dark/light from the resolved foreground luminance
+      // (see computePalette) — mirror that so the legend's gold matches the
+      // gilded orbs exactly.
+      const fg = resolveRgb(style.color)
+
+      setGoldColor(luminance(fg.r, fg.g, fg.b) > 0.55 ? GOLD_CSS.dark : GOLD_CSS.light)
     }
   }, [size, themeEpoch])
 
@@ -961,7 +970,8 @@ export function StarMap({
       {/* Legend — bottom-left, one entry per line like a conventional key. */}
       <div className="pointer-events-none absolute bottom-2 left-2 flex flex-col gap-1 text-[0.62rem] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-2 rounded-full bg-[var(--theme-primary)]/80" /> skill
+          <span className="inline-block size-2 rounded-full" style={{ backgroundColor: goldColor, opacity: 0.85 }} />{' '}
+          skill
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-2 rotate-45" style={{ backgroundColor: memoryColor }} /> memory

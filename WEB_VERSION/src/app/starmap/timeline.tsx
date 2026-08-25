@@ -50,11 +50,11 @@ function rng(seed: number): () => number {
   }
 }
 
-// Scatter each time bucket's activity into stars: count ∝ events, split between
-// skill- and memory-coloured stars, jittered within the bucket's horizontal slot
-// and across the track height. Vertical placement is biased toward the midline
-// (a triangular distribution) so stars cluster near the centre more often than
-// the edges. A starmap timeline for a starmap.
+// Scatter each time bucket's activity into kbach jewels: count ∝ events, split
+// between skill- and memory-coloured gems, jittered within the bucket's
+// horizontal slot and across the track height. Vertical placement is biased
+// toward the midline (a triangular distribution) so they cluster near the
+// centre more often than the edges — a jewelled ceiling strip for a ceiling map.
 function buildStars(axis: TimeAxis): Star[] {
   const n = Math.max(1, axis.buckets.length)
   const stars: Star[] = []
@@ -213,11 +213,11 @@ export const Timeline = memo(function Timeline({
           className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 border-t border-dashed border-foreground/5"
         />
 
-        {/* Dim constellation — the unrevealed future. */}
+        {/* Dim constellation — the unrevealed future, as kbach jewels. */}
         <div aria-hidden className="absolute inset-0">
           {stars.map((star, i) => (
             <div
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+              className="absolute -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1.5px]"
               key={i}
               style={{
                 backgroundColor: colorFor(star.kind),
@@ -242,7 +242,7 @@ export const Timeline = memo(function Timeline({
 
             return (
               <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
+                className="absolute -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1.5px]"
                 key={i}
                 style={
                   {
