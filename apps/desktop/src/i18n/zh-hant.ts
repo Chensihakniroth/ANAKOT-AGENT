@@ -176,6 +176,7 @@ export const zhHant = defineLocale({
       toolsets: '工具集',
       archivedChats: '已封存聊天',
       discord: 'Discord 狀態',
+      freeModels: '免費模型',
       about: '關於'
     },
     sections: {
@@ -1519,6 +1520,44 @@ export const zhHant = defineLocale({
     noAuthenticatedProviders: '沒有已驗證的提供方。',
     addProvider: '新增提供方…'
   },
+
+  freeModelSuite: {
+    title: '免費模型套件',
+    description: (ctx: { count: number }) => `${ctx.count} 個免費模型來自 ${ctx.count} 家提供方 — 選擇一個免費暢聊。`,
+    search: '篩選免費模型…',
+    noFreeModels: '找不到免費模型。',
+    noResults: '無符合的結果。',
+    noProviders: '沒有已驗證的提供方。',
+    switched: '已切換至 {model}',
+      switchFailed: '模型切換失敗',
+      current: '目前',
+      footerHint: (ctx: { count: number }) => `${ctx.count} 個免費模型可用 — 點擊切換。`,
+      freeTier: '免費方案',
+      probe: {
+        title: '切換前測試',
+        placeholder: '用於測試的提示…',
+        toggleOpen: '先試試',
+        run: '執行',
+        running: '執行中…',
+        close: '關閉測試區',
+        applyAfterProbe: '套用此模型',
+        applying: '套用中…',
+        reply: (model: string) => `${model} 的回覆`,
+        emptyPrompt: '提示為空。',
+        emptyResponse: '(空回覆)',
+        failed: '測試失敗',
+        reasoning: '推理',
+        toolCalls: (ctx: { count: number }) => `工具呼叫 (${ctx.count})`,
+        issueEmpty: '模型未傳回內容、推理或工具呼叫。可能已損壞或拒絕該提示。',
+        issueFiltered: '提供方已過濾整個回覆。請嘗試其他提示或模型。',
+        issueTruncated: '回覆被 max_tokens 上限截斷,且沒有可見文字。請提高 max_tokens 或嘗試其他模型。',
+        issueReasoningOnly: '模型將所有 token 預算用於思考,未產生可見回答。推理內容已顯示在下方。',
+        issueReplyTruncated: '回覆被 max_tokens 上限截斷。請提高 max_tokens 或縮短提示。',
+        issueReplyFiltered: '提供方已過濾回覆。請嘗試其他提示。',
+        issueNoAnswerTriedTool: (ctx: { names: string }) => `模型未傳回答案,而是嘗試呼叫一個我們沒有提供的工具:${ctx.names}。此測試區不支援該模型。`,
+        issueToolAlongsideText: (ctx: { names: string }) => `模型還輸出了未執行的工具呼叫(${ctx.names})。上方的可見文字就是你得到的回答。`
+      }
+    },
 
   shell: {
     windowControls: '視窗控制項',

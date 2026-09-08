@@ -2,6 +2,11 @@ import type { Locale } from './types'
 
 export const DEFAULT_LOCALE: Locale = 'en'
 
+// Picker is intentionally restricted to English + Khmer. Legacy locales
+// (zh, zh-hant, ja) remain in LOCALE_OPTIONS below so legacy configs and
+// isLocale() lookups keep working — they're filtered out of the visible
+// picker via `PICKER_OPTIONS` (see languages-ui.ts). Keeping one registry
+// avoids the divergence footgun where a locale resolves but isn't recognized.
 export const LOCALE_OPTIONS = [
   {
     id: 'en',
@@ -9,6 +14,14 @@ export const LOCALE_OPTIONS = [
     englishName: 'English',
     configValue: 'en'
   },
+  {
+    id: 'khm',
+    name: 'ភាសាខ្មែរ',
+    englishName: 'Khmer',
+    configValue: 'khm'
+  },
+  // Legacy locales — kept for type/picker source-of-truth parity but hidden
+  // from the visible picker UI.
   {
     id: 'zh',
     name: '简体中文',
@@ -29,6 +42,12 @@ export const LOCALE_OPTIONS = [
   }
 ] as const satisfies readonly { configValue: string; englishName: string; id: Locale; name: string }[]
 
+// The picker UI shows only English + Khmer; legacy locales are kept in
+// LOCALE_OPTIONS for backward compat (see comment above).
+export const PICKER_OPTIONS = LOCALE_OPTIONS.filter(
+  locale => locale.id === 'en' || locale.id === 'khm'
+)
+
 // `name` is the endonym (native name) shown in the picker so users recognize
 // their language regardless of the current UI language. No country flags:
 // languages are not countries. `englishName` is search-only (not shown) so an
@@ -41,6 +60,14 @@ const LOCALE_ALIASES: Record<string, Locale> = {
   en: 'en',
   'en-us': 'en',
   en_us: 'en',
+  khm: 'khm',
+  km: 'khm',
+  'km-kh': 'khm',
+  km_kh: 'khm',
+  khmer: 'khm',
+  'kh-kh': 'khm',
+  kh: 'khm',
+  // Legacy locales — still resolvable but no longer in the picker.
   zh: 'zh',
   'zh-cn': 'zh',
   zh_cn: 'zh',

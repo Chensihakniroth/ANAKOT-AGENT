@@ -104,7 +104,7 @@ export function PreviewAttachment({ source = 'manual', target }: { source?: Prev
   }
 
   return (
-    <div className="flex w-full max-w-160 flex-wrap items-center gap-2.5 rounded-lg border border-border/55 bg-card/55 px-2.5 py-1.5 text-sm">
+    <div className="flex w-full max-w-160 flex-wrap items-center gap-2.5 rounded-lg bg-card/55 px-2.5 py-1.5 text-sm">
       <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted/55 text-muted-foreground/85">
         <MonitorPlay className="size-3.5" />
       </span>

@@ -2580,6 +2580,21 @@ OPTIONAL_ENV_VARS = {
         "category": "provider",
         "advanced": True,
     },
+    "OMNIROUTE_API_KEY": {
+        "description": "Omni Route API key for the local OpenAI-compatible gateway",
+        "prompt": "Omni Route API key",
+        "url": None,
+        "password": True,
+        "category": "provider",
+    },
+    "OMNIROUTE_BASE_URL": {
+        "description": "Omni Route OpenAI-compatible base URL",
+        "prompt": "Omni Route base URL (default: http://localhost:20128/v1)",
+        "url": None,
+        "password": False,
+        "category": "provider",
+        "advanced": True,
+    },
     "GLM_API_KEY": {
         "description": "Z.AI / GLM API key (also recognized as ZAI_API_KEY / Z_AI_API_KEY)",
         "prompt": "Z.AI / GLM API key",

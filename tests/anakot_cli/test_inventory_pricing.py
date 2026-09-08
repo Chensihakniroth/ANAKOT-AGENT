@@ -77,6 +77,26 @@ def test_apply_pricing_nous_paid_tier_no_gating(monkeypatch):
     assert rows[0]["unavailable_models"] == []
 
 
+def test_apply_pricing_nous_includes_portal_free_model_without_live_pricing(monkeypatch):
+    """Portal free recommendations remain visible when live pricing is stale."""
+    _patch_pricing(monkeypatch, free_tier=True, pricing={"nous": {}})
+    monkeypatch.setattr(
+        models_mod,
+        "union_with_portal_free_recommendations",
+        lambda ids, pricing, portal_url: (
+            ids + ["portal/free"],
+            {"portal/free": {"prompt": "0", "completion": "0"}},
+        ),
+    )
+    rows = [{"slug": "nous", "models": ["curated/free"]}]
+
+    inv._apply_pricing(rows)
+
+    assert rows[0]["free_tier"] is True
+    assert rows[0]["models"] == ["curated/free", "portal/free"]
+    assert rows[0]["pricing"]["portal/free"]["free"] is True
+
+
 def test_apply_pricing_skips_providers_without_pricing(monkeypatch):
     """A provider with no live pricing simply gets no pricing key."""
     _patch_pricing(monkeypatch, free_tier=False, pricing={})

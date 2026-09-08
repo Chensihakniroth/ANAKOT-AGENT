@@ -2986,6 +2986,200 @@ async def proxy_chat_completions(request: Request):
         )
 
 
+# ---------------------------------------------------------------------------
+# POST /api/v1/model/probe — one-shot completion against an explicit
+# (provider, model) pair, used by the Free Model Suite scratchpad to evaluate
+# a candidate model before committing to a switch.  No state, no session, no
+# tools: the goal is to surface "does this model answer at all, and does it
+# look right?" not to run a real agent turn.
+# ---------------------------------------------------------------------------
+
+
+class ModelProbeRequest(BaseModel):
+    provider: str
+    model: str
+    prompt: str
+    # Optional system prompt; defaults to a no-op so callers can pass a
+    # specific instruction without having to send a second message.
+    system: Optional[str] = None
+    # Cap the reply; keeps the scratchpad snappy and bounds token spend.
+    # 1024 default because reasoning models (DeepSeek-R1, QwQ, o1, …) need
+    # budget for thinking + visible answer — 256 silently truncates them.
+    max_tokens: Optional[int] = 1024
+    # Per-call timeout in seconds.  Scratchpad waits synchronously, so a
+    # slow / hung model can't pin the UI.
+    timeout_s: Optional[float] = 30.0
+
+
+@app.post("/api/v1/model/probe")
+async def model_probe(body: ModelProbeRequest, request: Request):
+    _require_token(request)
+
+    provider = (body.provider or "").strip().lower()
+    model = (body.model or "").strip()
+    prompt = (body.prompt or "").strip()
+
+    if not provider or not model or not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="provider, model, and prompt are required",
+        )
+
+    # Build the configured client via the same router the auxiliary tasks
+    # use, so probe handles every quirk the main agent already deals with
+    # (auth, base URLs, Codex Responses API, Anthropic messages, …).
+    try:
+        from agent.auxiliary_client import resolve_provider_client
+    except Exception as exc:
+        _log.exception("auxiliary_client import failed during model.probe")
+        raise HTTPException(
+            status_code=500, detail=f"provider client unavailable: {exc}"
+        ) from exc
+
+    try:
+        client, resolved_model = resolve_provider_client(
+            provider,
+            model=model,
+            async_mode=True,
+        )
+    except Exception as exc:
+        _log.exception("resolve_provider_client failed during model.probe")
+        raise HTTPException(
+            status_code=502, detail=f"failed to resolve provider: {exc}"
+        ) from exc
+
+    if client is None or not resolved_model:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"provider '{provider}' is not configured — "
+                "check the API key in Settings → Keys"
+            ),
+        )
+
+    messages = []
+    if body.system:
+        messages.append({"role": "system", "content": body.system})
+    messages.append({"role": "user", "content": prompt})
+
+    request_kwargs = {
+        "model": resolved_model,
+        "messages": messages,
+        "max_tokens": int(body.max_tokens or 256),
+        "stream": False,
+    }
+
+    import asyncio
+    import httpx
+
+    timeout_s = max(1.0, float(body.timeout_s or 30.0))
+    try:
+        result = await asyncio.wait_for(
+            client.chat.completions.create(**request_kwargs),
+            timeout=timeout_s,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"probe timed out after {timeout_s:.0f}s",
+        )
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"cannot connect to provider: {exc}"
+        ) from exc
+    except HTTPException:
+        # The router's 4xx errors (provider not configured, etc.) bubble up
+        # as HTTPException already — don't wrap them.
+        raise
+    except Exception as exc:
+        # Strip the Electron-IPC "Error invoking remote method '...': Error: "
+        # prefix the renderer normally adds so the scratchpad sees the
+        # provider's own message.  Real exceptions from the provider almost
+        # always end with the meaningful payload after the last "Error: ".
+        msg = str(exc)
+        _log.exception("model.probe: provider call failed")
+        last_err = msg.rsplit("Error: ", 1)[-1] if "Error: " in msg else msg
+        raise HTTPException(
+            status_code=502, detail=f"provider error: {last_err or exc!r}"
+        ) from exc
+
+    # Resolve the response into a UI-friendly payload.  We never want a
+    # reasoning model to silently return "(empty reply)" just because the
+    # provider put the answer in `reasoning_content` instead of `content`,
+    # nor a `finish_reason: "length"` reply to masquerade as a full answer.
+    # Mirrors `extract_content_or_reasoning` in agent/auxiliary_client.py
+    # so the scratchpad agrees with the main agent loop on what "the
+    # answer" means.
+    try:
+        from agent.auxiliary_client import extract_content_or_reasoning as _extract
+    except Exception:
+        def _extract(resp):  # minimal fallback if the helper is unavailable
+            try:
+                return (resp.choices[0].message.content or "")
+            except Exception:
+                return ""
+
+    content = ""
+    reasoning = ""
+    finish_reason = None
+    tool_calls: list[dict] = []
+    try:
+        msg = result.choices[0].message
+        content = (msg.content or "")
+        if not isinstance(content, str):
+            content = "".join(
+                part.get("text", "") for part in content if isinstance(part, dict)
+            )
+
+        reasoning_parts: list[str] = []
+        for field in ("reasoning", "reasoning_content"):
+            val = getattr(msg, field, None)
+            if val and isinstance(val, str) and val.strip() and val.strip() not in reasoning_parts:
+                reasoning_parts.append(val.strip())
+        details = getattr(msg, "reasoning_details", None)
+        if isinstance(details, list):
+            for detail in details:
+                if isinstance(detail, dict):
+                    summary = detail.get("summary") or detail.get("content") or detail.get("text")
+                    if summary:
+                        text = summary.strip() if isinstance(summary, str) else str(summary)
+                        if text and text not in reasoning_parts:
+                            reasoning_parts.append(text)
+        reasoning = "\n\n".join(reasoning_parts)
+
+        finish_reason = getattr(result.choices[0], "finish_reason", None)
+        # Tool calls — we never sent any tools, so this is the model trying
+        # to call a hallucinated one. Surface as a warning rather than a
+        # silent "empty reply".
+        for tc in (getattr(msg, "tool_calls", None) or []):
+            try:
+                tool_calls.append({
+                    "name": getattr(getattr(tc, "function", None), "name", "") or "",
+                    "arguments": getattr(getattr(tc, "function", None), "arguments", "") or ""
+                })
+            except Exception:
+                tool_calls.append({"name": "", "arguments": ""})
+    except Exception as exc:
+        _log.exception("model.probe: failed to parse provider response shape")
+        raise HTTPException(
+            status_code=502, detail=f"unparseable provider response: {exc}"
+        ) from exc
+
+    return {
+        "ok": True,
+        "provider": provider,
+        "model": resolved_model,
+        "content": content,
+        # Surface reasoning + finish_reason + tool_calls so the scratchpad
+        # can flag "this model spent its budget on thinking" / "this
+        # model wants to call a tool we didn't send" / "this reply was
+        # truncated" instead of silently showing nothing.
+        "reasoning": reasoning,
+        "finish_reason": finish_reason,
+        "tool_calls": tool_calls,
+    }
+
+
 @app.delete("/api/env")
 async def remove_env_var(body: EnvVarDelete, request: Request):
     _require_admin(request)

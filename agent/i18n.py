@@ -41,7 +41,10 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = (
-    "en", "zh", "zh-hant", "ja", "de", "es", "fr", "tr", "uk",
+    "en", "khm",
+    # Legacy locales — still on disk so old configs resolve, but hidden
+    # from the language picker. Add new catalogs here when reintroducing.
+    "zh", "zh-hant", "ja", "de", "es", "fr", "tr", "uk",
     "af", "ko", "it", "ga", "pt", "ru", "hu",
 )
 DEFAULT_LANGUAGE = "en"
@@ -50,6 +53,11 @@ DEFAULT_LANGUAGE = "en"
 # get the right catalog instead of silently falling back to English.
 _LANGUAGE_ALIASES: dict[str, str] = {
     "english": "en", "en-us": "en", "en-gb": "en",
+    # Khmer — khm is the internal code; standard BCP-47 'km' and 'kh' are
+    # also routed here so users who type the more familiar code still land
+    # on the right catalog.
+    "khmer": "khm", "ខ្មែរ": "khm", "km": "khm", "km-kh": "khm",
+    "kh": "khm", "kh-kh": "khm",
     # Simplified Chinese — explicit codes route here; bare "chinese" / "mandarin"
     # also default to Simplified since that's the larger user base.
     "chinese": "zh", "mandarin": "zh", "zh-cn": "zh", "zh-hans": "zh", "zh-sg": "zh",

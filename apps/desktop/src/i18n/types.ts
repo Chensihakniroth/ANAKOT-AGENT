@@ -5,7 +5,9 @@
 // partial locales should use `defineLocale()` so missing desktop-only strings
 // fall back to English while new keys remain type-checked.
 
-export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja'
+// Legacy locales (zh, zh-hant, ja) remain in the type so previously-saved
+// translations keep compiling; they're hidden from the picker via LOCALE_OPTIONS.
+export type Locale = 'en' | 'khm' | 'zh' | 'zh-hant' | 'ja'
 
 interface ModeOptionCopy {
   label: string
@@ -207,6 +209,7 @@ export interface Translations {
       pets: string
       discord: string
       archivedChats: string
+      freeModels: string
       about: string
     }
     sections: Record<string, string>
@@ -1271,6 +1274,44 @@ export interface Translations {
     search: string
     noAuthenticatedProviders: string
     addProvider: string
+  }
+
+  freeModelSuite: {
+    title: string
+    description: (ctx: { count: number }) => string
+    search: string
+    noFreeModels: string
+    noResults: string
+    noProviders: string
+    switched: string
+    switchFailed: string
+    current: string
+    footerHint: (ctx: { count: number }) => string
+    freeTier: string
+    probe: {
+      title: string
+      placeholder: string
+      toggleOpen: string
+      run: string
+      running: string
+      close: string
+      applyAfterProbe: string
+      applying: string
+      reply: (model: string) => string
+      emptyPrompt: string
+      emptyResponse: string
+      failed: string
+      reasoning: string
+      toolCalls: (ctx: { count: number }) => string
+      issueEmpty: string
+      issueFiltered: string
+      issueTruncated: string
+      issueReasoningOnly: string
+      issueReplyTruncated: string
+      issueReplyFiltered: string
+      issueNoAnswerTriedTool: (ctx: { names: string }) => string
+      issueToolAlongsideText: (ctx: { names: string }) => string
+    }
   }
 
   shell: {

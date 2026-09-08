@@ -41,6 +41,7 @@ class TestProviderRegistry:
         ("minimax-cn", "MiniMax (China)", "api_key"),
         ("kilocode", "Kilo Code", "api_key"),
         ("gmi", "GMI Cloud", "api_key"),
+        ("omniroute", "Omni Route", "api_key"),
     ])
     def test_provider_registered(self, provider_id, name, auth_type):
         assert provider_id in PROVIDER_REGISTRY
@@ -105,6 +106,67 @@ class TestProviderRegistry:
         assert pconfig.api_key_env_vars == ("GMI_API_KEY",)
         assert pconfig.base_url_env_var == "GMI_BASE_URL"
 
+    def test_omniroute_env_vars(self):
+        pconfig = PROVIDER_REGISTRY["omniroute"]
+        assert pconfig.api_key_env_vars == ("OMNIROUTE_API_KEY",)
+        assert pconfig.base_url_env_var == "OMNIROUTE_BASE_URL"
+        assert pconfig.inference_base_url == "http://localhost:20128/v1"
+
+    def test_omniroute_aliases(self):
+        assert resolve_provider("omni-route") == "omniroute"
+        assert resolve_provider("omni route") == "omniroute"
+
+    def test_omniroute_is_in_model_picker_catalog(self):
+        from anakot_cli.models import CANONICAL_PROVIDERS
+
+        assert any(provider.slug == "omniroute" for provider in CANONICAL_PROVIDERS)
+
+    def test_omniroute_prefers_live_catalog(self, monkeypatch):
+        from anakot_cli import models
+
+        monkeypatch.setattr(
+            "anakot_cli.auth.resolve_api_key_provider_credentials",
+            lambda provider: {
+                "api_key": "test-key",
+                "base_url": "http://localhost:20128/v1",
+            },
+        )
+        monkeypatch.setattr(
+            models,
+            "fetch_api_models",
+            lambda api_key, base_url: ["auto/new-template", "auto/best-coding"],
+        )
+
+        assert models.provider_model_ids("omniroute") == [
+            "auto/new-template",
+            "auto/best-coding",
+        ]
+
+    def test_omniroute_has_no_static_fallback(self, monkeypatch):
+        from anakot_cli import models
+
+        monkeypatch.setattr(
+            "anakot_cli.auth.resolve_api_key_provider_credentials",
+            lambda provider: {"api_key": "test-key", "base_url": "http://localhost:20128/v1"},
+        )
+        monkeypatch.setattr(models, "fetch_api_models", lambda api_key, base_url: [])
+
+        assert models.provider_model_ids("omniroute") == []
+
+    def test_omniroute_picker_cache_forces_refresh(self, monkeypatch, tmp_path):
+        from anakot_cli import models
+
+        calls = []
+        monkeypatch.setattr(models, "_provider_models_cache_path", lambda: tmp_path / "models.json")
+        monkeypatch.setattr(
+            models,
+            "provider_model_ids",
+            lambda provider, force_refresh=False: calls.append(force_refresh) or ["auto/new-template"],
+        )
+
+        assert models.cached_provider_model_ids("omniroute") == ["auto/new-template"]
+        assert calls == [True]
+
     def test_huggingface_env_vars(self):
         pconfig = PROVIDER_REGISTRY["huggingface"]
         assert pconfig.api_key_env_vars == ("HF_TOKEN",)
@@ -143,6 +205,7 @@ PROVIDER_ENV_VARS = (
     "MINIMAX_API_KEY", "MINIMAX_CN_API_KEY",
     "KILOCODE_API_KEY", "KILOCODE_BASE_URL",
     "GMI_API_KEY", "GMI_BASE_URL",
+    "OMNIROUTE_API_KEY", "OMNIROUTE_BASE_URL",
     "DASHSCOPE_API_KEY", "OPENCODE_ZEN_API_KEY", "OPENCODE_GO_API_KEY",
     "NOUS_API_KEY", "GITHUB_TOKEN", "GH_TOKEN",
     "OPENAI_BASE_URL", "ANAKOT_COPILOT_ACP_COMMAND", "COPILOT_CLI_PATH",

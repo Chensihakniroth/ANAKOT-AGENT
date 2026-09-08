@@ -182,6 +182,7 @@ export const ja = defineLocale({
       toolsets: 'ツールセット',
       archivedChats: 'アーカイブ済みチャット',
       discord: 'Discord プレゼンス',
+      freeModels: '無料モデル',
       about: '情報'
     },
     sections: {
@@ -1559,6 +1560,44 @@ export const ja = defineLocale({
     noAuthenticatedProviders: '認証済みプロバイダーがありません。',
     addProvider: 'プロバイダーを追加…'
   },
+
+  freeModelSuite: {
+    title: '無料モデルスイート',
+    description: (ctx: { count: number }) => `${ctx.count} 件の無料モデルが ${ctx.count} プロバイダーで利用可能 — 選んで無料でチャットしましょう。`,
+    search: '無料モデルを絞り込む…',
+    noFreeModels: '無料モデルが見つかりません。',
+    noResults: '該当する結果はありません。',
+    noProviders: '認証済みプロバイダーがありません。',
+    switched: '切り替えました: {model}',
+      switchFailed: 'モデルの切り替えに失敗しました',
+      current: '現在',
+      footerHint: (ctx: { count: number }) => `${ctx.count} 件の無料モデルが利用可能 — クリックで切り替えます。`,
+      freeTier: '無料プラン',
+      probe: {
+        title: '切り替え前にテスト',
+        placeholder: 'テスト用プロンプト…',
+        toggleOpen: 'まず試す',
+        run: '実行',
+        running: '実行中…',
+        close: 'スクラッチパッドを閉じる',
+        applyAfterProbe: 'このモデルを適用',
+        applying: '適用中…',
+        reply: (model: string) => `${model} からの返信`,
+        emptyPrompt: 'プロンプトが空です。',
+        emptyResponse: '(空の返信)',
+        failed: 'プローブに失敗しました',
+        reasoning: '推論',
+        toolCalls: (ctx: { count: number }) => `ツール呼び出し (${ctx.count})`,
+        issueEmpty: 'モデルは内容・推論・ツール呼び出しのいずれも返しませんでした。故障またはプロンプト拒否の可能性があります。',
+        issueFiltered: 'プロバイダが応答をフィルタリングしました。別のプロンプトまたはモデルを試してください。',
+        issueTruncated: 'max_tokens の上限で返信が切れ、可視テキストがありません。リクエストの max_tokens を増やすか別のモデルを試してください。',
+        issueReasoningOnly: 'モデルはトークン予算を思考に使ってしまい、可視の回答が出ませんでした。推論内容を下に表示しています。',
+        issueReplyTruncated: 'max_tokens の上限で返信が切れました。max_tokens を増やすかプロンプトを短くしてください。',
+        issueReplyFiltered: 'プロバイダが応答をフィルタリングしました。別のプロンプトを試してください。',
+        issueNoAnswerTriedTool: (ctx: { names: string }) => `モデルは回答を返さず、存在しないツールを呼び出そうとしました: ${ctx.names}。このスクラッチパッドでは未対応の設定です。`,
+        issueToolAlongsideText: (ctx: { names: string }) => `モデルは未実行のツール呼び出し (${ctx.names}) も出力しました。上の可視テキストが実際に得られた回答です。`
+      }
+    },
 
   shell: {
     windowControls: 'ウィンドウコントロール',

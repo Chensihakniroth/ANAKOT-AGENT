@@ -1504,15 +1504,28 @@ def _try_openrouter(explicit_api_key: str = None, model: str = None) -> Tuple[Op
     pool_present, entry = _select_pool_entry("openrouter")
     if pool_present:
         or_key = explicit_api_key or _pool_runtime_api_key(entry)
-        if not or_key:
-            _mark_provider_unhealthy("openrouter", ttl=60)
-            return None, None
-        base_url = _pool_runtime_base_url(entry, OPENROUTER_BASE_URL) or OPENROUTER_BASE_URL
-        logger.debug("Auxiliary client: OpenRouter via pool")
-        return OpenAI(api_key=or_key, base_url=base_url,
-                       default_headers=build_or_headers()), model or _OPENROUTER_MODEL
+        if or_key:
+            base_url = _pool_runtime_base_url(entry, OPENROUTER_BASE_URL) or OPENROUTER_BASE_URL
+            logger.debug("Auxiliary client: OpenRouter via pool")
+            return OpenAI(api_key=or_key, base_url=base_url,
+                          default_headers=build_or_headers()), model or _OPENROUTER_MODEL
+
+        # A pool can exist but be empty or exhausted. Continue to the regular
+        # Settings -> Keys credential instead of treating the provider as
+        # unconfigured.
+        logger.debug("Auxiliary client: OpenRouter pool has no usable entry; trying configured API key")
 
     or_key = explicit_api_key or os.getenv("OPENROUTER_API_KEY")
+    if not or_key:
+        # Settings -> Keys persists API keys in Anakot's .env file.  The
+        # main provider path reads it through get_env_value(); the probe must
+        # use the same source instead of checking only the process environment.
+        try:
+            from anakot_cli.config import get_env_value
+
+            or_key = get_env_value("OPENROUTER_API_KEY")
+        except Exception:
+            or_key = ""
     if not or_key:
         _mark_provider_unhealthy("openrouter", ttl=60)
         return None, None

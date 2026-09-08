@@ -11,6 +11,7 @@ const {
   nativeTheme,
   net: electronNet,
   powerMonitor,
+  powerSaveBlocker,
   protocol,
   safeStorage,
   screen,
@@ -638,6 +639,7 @@ function registerRendererProtocol() {
 }
 
 let mainWindow = null
+let keepAwakeBlockerId = null
 let petOverlayWindow = null
 let anakotProcess = null
 let connectionPromise = null
@@ -5366,6 +5368,14 @@ function createWindow() {
     }
   })
 
+  mainWindow.webContents.on('found-in-page', (_event, result) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('anakot:found-in-page', {
+      activeMatchOrdinal: result.activeMatchOrdinal,
+      count: result.matches
+    })
+  })
+
   if (IS_MAC) {
     mainWindow.setWindowButtonPosition?.(WINDOW_BUTTON_POSITION)
     if (icon) {
@@ -6128,6 +6138,39 @@ ipcMain.handle('anakot:notification:setPrefs', (_event, prefs) => {
   const merged = { ...loadNotificationPrefs(), ...prefs }
   saveNotificationPrefs(merged)
   return merged
+})
+
+ipcMain.handle('anakot:power:setKeepAwake', (_event, enabled) => {
+  const shouldBlock = Boolean(enabled)
+
+  if (shouldBlock && keepAwakeBlockerId === null) {
+    keepAwakeBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+  } else if (!shouldBlock && keepAwakeBlockerId !== null) {
+    if (powerSaveBlocker.isStarted(keepAwakeBlockerId)) {
+      powerSaveBlocker.stop(keepAwakeBlockerId)
+    }
+    keepAwakeBlockerId = null
+  }
+
+  return true
+})
+
+ipcMain.handle('anakot:find-in-page', (event, query, options = {}) => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || senderWindow.isDestroyed()) return false
+
+  senderWindow.webContents.findInPage(String(query || ''), {
+    forward: options.forward !== false,
+    findNext: Boolean(options.findNext)
+  })
+  return true
+})
+
+ipcMain.handle('anakot:find-in-page:stop', event => {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!senderWindow || senderWindow.isDestroyed()) return false
+  senderWindow.webContents.stopFindInPage('clearSelection')
+  return true
 })
 
 ipcMain.handle('anakot:readFileDataUrl', async (_event, filePath) => {

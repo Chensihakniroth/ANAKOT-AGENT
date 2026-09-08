@@ -837,7 +837,8 @@ class TestExplicitProviderRouting:
 
     def test_explicit_openrouter_pool_exhausted_logs_precise_warning(self, monkeypatch, caplog):
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        with patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)):
+        with patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)), \
+             patch("anakot_cli.config.get_env_value", return_value=None):
             with caplog.at_level(logging.WARNING, logger="agent.auxiliary_client"):
                 client, model = resolve_provider_client("openrouter")
         assert client is None
@@ -851,6 +852,17 @@ class TestExplicitProviderRouting:
             for record in caplog.records
         )
 
+    def test_explicit_openrouter_falls_back_to_settings_key_when_pool_is_empty(self, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        fake_client = MagicMock()
+        with patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)), \
+             patch("anakot_cli.config.get_env_value", return_value="sk-from-settings"), \
+             patch("agent.auxiliary_client.OpenAI", return_value=fake_client):
+            client, model = resolve_provider_client("openrouter", model="meta/llama:free")
+
+        assert client is fake_client
+        assert model == "meta/llama:free"
+
     def test_explicit_openrouter_missing_env_keeps_not_set_warning(self, monkeypatch, caplog):
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
@@ -862,6 +874,18 @@ class TestExplicitProviderRouting:
             "OPENROUTER_API_KEY not set" in record.message
             for record in caplog.records
         )
+
+    def test_explicit_openrouter_reads_key_from_anakot_env_file(self, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        fake_client = MagicMock()
+        with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)), \
+             patch("anakot_cli.config.get_env_value", return_value="sk-from-anakot-env"):
+            with patch("agent.auxiliary_client.OpenAI", return_value=fake_client):
+                client, model = resolve_provider_client("openrouter", model="meta/llama:free")
+
+        assert client is fake_client
+        assert model == "meta/llama:free"
+        fake_client.assert_not_called()
 
 class TestGetTextAuxiliaryClient:
     """Test the full resolution chain for get_text_auxiliary_client."""

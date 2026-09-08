@@ -262,6 +262,7 @@ export const en: Translations = {
       pets: 'Pets',
       discord: 'Discord Presence',
       archivedChats: 'Archived Chats',
+      freeModels: 'Free Models',
       about: 'About'
     },
     sections: {
@@ -1610,6 +1611,44 @@ export const en: Translations = {
     noAuthenticatedProviders: 'No authenticated providers.',
     addProvider: 'Add provider…'
   },
+
+  freeModelSuite: {
+      title: 'Free Model Suite',
+      description: (ctx: { count: number }) => `${ctx.count} free model${ctx.count !== 1 ? 's' : ''} across ${ctx.count} provider${ctx.count !== 1 ? 's' : ''} — pick one and chat free.`,
+      search: 'Filter free models…',
+      noFreeModels: 'No free models found.',
+      noResults: 'No results.',
+      noProviders: 'No authenticated providers.',
+      switched: 'Switched to {model}',
+      switchFailed: 'Model switch failed',
+      current: 'Current',
+      footerHint: (ctx: { count: number }) => `${ctx.count} free model${ctx.count !== 1 ? 's' : ''} available — tap one to switch.`,
+      freeTier: 'Free tier',
+      probe: {
+        title: 'Test before switching',
+        placeholder: 'Prompt to test this model with…',
+        toggleOpen: 'Try it first',
+        run: 'Run',
+        running: 'Running…',
+        close: 'Close scratchpad',
+        applyAfterProbe: 'Apply this model',
+        applying: 'Applying…',
+        reply: (model: string) => `Reply from ${model}`,
+        emptyPrompt: 'Prompt is empty.',
+        emptyResponse: '(empty reply)',
+        failed: 'Probe failed',
+        reasoning: 'Reasoning',
+        toolCalls: (ctx: { count: number }) => `Tool call${ctx.count === 1 ? '' : 's'} (${ctx.count})`,
+        issueEmpty: 'Model returned no content, no reasoning, and no tool calls. It may be broken or refusing the prompt.',
+        issueFiltered: 'Provider filtered the entire response. Try a different prompt or model.',
+        issueTruncated: 'Reply was cut off at the max_tokens budget with no visible text. Bump max_tokens in the request or try a different model.',
+        issueReasoningOnly: 'Model spent its token budget on thinking and produced no visible answer. Reasoning shown below.',
+        issueReplyTruncated: 'Reply was truncated at the max_tokens budget. Bump max_tokens or shorten the prompt.',
+        issueReplyFiltered: 'Provider filtered the response. Try a different prompt.',
+        issueNoAnswerTriedTool: (ctx: { names: string }) => `Model returned no answer and tried to call a tool we did not provide: ${ctx.names}. Treat the model as misconfigured for this scratchpad.`,
+        issueToolAlongsideText: (ctx: { names: string }) => `Model also emitted tool call${ctx.names.includes(',') ? 's' : ''} (${ctx.names}) that were not acted on. The visible answer above is what you got.`
+      }
+    },
 
   shell: {
     windowControls: 'Window controls',

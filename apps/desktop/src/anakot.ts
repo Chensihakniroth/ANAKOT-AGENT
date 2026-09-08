@@ -3,6 +3,8 @@ import { JsonRpcGatewayClient } from '@anakot/shared'
 import type {
   ActionResponse,
   ActionStatusResponse,
+  AnakotConfig,
+  AnakotConfigRecord,
   AnalyticsResponse,
   AudioSpeakResponse,
   AudioTranscriptionResponse,
@@ -13,8 +15,6 @@ import type {
   CronJobUpdates,
   ElevenLabsVoicesResponse,
   EnvVarInfo,
-  AnakotConfig,
-  AnakotConfigRecord,
   LogsResponse,
   MessagingPlatformsResponse,
   MessagingPlatformTestResponse,
@@ -46,6 +46,8 @@ const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 30_000
 export type {
   ActionResponse,
   ActionStatusResponse,
+  AnakotConfig,
+  AnakotConfigRecord,
   AnalyticsDailyEntry,
   AnalyticsModelEntry,
   AnalyticsResponse,
@@ -65,8 +67,6 @@ export type {
   ElevenLabsVoicesResponse,
   EnvVarInfo,
   GatewayReadyPayload,
-  AnakotConfig,
-  AnakotConfigRecord,
   LogsResponse,
   MessagingEnvVarInfo,
   MessagingHomeChannel,
@@ -178,6 +178,7 @@ export async function listAllProfileSessions(
 // that hit the local primary would no-op or 404. Omit for the current/default.
 export function setSessionArchived(id: string, archived: boolean, profile?: string | null): Promise<{ ok: boolean }> {
   const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+
   return window.anakotDesktop.api<{ ok: boolean }>({
     ...(profile ? { profile } : {}),
     path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
@@ -206,6 +207,7 @@ export function getSessionMessages(id: string, profile?: string | null): Promise
 
 export function deleteSession(id: string, profile?: string | null): Promise<{ ok: boolean }> {
   const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+
   return window.anakotDesktop.api<{ ok: boolean }>({
     ...(profile ? { profile } : {}),
     path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
@@ -219,6 +221,7 @@ export function renameSession(
   profile?: string | null
 ): Promise<{ ok: boolean; title: string }> {
   const suffix = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+
   return window.anakotDesktop.api<{ ok: boolean; title: string }>({
     ...(profile ? { profile } : {}),
     path: `/api/sessions/${encodeURIComponent(id)}${suffix}`,
@@ -680,6 +683,58 @@ export function setModelAssignment(body: ModelAssignmentRequest): Promise<ModelA
   return window.anakotDesktop.api<ModelAssignmentResponse>({
     ...profileScoped(),
     path: '/api/model/set',
+    method: 'POST',
+    body
+  })
+}
+
+/** Fire a one-shot completion against an explicit (provider, model) pair.
+ *  No state, no session, no tools — used by the Free Model Suite scratchpad
+ *  to evaluate a candidate model before committing to a switch. */
+export interface ModelProbeRequest {
+  max_tokens?: number
+  model: string
+  prompt: string
+  provider: string
+  system?: string
+  timeout_s?: number
+}
+
+export interface ModelProbeToolCall {
+  name: string
+  arguments: string
+}
+
+export type ModelProbeFinishReason =
+  | 'length'
+  | 'content_filter'
+  | 'tool_calls'
+  | 'stop'
+  | string
+  | null
+
+export interface ModelProbeResponse {
+  ok: true
+  provider: string
+  model: string
+  content: string
+  /** Reasoning / chain-of-thought text.  Populated by reasoning models
+   *  (DeepSeek-R1, QwQ, o1, …) that return the answer in
+   *  `reasoning_content` instead of `content`, or in addition to it. */
+  reasoning: string
+  /** `length` (truncated at max_tokens), `content_filter`, `tool_calls`,
+   *  `stop`.  Frontend uses this to flag "this model spent its whole
+   *  budget on thinking" or "this reply was filtered". */
+  finish_reason: ModelProbeFinishReason
+  /** Models can hallucinate tool calls even with no tools in the request.
+   *  Frontend surfaces this as a warning, not a silent empty reply. */
+  tool_calls: ModelProbeToolCall[]
+}
+
+export function probeModel(body: ModelProbeRequest): Promise<ModelProbeResponse> {
+  return window.anakotDesktop.api<ModelProbeResponse>({
+    ...profileScoped(),
+    path: '/api/v1/model/probe',
     method: 'POST',
     body
   })

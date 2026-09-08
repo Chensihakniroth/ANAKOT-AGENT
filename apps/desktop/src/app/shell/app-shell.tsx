@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { type CSSProperties, type ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react'
 
 import { NotificationStack } from '@/components/notifications'
+import { FindBar } from '@/components/find-bar'
 import { PaneShell } from '@/components/pane-shell'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import {
@@ -185,6 +186,7 @@ export function AppShell({
       <KeybindPanel />
 
       <NotificationStack />
+      <FindBar />
       <FloatingPet />
     </SidebarProvider>
   )

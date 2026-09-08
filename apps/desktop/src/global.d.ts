@@ -32,6 +32,10 @@ declare global {
       getWindowOpacity: () => Promise<number>
       getNotificationPrefs: () => Promise<NotificationPrefs>
       setNotificationPrefs: (prefs: Partial<NotificationPrefs>) => Promise<NotificationPrefs>
+      setKeepAwake?: (enabled: boolean) => Promise<boolean>
+      findInPage?: (query: string, options?: { forward?: boolean; findNext?: boolean }) => Promise<boolean>
+      stopFindInPage?: () => Promise<boolean>
+      onFoundInPage?: (callback: (result: { activeMatchOrdinal: number; count: number }) => void) => () => void
       requestMicrophoneAccess: () => Promise<boolean>
       readFileDataUrl: (filePath: string) => Promise<string>
       readFileText: (filePath: string) => Promise<AnakotReadFileTextResult>

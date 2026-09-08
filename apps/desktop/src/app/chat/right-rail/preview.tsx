@@ -107,7 +107,7 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
 
   return (
     <aside className="relative z-10 flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-(--ui-stroke-tertiary) bg-(--ui-editor-surface-background) text-(--ui-text-tertiary)">
-      <div className="group/rail-tabs flex h-(--titlebar-height) shrink-0 border-b border-(--ui-stroke-tertiary) bg-(--ui-sidebar-surface-background)">
+      <div className="group/rail-tabs flex h-(--titlebar-height) shrink-0 bg-transparent">
         <div
           className="flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
@@ -122,10 +122,10 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
                 <ContextMenuTrigger asChild>
                   <div
                     className={cn(
-                      'group/tab relative flex h-full min-w-0 max-w-48 shrink-0 items-center text-[0.6875rem] font-medium [-webkit-app-region:no-drag] last:border-r last:border-(--ui-stroke-quaternary)',
+                      'group/tab relative flex h-full min-w-0 max-w-48 shrink-0 items-center text-[0.6875rem] font-medium [-webkit-app-region:no-drag]',
                       active
                         ? 'bg-(--ui-editor-surface-background) text-foreground [--tab-bg:var(--ui-editor-surface-background)]'
-                        : 'border-r border-(--ui-stroke-quaternary) text-(--ui-text-tertiary) [--tab-bg:var(--ui-sidebar-surface-background)] hover:bg-(--chrome-action-hover) hover:text-foreground'
+                        : 'text-(--ui-text-tertiary) [--tab-bg:var(--ui-editor-surface-background)] hover:bg-(--chrome-action-hover) hover:text-foreground'
                     )}
                     onAuxClick={event => {
                       if (event.button !== 1) return

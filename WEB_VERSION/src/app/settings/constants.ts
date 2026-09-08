@@ -163,25 +163,31 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
     priority: 17
   },
   {
+    prefix: 'OMNIROUTE_',
+    name: 'Omni Route',
+    description: 'Local OpenAI-compatible model gateway',
+    priority: 18
+  },
+  {
     prefix: 'STEPFUN_',
     name: 'StepFun',
     description: 'StepFun Step Plan coding models',
     docsUrl: 'https://platform.stepfun.com/',
-    priority: 18
+    priority: 19
   },
   {
     prefix: 'XIAOMI_',
     name: 'Xiaomi MiMo',
     description: 'MiMo-V2.5 and Xiaomi proprietary models',
     docsUrl: 'https://platform.xiaomimimo.com',
-    priority: 19
+    priority: 20
   },
   {
     prefix: 'ARCEEAI_',
     name: 'Arcee AI',
     description: 'Arcee-hosted small + medium models',
     docsUrl: 'https://chat.arcee.ai/',
-    priority: 20
+    priority: 21
   },
   { prefix: 'ARCEE_', name: 'Arcee AI', priority: 20 },
   {
@@ -189,21 +195,21 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
     name: 'GMI Cloud',
     description: 'GMI Cloud GPU + model serving',
     docsUrl: 'https://www.gmicloud.ai/',
-    priority: 21
+    priority: 22
   },
   {
     prefix: 'AZURE_FOUNDRY_',
     name: 'Azure Foundry',
     description: 'Azure AI Foundry custom endpoints (OpenAI / Anthropic-compatible)',
     docsUrl: 'https://ai.azure.com/',
-    priority: 22
+    priority: 23
   },
   {
     prefix: 'AWS_',
     name: 'AWS Bedrock',
     description: 'Authenticate via AWS profile + region',
     docsUrl: 'https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html',
-    priority: 23
+    priority: 24
   }
 ]
 

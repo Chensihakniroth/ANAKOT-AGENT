@@ -15,6 +15,7 @@ import {
 } from '@/lib/chat-messages'
 import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
+import { playCompletionSound } from '@/lib/completion-sound'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
 import { dispatchNativeNotification } from '@/store/native-notifications'
@@ -805,6 +806,7 @@ export function useMessageStream({
 
         if (isActiveEvent) {
           triggerHaptic('streamDone')
+          playCompletionSound()
         }
 
         const finalText = coerceGatewayText(payload?.text) || coerceGatewayText(payload?.rendered)

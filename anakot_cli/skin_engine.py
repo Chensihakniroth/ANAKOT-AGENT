@@ -165,24 +165,26 @@ class SkinConfig:
 _BUILTIN_SKINS: Dict[str, Dict[str, Any]] = {
     "default": {
         "name": "default",
-        "description": "Classic Anakot — gold and kawaii",
+        "description": "Classic Anakot — pink and violet (1_shell inspired)",
         "colors": {
-            "banner_border": "#CD7F32",
-            "banner_title": "#FFD700",
-            "banner_accent": "#FFBF00",
-            "banner_dim": "#B8860B",
-            "banner_text": "#FFF8DC",
-            "ui_accent": "#FFBF00",
-            "ui_label": "#DAA520",
-            "ui_ok": "#4caf50",
-            "ui_error": "#ef5350",
-            "ui_warn": "#ffa726",
-            "prompt": "#FFF8DC",
-            "input_rule": "#CD7F32",
-            "response_border": "#FFD700",
+            # Palette inspired by Oh My Posh's `1_shell` theme:
+            # https://github.com/JanDeDobbeleer/oh-my-posh/blob/main/themes/1_shell.omp.json
+            "banner_border": "#bc93ff",   # violet (1_shell path brackets)
+            "banner_title": "#ff70a6",    # signature pink leading-diamond
+            "banner_accent": "#00c7fc",   # cyan secondary accent
+            "banner_dim": "#ffafd2",      # light pink (path foreground)
+            "banner_text": "#ffbebc",     # soft pink (session text)
+            "ui_accent": "#ff70a6",       # match banner_title
+            "ui_label": "#ee79d1",        # magenta (git segment)
+            "ui_ok": "#a9ffb4",           # mint (executiontime / sysinfo)
+            "ui_error": "#ef5350",        # red (status)
+            "ui_warn": "#ee79d1",         # magenta (warm warning)
+            "prompt": "#ffbebc",          # soft pink body
+            "input_rule": "#bc93ff",      # violet rule
+            "response_border": "#ff70a6", # pink border
             "status_bar_bg": "#1a1a2e",
-            "session_label": "#DAA520",
-            "session_border": "#8B8682",
+            "session_label": "#ffafd2",   # light pink
+            "session_border": "#bc93ff",  # violet
         },
         "spinner": {
             # Empty = use hardcoded defaults in display.py

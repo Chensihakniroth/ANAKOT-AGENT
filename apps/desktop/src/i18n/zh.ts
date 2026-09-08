@@ -256,6 +256,7 @@ export const zh: Translations = {
       pets: '宠物',
       discord: 'Discord 状态',
       archivedChats: '已归档对话',
+      freeModels: '免费模型',
       about: '关于'
     },
     sections: {
@@ -1746,6 +1747,44 @@ export const zh: Translations = {
     noAuthenticatedProviders: '没有已认证的提供方。',
     addProvider: '添加提供方…'
   },
+
+  freeModelSuite: {
+    title: '免费模型套件',
+    description: (ctx: { count: number }) => `${ctx.count} 个免费模型来自 ${ctx.count} 家提供方 — 选择一个免费畅聊。`,
+    search: '筛选免费模型…',
+    noFreeModels: '未找到免费模型。',
+    noResults: '无匹配结果。',
+    noProviders: '没有已认证的提供方。',
+    switched: '已切换到 {model}',
+      switchFailed: '模型切换失败',
+      current: '当前',
+      footerHint: (ctx: { count: number }) => `${ctx.count} 个免费模型可用 — 点击切换。`,
+      freeTier: '免费套餐',
+      probe: {
+        title: '切换前测试',
+        placeholder: '用于测试的提示词…',
+        toggleOpen: '先试试',
+        run: '运行',
+        running: '运行中…',
+        close: '关闭测试区',
+        applyAfterProbe: '应用此模型',
+        applying: '应用中…',
+        reply: (model: string) => `${model} 的回复`,
+        emptyPrompt: '提示词为空。',
+        emptyResponse: '(空回复)',
+        failed: '测试失败',
+        reasoning: '推理',
+        toolCalls: (ctx: { count: number }) => `工具调用 (${ctx.count})`,
+        issueEmpty: '模型未返回内容、推理或工具调用。可能已损坏或拒绝该提示词。',
+        issueFiltered: '提供方已过滤整个回复。请尝试其他提示词或模型。',
+        issueTruncated: '回复被 max_tokens 限制截断,且没有可见文本。请提高 max_tokens 或尝试其他模型。',
+        issueReasoningOnly: '模型将所有 token 预算用于思考,未产生可见回答。推理内容已显示在下方。',
+        issueReplyTruncated: '回复被 max_tokens 限制截断。请提高 max_tokens 或缩短提示词。',
+        issueReplyFiltered: '提供方已过滤回复。请尝试其他提示词。',
+        issueNoAnswerTriedTool: (ctx: { names: string }) => `模型未返回答案,而是尝试调用一个我们没有提供的工具:${ctx.names}。此测试区不支持该模型。`,
+        issueToolAlongsideText: (ctx: { names: string }) => `模型还输出了未执行的工具调用(${ctx.names})。上方的可见文本就是你得到的回答。`
+      }
+    },
 
   shell: {
     windowControls: '窗口控件',

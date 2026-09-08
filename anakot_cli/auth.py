@@ -197,6 +197,14 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         api_key_env_vars=("LM_API_KEY",),
         base_url_env_var="LM_BASE_URL",
     ),
+    "omniroute": ProviderConfig(
+        id="omniroute",
+        name="Omni Route",
+        auth_type="api_key",
+        inference_base_url="http://localhost:20128/v1",
+        api_key_env_vars=("OMNIROUTE_API_KEY",),
+        base_url_env_var="OMNIROUTE_BASE_URL",
+    ),
     "copilot": ProviderConfig(
         id="copilot",
         name="GitHub Copilot",
@@ -1599,6 +1607,7 @@ def resolve_provider(
         "go": "opencode-go", "opencode-go-sub": "opencode-go",
         "kilo": "kilocode", "kilo-code": "kilocode", "kilo-gateway": "kilocode",
         "lmstudio": "lmstudio", "lm-studio": "lmstudio", "lm_studio": "lmstudio",
+            "omni-route": "omniroute", "omni_route": "omniroute", "omni route": "omniroute",
         # Local server aliases — route through the generic custom provider
         "ollama": "custom", "ollama_cloud": "ollama-cloud",
         "vllm": "custom", "llamacpp": "custom",

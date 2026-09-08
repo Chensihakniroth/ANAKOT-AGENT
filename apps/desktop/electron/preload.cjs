@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   getWindowOpacity: () => ipcRenderer.invoke('anakot:window:getOpacity'),
   getNotificationPrefs: () => ipcRenderer.invoke('anakot:notification:getPrefs'),
   setNotificationPrefs: prefs => ipcRenderer.invoke('anakot:notification:setPrefs', prefs),
+  setKeepAwake: enabled => ipcRenderer.invoke('anakot:power:setKeepAwake', Boolean(enabled)),
+  findInPage: (query, options) => ipcRenderer.invoke('anakot:find-in-page', query, options),
+  stopFindInPage: () => ipcRenderer.invoke('anakot:find-in-page:stop'),
+  onFoundInPage: callback => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('anakot:found-in-page', listener)
+    return () => ipcRenderer.removeListener('anakot:found-in-page', listener)
+  },
   requestMicrophoneAccess: () => ipcRenderer.invoke('anakot:requestMicrophoneAccess'),
   readFileDataUrl: filePath => ipcRenderer.invoke('anakot:readFileDataUrl', filePath),
   readFileText: filePath => ipcRenderer.invoke('anakot:readFileText', filePath),

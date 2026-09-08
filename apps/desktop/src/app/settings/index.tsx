@@ -1,11 +1,11 @@
 import { IconDownload, IconRefresh, IconUpload } from '@tabler/icons-react'
 import { useRef } from 'react'
 
-import { Tip } from '@/components/ui/tooltip'
 import { getAnakotConfigDefaults, getAnakotConfigRecord, saveAnakotConfig } from '@/anakot'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Discord, Globe, Info, KeyRound, PawPrint, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
+import { Archive, Discord, Globe, Info, KeyRound, Leaf, PawPrint, Settings2, Sparkles, Wrench, Zap } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -18,6 +18,7 @@ import { AppearanceSettings } from './appearance-settings'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
 import { DiscordRpcSettings } from './discord-rpc-settings'
+import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { McpSettings } from './mcp-settings'
@@ -38,6 +39,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'pets',
   'discord',
   'sessions',
+  'freeModels',
   'about'
 ]
 
@@ -193,6 +195,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             label={t.settings.nav.archivedChats}
             onClick={() => setActiveView('sessions')}
           />
+          <OverlayNavItem
+            active={activeView === 'freeModels'}
+            icon={Leaf}
+            label={t.settings.nav.freeModels ?? 'Free Models'}
+            onClick={() => setActiveView('freeModels')}
+          />
           <div className="my-2 h-px bg-border/30" />
           <OverlayNavItem
             active={activeView === 'about'}
@@ -259,6 +267,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <PetSettings />
           ) : activeView === 'discord' ? (
             <DiscordRpcSettings />
+          ) : activeView === 'freeModels' ? (
+            <FreeModelSuiteSettings gateway={gateway} onMainModelChanged={onMainModelChanged} />
           ) : (
             <SessionsSettings />
           )}

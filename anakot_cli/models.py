@@ -908,6 +908,7 @@ class ProviderEntry(NamedTuple):
 
 CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("lmstudio", "LM Studio", "LM Studio (Local desktop app with built-in model server)"),
+    ProviderEntry("omniroute", "Omni Route", "Omni Route (Local OpenAI-compatible model gateway)"),
     ProviderEntry("ollama-cloud", "Ollama Cloud", "Ollama Cloud (Cloud-hosted open models, ollama.com)"),
     ProviderEntry("callmemo", "callmemo Portal", "callmemo Portal (Everything your agent needs, 300+ models with bundled tool use)"),
     ProviderEntry("openrouter", "OpenRouter", "OpenRouter (Pay-per-use API aggregator)"),
@@ -1417,13 +1418,23 @@ def _resolve_openrouter_api_key() -> str:
     return os.getenv("OPENROUTER_API_KEY", "").strip()
 
 
+def _resolve_nous_pricing_credentials() -> tuple[str, str]:
+    """Return (api_key, base_url) for callmemo/nous pricing fetch.
 
+    Reads ``NOUS_API_KEY`` and ``NOUS_BASE_URL`` env vars.
+    Falls back to the default Portal inference endpoint when
+    NOUS_BASE_URL is unset so the function never crashes.
+    """
+    api_key = os.getenv("NOUS_API_KEY", "").strip()
+    base_url = os.getenv("NOUS_BASE_URL", "").strip() or "https://inference-api.callmemo.ai"
+    return api_key, base_url
 
 
 def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> dict[str, dict[str, str]]:
     """Return live pricing for providers that support it (openrouter, nous, novita)."""
     normalized = normalize_provider(provider)
-    if normalized == "openrouter":
+    # "nous" is the Anakot slug for callmemo — treat as alias
+    if normalized in ("openrouter",):
         return fetch_models_with_pricing(
             api_key=_resolve_openrouter_api_key(),
             base_url="https://openrouter.ai/api",
@@ -1431,7 +1442,7 @@ def get_pricing_for_provider(provider: str, *, force_refresh: bool = False) -> d
         )
     if normalized == "novita":
         return _fetch_novita_pricing(force_refresh=force_refresh)
-    if normalized == "callmemo":
+    if normalized in ("callmemo", "nous"):
         api_key, base_url = _resolve_nous_pricing_credentials()
         if base_url:
             # callmemo base_url typically looks like https://inference-api.callmemo.ai/v1
@@ -2128,6 +2139,24 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False) 
         live = fetch_ollama_cloud_models(force_refresh=force_refresh)
         if live:
             return live
+    if normalized == "omniroute":
+        # Omni Route publishes its virtual auto/* routing templates through
+        # the OpenAI-compatible /v1/models endpoint. Use that live catalog so
+        # newly added templates appear without an Anakot release.
+        try:
+            from anakot_cli.auth import resolve_api_key_provider_credentials
+
+            creds = resolve_api_key_provider_credentials("omniroute")
+            api_key = str(creds.get("api_key") or "").strip()
+            base_url = str(creds.get("base_url") or "").strip()
+            if api_key and base_url:
+                live = fetch_api_models(api_key, base_url)
+                if live:
+                    return live
+        except Exception:
+            pass
+        # Omni Route's catalog is dynamic; do not invent a static fallback.
+        return []
     if normalized in ("openai", "openai-api"):
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if api_key:
@@ -2400,10 +2429,10 @@ def cached_provider_model_ids(
     entry = cache.get(normalized)
     now = time.time()
 
-    # OpenRouter and similar aggregators can change their model inventory
+    # Aggregators and routing gateways can change their model inventory
     # independently of the local credential fingerprint. Always force a fresh
     # lookup for these providers so the picker doesn't get stuck on stale rows.
-    should_force_refresh = bool(force_refresh or normalized == "openrouter")
+    should_force_refresh = bool(force_refresh or normalized in {"openrouter", "omniroute"})
 
     if (
         not should_force_refresh

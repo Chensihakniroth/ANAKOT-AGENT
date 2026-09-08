@@ -1,33 +1,53 @@
 import { Codicon } from '@/components/ui/codicon'
 
+export type MobileNavTab = 'chat' | 'sessions' | 'more'
+
 interface BottomNavProps {
+  activeTab: MobileNavTab
+  onChatClick: () => void
   onSessionsClick: () => void
-  onSettingsClick: () => void
+  onMoreClick: () => void
 }
 
-const navItemClass =
-  'flex flex-col items-center gap-0.5 text-[0.6rem] min-w-0 px-3 py-1 rounded-md transition-colors'
-const activeClass = 'text-(--ui-text-primary)'
-const inactiveClass = 'text-(--ui-text-tertiary)'
+const TABS = [
+  { id: 'chat', label: 'Chat', icon: 'comment' },
+  { id: 'sessions', label: 'Sessions', icon: 'list-tree' },
+  { id: 'more', label: 'More', icon: 'menu' }
+] as const satisfies ReadonlyArray<{ id: MobileNavTab; label: string; icon: string }>
 
-export function BottomNav({ onSessionsClick, onSettingsClick }: BottomNavProps) {
+const HANDLER_KEYS: Record<MobileNavTab, 'onChatClick' | 'onSessionsClick' | 'onMoreClick'> = {
+  chat: 'onChatClick',
+  sessions: 'onSessionsClick',
+  more: 'onMoreClick'
+}
+
+export function BottomNav({ activeTab, onChatClick, onSessionsClick, onMoreClick }: BottomNavProps) {
+  const handlers = { onChatClick, onSessionsClick, onMoreClick }
+
   return (
-    <nav className="flex items-center justify-around h-14 shrink-0 border-t border-(--ui-stroke-tertiary) bg-background px-2 pb-[env(safe-area-inset-bottom)]">
-      {/* Chat — always active on mobile since we show chat by default */}
-      <span className={`${navItemClass} ${activeClass}`}>
-        <Codicon name="comment" size="1.25rem" />
-        <span>Chat</span>
-      </span>
+    <nav className="flex h-16 shrink-0 items-stretch border-t border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_2px_rgba(0,0,0,0.04)]">
+      {TABS.map(tab => {
+        const active = activeTab === tab.id
 
-      <button className={`${navItemClass} ${inactiveClass}`} onClick={onSessionsClick} type="button">
-        <Codicon name="list-tree" size="1.25rem" />
-        <span>Sessions</span>
-      </button>
-
-      <button className={`${navItemClass} ${inactiveClass}`} onClick={onSettingsClick} type="button">
-        <Codicon name="gear" size="1.25rem" />
-        <span>Settings</span>
-      </button>
+        return (
+          <button
+            aria-current={active}
+            aria-label={tab.label}
+            className={[
+              'mx-1 my-1.5 flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 transition-colors',
+              active
+                ? 'bg-(--ui-control-hover-background) text-(--ui-accent)'
+                : 'text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)'
+            ].join(' ')}
+            key={tab.id}
+            onClick={handlers[HANDLER_KEYS[tab.id]]}
+            type="button"
+          >
+            <Codicon name={tab.icon} size="1.375rem" />
+            <span className="text-xs font-medium leading-none">{tab.label}</span>
+          </button>
+        )
+      })}
     </nav>
   )
 }

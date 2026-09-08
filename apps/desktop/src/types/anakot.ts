@@ -236,6 +236,8 @@ export interface ModelOptionProvider {
   /** Per-model option support, keyed by model id (present when the picker
    *  requested capabilities). Lets the UI gate fast/reasoning controls. */
   capabilities?: Record<string, ModelCapabilities>
+  /** Context-window size in tokens, keyed by model id. */
+  context_windows?: Record<string, number>
 }
 
 export interface ModelCapabilities {

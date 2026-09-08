@@ -19,7 +19,7 @@ const TAG_CLASSES = {
   li: 'marker:text-muted-foreground/60',
   ol: 'mb-2 list-decimal pl-5 last:mb-0',
   p: 'mb-1.5 leading-relaxed last:mb-0',
-  pre: 'mb-2 overflow-x-auto rounded-md border border-border/60 bg-background/70 p-2 font-mono text-[0.7rem] leading-[1.55] last:mb-0',
+  pre: 'mb-2 overflow-x-auto rounded-md border border-border/35 bg-background/70 p-1.5 font-mono text-[0.7rem] leading-[1.55] last:mb-0',
   td: 'px-2 py-1 align-top leading-snug',
   th: 'px-2 py-1 text-left text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80',
   thead: 'bg-muted/40',

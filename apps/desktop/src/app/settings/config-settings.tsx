@@ -388,86 +388,81 @@ export function ConfigSettings({
         </div>
       )}
       {activeSectionId === 'obsidian' && (
-        <div className="mb-6 rounded-lg border border-[var(--color-border)] p-4">
-          <ListRow
-            action={
-              <div className="flex items-center gap-2">
-                <Input
-                  className={cn('w-80', CONTROL_TEXT)}
-                  onChange={e => updateConfig(setNested(config, 'obsidian.vault_path', e.target.value))}
-                  placeholder="C:\Users\You\Documents\Obsidian Vault"
-                  value={String(getNested(config, 'obsidian.vault_path') || '')}
-                />
-                <button
-                  className="shrink-0 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-secondary)]"
-                  onClick={() => {
-                    const path = String(getNested(config, 'obsidian.vault_path') || '')
+        <div className="grid gap-1">
+          <div className="scroll-mt-6 rounded-lg" id="setting-field-obsidian.vault_path">
+            <ListRow
+              action={
+                <div className="flex items-center gap-2">
+                  <Input
+                    className={cn('w-80', CONTROL_TEXT)}
+                    onChange={e => updateConfig(setNested(config, 'obsidian.vault_path', e.target.value))}
+                    placeholder="C:\Users\You\Documents\Obsidian Vault"
+                    value={String(getNested(config, 'obsidian.vault_path') || '')}
+                  />
+                  <button
+                    className="shrink-0 rounded-md border border-[var(--color-border)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-bg-secondary)]"
+                    onClick={() => {
+                      const path = String(getNested(config, 'obsidian.vault_path') || '')
 
-                    if (!path) {
-                      notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path first.' })
-
-                      return
-                    }
-
-                    // Send IPC to main process to validate path
-                    window.anakotDesktop?.api?.({
-                      path: '/api/obsidian/validate-path',
-                      method: 'POST',
-                      body: { path }
-                    }).then((result: any) => {
-                      if (result?.ok && result?.valid) {
-                        notify({ kind: 'success', title: 'Valid Path', message: `Found ${result.count || 0} markdown notes in this folder.` })
-                      } else {
-                        notify({ kind: 'error', title: 'Invalid Path', message: result?.error || 'Path not found or not accessible.' })
+                      if (!path) {
+                        notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path first.' })
+                        return
                       }
-                    }).catch(() => {
-                      notify({ kind: 'error', title: 'Validation Failed', message: 'Could not validate path. Check the path exists.' })
-                    })
-                  }}
-                  type="button"
-                >
-                  Test
-                </button>
-                <button
-                  className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                  onClick={() => {
-                    const path = String(getNested(config, 'obsidian.vault_path') || '')
 
-                    if (!path) {
-                      notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path to your Obsidian vault folder.' })
+                      window.anakotDesktop?.api?.({
+                        path: '/api/obsidian/validate-path',
+                        method: 'POST',
+                        body: { path }
+                      }).then((result: any) => {
+                        if (result?.ok && result?.valid) {
+                          notify({ kind: 'success', title: 'Valid Path', message: `Found ${result.count || 0} markdown notes.` })
+                        } else {
+                          notify({ kind: 'error', title: 'Invalid Path', message: result?.error || 'Path not found or not accessible.' })
+                        }
+                      }).catch(() => {
+                        notify({ kind: 'error', title: 'Validation Failed', message: 'Could not validate path.' })
+                      })
+                    }}
+                    type="button"
+                  >
+                    Test
+                  </button>
+                  <button
+                    className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    onClick={() => {
+                      const path = String(getNested(config, 'obsidian.vault_path') || '')
 
-                      return
-                    }
-
-                    // Validate path format (basic check)
-                    if (!path.includes('\\') && !path.includes('/')) {
-                      notify({ kind: 'error', title: 'Invalid Path', message: 'The path does not look valid. Please enter a valid folder path.' })
-
-                      return
-                    }
-                    void (async () => {
-                      try {
-                        await saveAnakotConfig(config)
-                        onConfigSaved?.()
-                        notify({ kind: 'success', title: 'Saved', message: 'Obsidian vault path saved successfully.' })
-                      } catch (err) {
-                        notifyError(err, 'Failed to save vault path')
+                      if (!path) {
+                        notify({ kind: 'warning', title: 'Vault Path Required', message: 'Please enter a path first.' })
+                        return
                       }
-                    })()
-                  }}
-                  type="button"
-                >
-                  Save
-                </button>
-              </div>
-            }
-            description={FIELD_DESCRIPTIONS['obsidian.vault_path'] ?? 'Path to your Obsidian vault folder. The Markdown Library scans this directory for markdown notes and their connections.'}
-            title={FIELD_LABELS['obsidian.vault_path'] ?? 'Obsidian Vault Path'}
-            wide
-          />
-          <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            Enter the full path to your Obsidian vault folder. The Markdown Library scans this directory.
-          </p>
+
+                      if (!path.includes('\\') && !path.includes('/')) {
+                        notify({ kind: 'error', title: 'Invalid Path', message: 'Path does not look valid.' })
+                        return
+                      }
+
+                      void (async () => {
+                        try {
+                          await saveAnakotConfig(config)
+                          onConfigSaved?.()
+                          notify({ kind: 'success', title: 'Saved', message: 'Vault path saved.' })
+                        } catch (err) {
+                          notifyError(err, 'Failed to save vault path')
+                        }
+                      })()
+                    }}
+                    type="button"
+                  >
+                    Save
+                  </button>
+                </div>
+              }
+              description={FIELD_DESCRIPTIONS['obsidian.vault_path'] ?? 'Path to your Obsidian vault folder'}
+              title={FIELD_LABELS['obsidian.vault_path'] ?? 'Vault Path'}
+              wide
+            />
+          </div>
         </div>
       )}
       {activeSectionId === 'advanced' && (

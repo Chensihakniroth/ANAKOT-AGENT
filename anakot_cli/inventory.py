@@ -188,6 +188,7 @@ def _apply_capabilities(rows: list[dict]) -> None:
     for row in rows:
         slug = row.get("slug") or ""
         caps: dict[str, dict[str, bool]] = {}
+        context_windows: dict[str, int] = {}
 
         for model in row.get("models") or []:
             reasoning = True
@@ -196,6 +197,8 @@ def _apply_capabilities(rows: list[dict]) -> None:
                     meta = get_model_capabilities(slug, model)
                     if meta is not None:
                         reasoning = bool(meta.supports_reasoning)
+                        if meta.context_window > 0:
+                            context_windows[model] = meta.context_window
                 except Exception:
                     reasoning = True
 
@@ -205,6 +208,7 @@ def _apply_capabilities(rows: list[dict]) -> None:
             }
 
         row["capabilities"] = caps
+        row["context_windows"] = context_windows
 
 
 # ─── Internal: row post-processing ──────────────────────────────────────
@@ -316,6 +320,7 @@ def _apply_pricing(rows: list[dict]) -> None:
         check_callmemo_free_tier,
         get_pricing_for_provider,
         partition_callmemo_models_by_tier,
+        union_with_portal_free_recommendations,
     )
 
     # Resolve callmemo free-tier once (cached in models.py for the TTL window).
@@ -330,6 +335,41 @@ def _apply_pricing(rows: list[dict]) -> None:
             raw_pricing = get_pricing_for_provider(slug) or {}
         except Exception:
             raw_pricing = {}
+
+        if slug in ("nous", "callmemo"):
+            try:
+                if nous_free_tier is None:
+                    nous_free_tier = check_callmemo_free_tier(force_fresh=True)
+                row["free_tier"] = bool(nous_free_tier)
+                if nous_free_tier:
+                    portal_url = ""
+                    try:
+                        from anakot_cli.auth import get_provider_auth_state
+
+                        portal_url = (get_provider_auth_state(slug) or {}).get(
+                            "portal_base_url", ""
+                        )
+                    except Exception:
+                        pass
+                    models, raw_pricing = union_with_portal_free_recommendations(
+                        list(models), raw_pricing, portal_url
+                    )
+                    row["models"] = models
+                    row["total_models"] = len(models)
+
+                if nous_free_tier:
+                    _selectable, unavailable = partition_callmemo_models_by_tier(
+                        list(models), raw_pricing, free_tier=True
+                    )
+                    row["unavailable_models"] = unavailable
+                else:
+                    row["unavailable_models"] = []
+            except Exception:
+                # Tier detection failed — fail open (no gating) so the user
+                # is never blocked from picking a model.
+                row["free_tier"] = False
+                row["unavailable_models"] = []
+
         if not raw_pricing:
             continue
 
@@ -356,20 +396,3 @@ def _apply_pricing(rows: list[dict]) -> None:
         if formatted:
             row["pricing"] = formatted
 
-        if slug == "nous":
-            try:
-                if nous_free_tier is None:
-                    nous_free_tier = check_callmemo_free_tier(force_fresh=True)
-                row["free_tier"] = bool(nous_free_tier)
-                if nous_free_tier:
-                    _selectable, unavailable = partition_callmemo_models_by_tier(
-                        list(models), raw_pricing, free_tier=True
-                    )
-                    row["unavailable_models"] = unavailable
-                else:
-                    row["unavailable_models"] = []
-            except Exception:
-                # Tier detection failed — fail open (no gating) so the user
-                # is never blocked from picking a model.
-                row["free_tier"] = False
-                row["unavailable_models"] = []
