@@ -37,7 +37,7 @@ matching Anakot contracts exist:
 
 `npm run type-check --prefix apps/desktop` passes after the parity slice.
 
-The existing Electron platform suite still reports three pre-existing failures
-in `bootstrap-platform.test.cjs` and `hardening.test.cjs`; they concern the
-unpackaged `child_process` scan and sensitive-file expectations, not the new
-desktop contracts.
+The Electron platform suite passes 98/98 after fixing three pre-existing
+failures in `bootstrap-platform.test.cjs` and `hardening.test.cjs` (bare
+`require('child_process')` in main.cjs and dropped `.env` blocking in
+hardening.cjs).

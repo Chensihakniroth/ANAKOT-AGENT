@@ -80,7 +80,16 @@ function sensitiveFileBlockReason(filePath) {
     return 'AWS credential files are blocked.'
   }
 
+  if (basename === '.env') {
+    return '.env files are blocked because they commonly contain secrets.'
+  }
 
+  if (basename.startsWith('.env.')) {
+    const suffix = basename.slice('.env.'.length)
+    if (!SAFE_ENV_SUFFIXES.has(suffix)) {
+      return `${basename} is blocked because it appears to contain environment secrets.`
+    }
+  }
 
   if (/^id_(rsa|dsa|ecdsa|ed25519)(?:\..+)?$/.test(basename) && !basename.endsWith('.pub')) {
     return 'SSH private key files are blocked.'

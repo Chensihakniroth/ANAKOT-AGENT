@@ -7218,7 +7218,7 @@ ipcMain.handle('anakot:git:ship-info', async (_event, { cwd }) => {
     const root = await findGitRoot(rawPath)
     if (!root) return { ok: false, error: 'not a git repo' }
     // Check gh auth status
-    const cp = require('child_process')
+    const cp = require('node:child_process')
     const authResult = await new Promise(resolve => {
       cp.execFile('gh', ['auth', 'status'], { cwd: root, windowsHide: true, timeout: 10000 }, (err, stdout, stderr) => {
         resolve({ ok: !err, output: (stderr || stdout || '').trim() })
@@ -7254,7 +7254,7 @@ ipcMain.handle('anakot:git:create-pr', async (_event, { cwd, title, body }) => {
     const args = ['pr', 'create']
     if (title) args.push('--title', title)
     if (body) args.push('--body', body)
-    const cp = require('child_process')
+    const cp = require('node:child_process')
     const result = await new Promise(resolve => {
       cp.execFile('gh', args, { cwd: root, windowsHide: true, timeout: 30000 }, (err, stdout, stderr) => {
         resolve({ ok: !err, output: (stdout || '').trim(), error: err ? (stderr || stdout || '').trim() : undefined })
