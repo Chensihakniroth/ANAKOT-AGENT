@@ -14,6 +14,12 @@ than by replacing the whole `apps/desktop` tree.
   `powerSaveBlocker`.
 - Completion sound preference and a lightweight opt-out completion cue when the
   active chat turn finishes.
+- Wake-word controls, backend status, and shell-level listening/detection
+  feedback using the existing `wake.*` gateway contract.
+- Webhooks settings with create, event filters, delivery target, enable/disable,
+  delete, refresh, URL copy, and one-time secret display.
+- Keyboard session switching with Ctrl/Cmd+Tab and Ctrl/Cmd+Shift+Tab.
+- Keep-awake and completion-sound controls in desktop settings.
 - Existing Anakot ports verified locally: projects/worktrees, Quick Entry,
   reactions, terminal settings, window opacity, profiles, NotebookLLM, and
   Discord Rich Presence.
@@ -23,12 +29,12 @@ than by replacing the whole `apps/desktop` tree.
 These upstream Hermes features should not be copied into the renderer until the
 matching Anakot contracts exist:
 
-- Wake indicator: `wake.start`, `wake.stop`, `wake.status`, and the native
-  indicator window lifecycle.
+- Native wake indicator window lifecycle (the backend controls and shell pill
+  are implemented; the separate always-on-top indicator remains).
 - Session import: foreign transcript discovery, upload, conversion, and
   persistence APIs.
-- Webhooks: webhook CRUD, enable/restart responses, delivery routes, and
-  profile-scoped RPC/API methods.
+- Webhooks: the core Anakot REST CRUD surface is now wired into settings;
+  profile-scoped remote routing and restart orchestration remain.
 - Hermes connection fleet and retained remote-session ownership model.
 - Managed local-model runtime and provider wait state.
 - Learning journey UI actions that currently exceed Anakot's Starmap API.

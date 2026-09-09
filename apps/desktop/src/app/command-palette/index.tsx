@@ -37,11 +37,13 @@ import {
   Settings2,
   Sun,
   Users,
+  Download,
   Wrench,
   Zap
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $commandPaletteOpen, closeCommandPalette, setCommandPaletteOpen } from '@/store/command-palette'
+import { setSessionImportOpen } from '@/store/session-import'
 import { type ThemeMode, useTheme } from '@/themes/context'
 import { PetPalettePage } from './pet-palette-page'
 
@@ -287,6 +289,16 @@ export function CommandPalette() {
             keywords: ['companion', 'pet', 'sprite', 'mascot'],
             label: t.settings.appearance.pet.title,
             to: 'pet'
+          },
+          {
+            icon: Download,
+            id: 'nav-import-session',
+            keywords: ['import', 'session', 'claude', 'codex', 'transcript', 'foreign'],
+            label: 'Import Foreign Session',
+            run: () => {
+              setCommandPaletteOpen(false)
+              setSessionImportOpen(true)
+            }
           }
         ]
       },

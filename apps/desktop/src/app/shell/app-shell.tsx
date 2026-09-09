@@ -1,9 +1,11 @@
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, type ReactNode, useCallback, useMemo, useSyncExternalStore } from 'react'
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-import { NotificationStack } from '@/components/notifications'
 import { FindBar } from '@/components/find-bar'
+import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
+import { FloatingPet } from '@/components/pet/floating-pet'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import {
   $fileBrowserOpen,
@@ -14,15 +16,19 @@ import {
   setSidebarOpen
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
-import { $selectedStoredSessionId, $connection, $sessions } from '@/store/session'
+import { $connection, $selectedStoredSessionId, $sessions } from '@/store/session'
+import { sessionTitle } from '@/lib/chat-runtime'
+import { useDiscordRpc } from '@/lib/discord-rpc'
+import { $wakeFired, $wakeWord } from '@/store/wake-word'
+
+import { sessionRoute } from '../routes'
 
 import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
-import { FloatingPet } from '@/components/pet/floating-pet'
-import { useDiscordRpc } from '@/lib/discord-rpc'
-import { sessionTitle } from '@/lib/chat-runtime'
+
+const KAOMOJIS = ['૮ • ﻌ - ა', '∪･ω･∪', '∪￣-￣∪', '꒰ᐢ. ̫ .ᐢ꒱', '∪･ｪ･∪', '(=`ω´=)']
 
 interface AppShellProps {
   activityBar?: ReactNode
@@ -38,6 +44,7 @@ interface AppShellProps {
 function subscribeWindowSize(cb: () => void) {
   window.addEventListener('resize', cb)
   window.addEventListener('fullscreenchange', cb)
+
   return () => {
     window.removeEventListener('resize', cb)
     window.removeEventListener('fullscreenchange', cb)
@@ -67,48 +74,74 @@ export function AppShell({
 
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
   const sessions = useStore($sessions)
-  const activeSession = selectedStoredSessionId
-    ? sessions.find(s => s.id === selectedStoredSessionId)
-    : null
+  const navigate = useNavigate()
+
+  const activeSession = selectedStoredSessionId ? sessions.find(s => s.id === selectedStoredSessionId) : null
+
   const sessionLabel = activeSession ? sessionTitle(activeSession) : null
 
-  const KAOMOJIS = [
-    '૮ • ﻌ - ა',
-    '∪･ω･∪',
-    '∪￣-￣∪',
-    '꒰ᐢ. ̫ .ᐢ꒱',
-    '∪･ｪ･∪',
-    '(=`ω´=)',
-  ]
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const modifier = event.metaKey || event.ctrlKey
+
+      if (!modifier || event.altKey || event.key !== 'Tab' || sessions.length < 2) {
+        return
+      }
+
+
+      event.preventDefault()
+      const currentIndex = sessions.findIndex(session => session.id === selectedStoredSessionId)
+      const direction = event.shiftKey ? -1 : 1
+      const start = currentIndex >= 0 ? currentIndex : 0
+      const nextIndex = (start + direction + sessions.length) % sessions.length
+      const next = sessions[nextIndex]
+
+      if (next) {
+        navigate(sessionRoute(next.id))
+
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [navigate, selectedStoredSessionId, sessions])
 
   const MAX_STATE_CHARS = 128
 
   const pickKaomoji = useCallback((seed: string): string => {
     let hash = 0
+
     for (let i = 0; i < seed.length; i++) {
-      hash = ((hash << 5) - hash) + seed.charCodeAt(i)
+      hash = (hash << 5) - hash + seed.charCodeAt(i)
       hash |= 0
     }
+
     return KAOMOJIS[Math.abs(hash) % KAOMOJIS.length]
   }, [])
 
-  const kaomoji = useMemo(
-    () => pickKaomoji(sessionLabel ?? 'idle'),
-    [sessionLabel, pickKaomoji],
-  )
+  const kaomoji = useMemo(() => pickKaomoji(sessionLabel ?? 'idle'), [sessionLabel, pickKaomoji])
 
   const stateText = useMemo(() => {
-    if (!sessionLabel) return kaomoji
+    if (!sessionLabel) {
+      return kaomoji
+    }
+
     const raw = `${kaomoji} ${sessionLabel}`
-    if (raw.length <= MAX_STATE_CHARS) return raw
+
+    if (raw.length <= MAX_STATE_CHARS) {
+      return raw
+    }
+
     // Truncate the title, leaving room for the kaomoji + space + …
     const maxTitleLen = MAX_STATE_CHARS - kaomoji.length - 1 - 1 // kaomoji + space + ellipsis
+
     return `${kaomoji} ${sessionLabel.slice(0, maxTitleLen)}…`
   }, [sessionLabel, kaomoji])
 
   useDiscordRpc({
     details: sessionLabel ? stateText : 'Chatting with Anakot',
-    state: sessionLabel ? 'Chatting with Anakot' : undefined,
+    state: sessionLabel ? 'Chatting with Anakot' : undefined
   })
 
   const titlebarControls = titlebarControlsPosition(connection?.windowButtonPosition, isFullscreen)
@@ -157,11 +190,12 @@ export function AppShell({
     >
       <TitlebarControls leftTools={leftTitlebarTools} onOpenSettings={onOpenSettings} tools={titlebarTools} />
 
-      <main
-        className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none"
-      >
+      <main className="relative z-3 flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background transition-none">
         {/* Content row: ActivityBar + PaneShell, offset below titlebar */}
-        <div className="flex min-h-0 flex-1 flex-row" style={{ paddingTop: `var(--titlebar-height, ${TITLEBAR_HEIGHT}px)` }}>
+        <div
+          className="flex min-h-0 flex-1 flex-row"
+          style={{ paddingTop: `var(--titlebar-height, ${TITLEBAR_HEIGHT}px)` }}
+        >
           {/* Activity Bar — fixed width icon rail */}
           {activityBar && (
             <div className="relative z-10 shrink-0" style={{ width: `${activityBarWidth}px` }}>
@@ -171,9 +205,7 @@ export function AppShell({
 
           {/* PaneShell — takes remaining width */}
           <div className="min-w-0 flex-1">
-            <PaneShell className="min-h-0 flex-1">
-              {children}
-            </PaneShell>
+            <PaneShell className="min-h-0 flex-1">{children}</PaneShell>
           </div>
         </div>
 
@@ -187,7 +219,35 @@ export function AppShell({
 
       <NotificationStack />
       <FindBar />
+      <WakeStatusPill />
       <FloatingPet />
     </SidebarProvider>
+  )
+}
+
+function WakeStatusPill() {
+  const wake = useStore($wakeWord)
+  const fired = useStore($wakeFired)
+  const listening = Boolean(wake.status?.listening)
+  const detected = Boolean(fired && Date.now() - fired.at < 2500)
+  const unavailable = Boolean(wake.status && !wake.status.requirements?.available)
+
+  if (!listening && !detected && !unavailable) {
+    return null
+  }
+
+  return (
+    <div
+      aria-live="polite"
+      className="fixed left-1/2 top-[var(--titlebar-height,2rem)] z-40 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 px-3 py-1 text-[0.68rem] text-muted-foreground shadow-md backdrop-blur"
+    >
+      <span className={detected ? 'text-primary' : unavailable ? 'text-destructive' : 'text-emerald-500'}>
+        {detected
+          ? `Wake detected${fired?.phrase ? `: ${fired.phrase}` : ''}`
+          : unavailable
+            ? 'Wake word unavailable'
+            : 'Wake word listening'}
+      </span>
+    </div>
   )
 }

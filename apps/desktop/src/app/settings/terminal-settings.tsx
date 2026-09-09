@@ -16,6 +16,8 @@ import {
   resetTerminalSettings,
   type TerminalCursorStyle
 } from '@/store/terminal-settings'
+import { $keepAwake, setKeepAwake } from '@/store/keep-awake'
+import { $completionSoundEnabled, setCompletionSoundEnabled } from '@/store/completion-sound'
 
 const CURSOR_OPTIONS: { id: TerminalCursorStyle; label: string }[] = [
   { id: 'block', label: 'Block' },
@@ -101,6 +103,8 @@ function TerminalPreview() {
 
 export function TerminalSettings() {
   const settings = useStore($terminalSettings)
+  const keepAwake = useStore($keepAwake)
+  const completionSoundEnabled = useStore($completionSoundEnabled)
   const [customFont, setCustomFont] = useState('')
 
   // Check if the current fontFamily matches one of the presets
@@ -111,6 +115,18 @@ export function TerminalSettings() {
     <SettingsContent>
       <div className="space-y-1 divide-y divide-border/30">
         <SectionHeading icon={Terminal} title="Terminal" />
+
+        <ListRow
+          action={<Switch checked={keepAwake} onCheckedChange={setKeepAwake} />}
+          description="Prevent the computer from sleeping while you leave Anakot running unattended."
+          title="Keep Computer Awake"
+        />
+
+        <ListRow
+          action={<Switch checked={completionSoundEnabled} onCheckedChange={setCompletionSoundEnabled} />}
+          description="Play a short sound when the active agent turn finishes."
+          title="Completion Sound"
+        />
 
         {/* Live Preview */}
         <ListRow

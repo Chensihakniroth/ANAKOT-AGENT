@@ -4343,6 +4343,82 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"status": "interrupted"})
 
 
+# ── Foreign Sessions: discovery, preview, and import ──────────────────
+@method("session.foreign.list")
+def _(rid, params: dict) -> dict:
+    from anakot_cli.foreign_sessions_browser import discover_foreign_sessions
+
+    try:
+        limit = int(params.get("limit") or 50)
+        items = discover_foreign_sessions(limit=limit)
+        return _ok(
+            rid,
+            {
+                "sessions": [
+                    {
+                        "handle": m.handle,
+                        "source": m.source,
+                        "title": m.title,
+                        "path": m.path,
+                        "modified_at": m.modified_at,
+                        "message_count": m.message_count,
+                        "cwd": m.cwd,
+                        "preview_turns": m.preview_turns,
+                    }
+                    for m in items
+                ]
+            },
+        )
+    except Exception as exc:
+        return _err(rid, 5000, f"failed to discover foreign sessions: {exc}")
+
+
+@method("session.foreign.preview")
+def _(rid, params: dict) -> dict:
+    from anakot_cli.foreign_sessions_browser import preview_foreign_session
+
+    handle_or_path = str(params.get("handle") or params.get("path") or "").strip()
+    if not handle_or_path:
+        return _err(rid, 4000, "handle or path required")
+    max_turns = int(params.get("max_turns") or 40)
+    try:
+        data = preview_foreign_session(handle_or_path, max_turns=max_turns)
+        return _ok(rid, data)
+    except Exception as exc:
+        return _err(rid, 5000, f"preview failed: {exc}")
+
+
+@method("session.foreign.import")
+def _(rid, params: dict) -> dict:
+    from anakot_cli.foreign_sessions import import_foreign_session
+    from anakot_cli.foreign_sessions_browser import resolve_handle_to_path
+
+    handle_or_path = str(params.get("handle") or params.get("path") or "").strip()
+    if not handle_or_path:
+        return _err(rid, 4000, "handle or path required")
+
+    path = resolve_handle_to_path(handle_or_path)
+    if not path or not path.exists():
+        return _err(rid, 4004, f"transcript not found: {handle_or_path}")
+
+    db = _get_db()
+    if db is None:
+        return _db_unavailable_error(rid, code=5008)
+
+    title = params.get("title")
+    source = params.get("source")
+    try:
+        summary = import_foreign_session(
+            file_path=path,
+            db=db,
+            source=source,
+            title=title,
+        )
+        return _ok(rid, summary)
+    except Exception as exc:
+        return _err(rid, 5000, f"import failed: {exc}")
+
+
 # ── Delegation: subagent tree observability + controls ───────────────
 # Powers the TUI's /agents overlay (see ui-tui/src/components/agentsOverlay).
 # The registry lives in tools/delegate_tool — these handlers are thin
@@ -4386,6 +4462,49 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 4000, "subagent_id required")
     ok = interrupt_subagent(subagent_id)
     return _ok(rid, {"found": ok, "subagent_id": subagent_id})
+
+
+_SUBAGENT_TAIL_BYTES = 16384
+
+
+@method("subagent.list")
+def _(rid, params: dict) -> dict:
+    from tools.delegate_tool import list_active_subagents
+
+    session_id = str(params.get("session_id") or "").strip()
+    records = list_active_subagents()
+    if session_id:
+        records = [r for r in records if r.get("owner_session_id") == session_id or not r.get("owner_session_id")]
+    return _ok(rid, {
+        "subagents": records,
+        "delegations": [],
+    })
+
+
+@method("subagent.tail")
+def _(rid, params: dict) -> dict:
+    from tools.delegate_tool import _active_subagents, _active_subagents_lock
+
+    subagent_id = str(params.get("subagent_id") or "").strip()
+    if not subagent_id:
+        return _err(rid, 4000, "subagent_id required")
+    result = {"subagent_id": subagent_id, "available": False, "text": "", "truncated": False}
+    with _active_subagents_lock:
+        record = _active_subagents.get(subagent_id)
+    if not record:
+        return _ok(rid, result)
+    agent = record.get("agent")
+    path = getattr(agent, "_live_transcript_path", None) if agent else None
+    if not path:
+        return _ok(rid, result)
+    try:
+        with open(path, "rb") as stream:
+            size = stream.seek(0, 2)
+            stream.seek(max(0, size - _SUBAGENT_TAIL_BYTES))
+            text = stream.read(_SUBAGENT_TAIL_BYTES).decode("utf-8", errors="ignore")
+            return _ok(rid, {**result, "available": True, "text": text, "truncated": size > _SUBAGENT_TAIL_BYTES})
+    except OSError:
+        return _ok(rid, result)
 
 
 # ── Spawn-tree snapshots: TUI-written, disk-persisted ────────────────

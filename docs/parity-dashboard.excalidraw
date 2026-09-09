@@ -1,0 +1,61 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "anakot-agent",
+  "elements": [
+    {"id":"header-1","type":"text","x":400,"y":30,"width":700,"height":40,"text":"Hermes ↔ Anakot Desktop Parity Dashboard","fontSize":24,"fontFamily":1,"textAlign":"center","strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    
+    {"id":"col-ank","type":"text","x":50,"y":100,"width":320,"height":30,"text":"🔵 ANAKOT DESKTOP (Current)","fontSize":18,"fontFamily":1,"strokeColor":"#00d4ff"},
+    {"id":"col-her","type":"text","x":730,"y":100,"width":320,"height":30,"text":"🟠 HERMES DESKTOP (Upstream)","fontSize":18,"fontFamily":1,"strokeColor":"#f0883e"},
+    
+    {"id":"sec-shell","type":"text","x":50,"y":150,"width":320,"height":24,"text":"🧱 Shell & Navigation","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    {"id":"sec-settings","type":"text","x":50,"y":250,"width":320,"height":24,"text":"⚙️ Settings","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    {"id":"sec-connect","type":"text","x":50,"y":350,"width":320,"height":24,"text":"🔌 Connectivity","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    {"id":"sec-awake","type":"text","x":50,"y":450,"width":320,"height":24,"text":"💤 Wake & Power","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    {"id":"sec-audio","type":"text","x":50,"y":550,"width":320,"height":24,"text":"🔊 Audio","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    {"id":"sec-data","type":"text","x":50,"y":650,"width":320,"height":24,"text":"📊 Data & Learning","fontSize":14,"fontFamily":1,"strokeColor":"#00d4ff","backgroundStyle":"hachure"},
+    
+    {"id":"sec-shell-h","type":"text","x":730,"y":150,"width":320,"height":24,"text":"🧱 Shell & Navigation","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    {"id":"sec-settings-h","type":"text","x":730,"y":250,"width":320,"height":24,"text":"⚙️ Settings","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    {"id":"sec-connect-h","type":"text","x":730,"y":350,"width":320,"height":24,"text":"🔌 Connectivity","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    {"id":"sec-awake-h","type":"text","x":730,"y":450,"width":320,"height":24,"text":"💤 Wake & Power","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    {"id":"sec-audio-h","type":"text","x":730,"y":550,"width":320,"height":24,"text":"🔊 Audio","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    {"id":"sec-data-h","type":"text","x":730,"y":650,"width":320,"height":24,"text":"📊 Data & Learning","fontSize":14,"fontFamily":1,"strokeColor":"#f0883e","backgroundStyle":"hachure"},
+    
+    {"id":"a-sessions","type":"rect","x":70,"y":178,"width":140,"height":48,"text":"Sessions + Quick Entry","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-projects","type":"rect","x":230,"y":178,"width":130,"height":48,"text":"Projects / Worktrees","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-find","type":"rect","x":70,"y":278,"width":140,"height":48,"text":"Find-in-Page","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-settings-ui","type":"rect","x":230,"y":278,"width":130,"height":48,"text":"Settings UI","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-webhooks","type":"rect","x":70,"y":378,"width":140,"height":48,"text":"Webhooks CRUD","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-gateway","type":"rect","x":230,"y":378,"width":130,"height":48,"text":"Gateway Switcher","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-keepawake","type":"rect","x":70,"y":478,"width":140,"height":48,"text":"Keep-Awake","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-wake","type":"rect","x":230,"y":478,"width":130,"height":48,"text":"Wake-Word Controls","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-completesound","type":"rect","x":70,"y":578,"width":140,"height":48,"text":"Completion Sound","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-starmap","type":"rect","x":230,"y":578,"width":130,"height":48,"text":"Starmap Store","fontSize":11,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"a-sessionimport","type":"rect","x":70,"y":678,"width":140,"height":48,"text":"Session Import","fontSize":11,"fillStyle":"hachure","strokeColor":"#f87171"},
+    {"id":"a-learning","type":"rect","x":230,"y":678,"width":130,"height":48,"text":"Learning Journey","fontSize":11,"fillStyle":"hachure","strokeColor":"#f87171"},
+    
+    {"id":"h-sessions","type":"rect","x":750,"y":178,"width":140,"height":48,"text":"Sessions + Nav","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-projects","type":"rect","x":910,"y":178,"width":130,"height":48,"text":"Projects / Worktrees","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-find","type":"rect","x":750,"y":278,"width":140,"height":48,"text":"Find-in-Page","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-settings-ui","type":"rect","x":910,"y":278,"width":130,"height":48,"text":"Settings UI","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-webhooks","type":"rect","x":750,"y":378,"width":140,"height":48,"text":"Webhooks Full","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-gateway","type":"rect","x":910,"y":378,"width":130,"height":48,"text":"Connection Fleet","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-keepawake","type":"rect","x":750,"y":478,"width":140,"height":48,"text":"Keep-Awake","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-wakeind","type":"rect","x":910,"y":478,"width":130,"height":48,"text":"Wake Indicator Window","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-completesound","type":"rect","x":750,"y":578,"width":140,"height":48,"text":"Completion Sound","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-starmap","type":"rect","x":910,"y":578,"width":130,"height":48,"text":"Starmap","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-sessionimport","type":"rect","x":750,"y":678,"width":140,"height":48,"text":"Session Import","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"h-learning","type":"rect","x":910,"y":678,"width":130,"height":48,"text":"Learning Journey","fontSize":11,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    
+    {"id":"leg-done","type":"rect","x":50,"y":760,"width":20,"height":20,"fillStyle":"hachure","strokeColor":"#00d4ff"},
+    {"id":"leg-done-text","type":"text","x":80,"y":763,"width":200,"height":20,"text":"✅ Implemented in Anakot","fontSize":12},
+    {"id":"leg-block","type":"rect","x":320,"y":760,"width":20,"height":20,"fillStyle":"hachure","strokeColor":"#f87171"},
+    {"id":"leg-block-text","type":"text","x":350,"y":763,"width":200,"height":20,"text":"🔴 Needs Backend Work","fontSize":12},
+    {"id":"leg-her","type":"rect","x":540,"y":760,"width":20,"height":20,"fillStyle":"hachure","strokeColor":"#f0883e"},
+    {"id":"leg-her-text","type":"text","x":570,"y":763,"width":200,"height":20,"text":"🟠 Hermes Feature (not yet ported)","fontSize":12}
+  ],
+  "appState": {
+    "viewBackgroundColor": "#0a0e27"
+  }
+}

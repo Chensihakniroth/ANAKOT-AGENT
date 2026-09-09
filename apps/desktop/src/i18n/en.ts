@@ -255,14 +255,18 @@ export const en: Translations = {
       providerApiKeys: 'API keys',
       gateway: 'Gateway',
       apiKeys: 'Tools & Keys',
+      keys: 'Keys',
       keysTools: 'Tools',
       keysSettings: 'Settings',
       mcp: 'MCP',
       toolsets: 'Tool Backends',
       pets: 'Pets',
+      browserProfile: 'Browser Profile',
+      notifications: 'Notifications',
       discord: 'Discord Presence',
       archivedChats: 'Archived Chats',
       freeModels: 'Free Models',
+      webhooks: 'Webhooks',
       about: 'About'
     },
     sections: {

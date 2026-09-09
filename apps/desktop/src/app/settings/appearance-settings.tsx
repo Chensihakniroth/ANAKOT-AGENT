@@ -11,13 +11,6 @@ import { triggerHaptic } from '@/lib/haptics'
 import { Check, Download, ImageIcon, Palette, Plus, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
-import {
-  NATIVE_NOTIFICATION_KINDS,
-  $nativeNotifyPrefs,
-  setNativeNotifyEnabled,
-  setNativeNotifyKind,
-  type NativeNotificationKind
-} from '@/store/native-notifications'
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
 import { $embedAllowed, $embedMode, clearEmbedAllowed, setEmbedMode, type EmbedMode } from '@/store/embed-consent'
 import { useTheme } from '@/themes/context'
@@ -603,9 +596,6 @@ export function AppearanceSettings({ gateway }: { gateway?: AnakotGateway | null
 
           {/* Window Translucency */}
           <WindowOpacitySlider />
-
-          {/* Notification Type Toggles */}
-          <NotificationToggleList />
         </div>
       </div>
     </SettingsContent>
@@ -655,75 +645,6 @@ function WindowOpacitySlider() {
       }
       description="Adjust the transparency level of the application window (20% – 100%)"
       title="Window Opacity"
-    />
-  )
-}
-
-function NotificationToggleList() {
-  const prefs = useStore($nativeNotifyPrefs)
-
-  const handleKindToggle = useCallback((kind: NativeNotificationKind, value: boolean) => {
-    setNativeNotifyKind(kind, value)
-    triggerHaptic('selection')
-  }, [])
-
-  const handleMasterToggle = useCallback((value: boolean) => {
-    setNativeNotifyEnabled(value)
-    triggerHaptic('selection')
-  }, [])
-
-  const labels: Record<NativeNotificationKind, string> = {
-    approval: 'Tool Approvals',
-    backgroundDone: 'Background Tasks',
-    input: 'Input Prompts',
-    turnDone: 'Replies Finished',
-    turnError: 'Errors'
-  }
-
-  const descriptions: Record<NativeNotificationKind, string> = {
-    approval: 'When the agent needs approval for a tool',
-    backgroundDone: 'When background tasks complete',
-    input: 'When the agent needs your input',
-    turnDone: 'When a reply finishes while you\u2019re away',
-    turnError: 'When a reply fails'
-  }
-
-  return (
-    <ListRow
-      below={
-        <div className="mt-3 grid gap-2">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2">
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-foreground">Native notifications</div>
-              <div className="text-[0.65rem] leading-tight text-muted-foreground">Master switch for all system toasts</div>
-            </div>
-            <Switch
-              checked={prefs.enabled}
-              onCheckedChange={handleMasterToggle}
-              size="xs"
-            />
-          </div>
-          {NATIVE_NOTIFICATION_KINDS.map(kind => (
-            <div
-              className="flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2"
-              key={kind}
-            >
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-foreground">{labels[kind]}</div>
-                <div className="text-[0.65rem] leading-tight text-muted-foreground">{descriptions[kind]}</div>
-              </div>
-              <Switch
-                checked={prefs.kinds[kind]}
-                onCheckedChange={v => handleKindToggle(kind, v)}
-                size="xs"
-              />
-            </div>
-          ))}
-        </div>
-      }
-      description="Enable or disable native OS notifications for each type of event"
-      title="Notifications"
-      wide
     />
   )
 }

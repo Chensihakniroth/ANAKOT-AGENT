@@ -6319,6 +6319,77 @@ class AnakotCLI:
             return self._fast_command_available()
         return True
 
+    def _handle_context_command(self, cmd_original: str = ""):
+        """Handle /context — deep context-window view with glyph grid and category breakdown."""
+        args = cmd_original.split(None, 1)
+        expanded = len(args) > 1 and args[1].strip().lower() in {"all", "full", "details"}
+        if not getattr(self, "agent", None):
+            print("(._.) No active agent -- send a message first.")
+            return
+
+        try:
+            from agent.context_breakdown import (
+                compute_session_context_breakdown,
+                compute_context_details,
+                render_context_breakdown_lines,
+            )
+            payload = compute_session_context_breakdown(self.agent, getattr(self, "conversation_history", []))
+            details = compute_context_details(self.agent) if expanded else None
+            lines = render_context_breakdown_lines(payload, details=details, grid=True)
+            print()
+            for line in lines:
+                print(f"  {line}")
+            print()
+        except Exception as exc:
+            print(f"(._.) Failed to compute context breakdown: {exc}")
+
+    def _handle_learn_command(self, cmd_original: str = ""):
+        """Handle /learn — inject a skill-distillation meta-prompt as the next user turn."""
+        raw_args = cmd_original.split(None, 1)[1].strip() if len(cmd_original.split(None, 1)) > 1 else ""
+
+        try:
+            from agent.learn_prompt import build_learn_prompt, parse_learn_args
+
+            parsed = parse_learn_args(raw_args)
+            prompt = build_learn_prompt(
+                parsed["user_request"],
+                from_chat=parsed["from_chat"],
+                from_dir=parsed.get("from_dir"),
+                from_url=parsed.get("from_url"),
+            )
+
+            # Inject as the next user turn
+            if hasattr(self, "_pending_input"):
+                self._pending_input.put(prompt)
+                source_desc = []
+                if parsed["from_chat"]:
+                    source_desc.append("conversation")
+                if parsed.get("from_dir"):
+                    source_desc.append(parsed["from_dir"])
+                if parsed.get("from_url"):
+                    source_desc.append(parsed["from_url"])
+                print(f"\n  ⚡ Learning from: {', '.join(source_desc) or 'context'}")
+                print("  The agent will analyze the source and create a reusable skill.\n")
+            else:
+                print("(._.) Cannot queue learn prompt — no input buffer available.")
+        except Exception as exc:
+            print(f"(._.) Failed to build learn prompt: {exc}")
+
+    def _handle_journey_command(self, cmd_original: str = ""):
+        """Handle /journey — learning timeline with subcommands."""
+        raw_args = cmd_original.split(None, 1)[1].strip() if len(cmd_original.split(None, 1)) > 1 else ""
+
+        try:
+            from anakot_cli.journey import handle_journey_subcommand
+
+            lines = handle_journey_subcommand(raw_args)
+            print()
+            for line in lines:
+                print(line)
+            print()
+        except Exception as exc:
+            print(f"(._.) Failed to render journey: {exc}")
+
     def show_help(self):
         """Display help information with categorized commands."""
         from anakot_cli.commands import COMMANDS_BY_CATEGORY
@@ -7187,6 +7258,49 @@ class AnakotCLI:
                 return
             if not self._show_recent_sessions(reason="sessions"):
                 _cprint("  (._.) No previous sessions yet.")
+            return
+
+        # /sessions import [target] — discover or import foreign session
+        if sub.startswith("import"):
+            if not self._session_db:
+                from anakot_state import format_session_db_unavailable
+                _cprint(f"  {format_session_db_unavailable()}")
+                return
+            from anakot_cli.foreign_sessions import import_foreign_session
+            from anakot_cli.foreign_sessions_browser import discover_foreign_sessions, resolve_handle_to_path
+            import_parts = arg.split(None, 1)
+            target = import_parts[1].strip() if len(import_parts) > 1 else ""
+
+            if not target:
+                items = discover_foreign_sessions(limit=15)
+                if not items:
+                    _cprint("  (._.) No foreign sessions detected in ~/.claude or ~/.codex.")
+                    _cprint("  Import any transcript file directly: /sessions import <path/to/transcript.jsonl>")
+                    return
+                _cprint("  Found foreign sessions:")
+                for idx, item in enumerate(items, 1):
+                    _cprint(f"  [{idx}] ({item.source}) {item.title} — {item.message_count} msgs ({item.handle})")
+                _cprint("\n  To import: /sessions import <number|handle|path>")
+                return
+
+            # Check if target is a 1-based index from discovery
+            if target.isdigit():
+                idx = int(target)
+                items = discover_foreign_sessions(limit=50)
+                if 1 <= idx <= len(items):
+                    target = items[idx - 1].path
+
+            resolved_path = resolve_handle_to_path(target)
+            if not resolved_path or not resolved_path.exists():
+                _cprint(f"  (._.) Could not find session file or handle: {target}")
+                return
+
+            try:
+                res = import_foreign_session(file_path=resolved_path, db=self._session_db)
+                _cprint(f"  (≧◡≦) Successfully imported '{res['title']}' ({res['message_count']} messages) as {res['session_id']}.")
+                _cprint(f"  Resume with: /resume {res['session_id']}")
+            except Exception as exc:
+                _cprint(f"  (ಥ﹏ಥ) Import failed: {exc}")
             return
 
         # /sessions <id_or_title> behaves the same as /resume <id_or_title>.
@@ -9046,6 +9160,12 @@ class AnakotCLI:
             self._show_gateway_status()
         elif canonical == "status":
             self._show_session_status()
+        elif canonical == "context":
+            self._handle_context_command(cmd_original)
+        elif canonical == "learn":
+            self._handle_learn_command(cmd_original)
+        elif canonical == "journey":
+            self._handle_journey_command(cmd_original)
         elif canonical == "statusbar":
             self._status_bar_visible = not self._status_bar_visible
             state = "visible" if self._status_bar_visible else "hidden"

@@ -110,6 +110,10 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("subgoal", "Add or manage extra criteria on the active goal", "Session",
                args_hint="[text | remove N | clear]"),
     CommandDef("status", "Show session info", "Session"),
+    CommandDef("context", "Show detailed context window view with usage gauge, category breakdown, and stats",
+               "Session", aliases=("ctx",), args_hint="[all]"),
+    CommandDef("journey", "Open the learning journey timeline", "Session",
+               aliases=("learning", "memory-graph"), cli_only=True),
     CommandDef("whoami", "Show your slash command access (admin / user)", "Info"),
     CommandDef("profile", "Show active profile name and home directory", "Info"),
     CommandDef("sethome", "Set this chat as the home channel", "Session",
@@ -118,7 +122,8 @@ COMMAND_REGISTRY: list[CommandDef] = [
                args_hint="[name]"),
 
     # Configuration
-    CommandDef("sessions", "Browse and resume previous sessions", "Session"),
+    CommandDef("sessions", "Browse, resume, or import foreign sessions", "Session",
+               args_hint="[list | import [path]]"),
 
     # Configuration
     CommandDef("config", "Show current configuration", "Configuration",
@@ -168,6 +173,8 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("skills", "Search, install, inspect, or manage skills",
                "Tools & Skills", cli_only=True,
                subcommands=("search", "browse", "inspect", "install", "audit")),
+    CommandDef("learn", "Learn a reusable skill from anything you describe (dirs, URLs, this chat, notes)",
+               "Tools & Skills", args_hint="<what to learn from>"),
     CommandDef("bundles", "List skill bundles (aliases /<name> for multiple skills)",
                "Tools & Skills"),
     CommandDef("cron", "Manage scheduled tasks", "Tools & Skills",

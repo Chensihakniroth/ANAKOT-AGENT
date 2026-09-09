@@ -1,192 +1,168 @@
 import { atom } from 'nanostores'
 
-import { persistString, storedString } from '@/lib/storage'
+import { persistBoolean, storedBoolean } from '@/lib/storage'
 
-import { $gateway } from './gateway'
-import { $activeSessionId } from './session'
+/**
+ * Native notification kinds supported by the Electron backend.
+ * These map to the defaults in main.cjs:
+ *   { message: true, task_complete: true, update: true, error: true, info: true }
+ */
+export const NATIVE_NOTIFICATION_KINDS = ['message', 'task_complete', 'update', 'error', 'info'] as const
+export type NativeNotificationKind = (typeof NATIVE_NOTIFICATION_KINDS)[number]
 
-// Native OS notifications (Electron `Notification`), separate from the in-app
-// toast feed in `notifications.ts`. Each kind toggles independently.
-export type NativeNotificationKind = 'approval' | 'backgroundDone' | 'input' | 'turnDone' | 'turnError'
-
-export const NATIVE_NOTIFICATION_KINDS: readonly NativeNotificationKind[] = [
-  'approval',
-  'input',
-  'turnDone',
-  'turnError',
-  'backgroundDone'
-]
-
-// Blocking prompts — surface even while focused if they're for another session.
-const ATTENTION_KINDS = new Set<NativeNotificationKind>(['approval', 'input'])
-
-export interface NativeNotificationPrefs {
-  enabled: boolean
-  kinds: Record<NativeNotificationKind, boolean>
+const NOTIFICATION_KIND_LABELS: Record<NativeNotificationKind, string> = {
+  message: 'New Messages',
+  task_complete: 'Task Complete',
+  update: 'Updates',
+  error: 'Errors',
+  info: 'Info'
 }
 
-const STORAGE_KEY = 'anakot:native-notifications'
-
-const DEFAULT_PREFS: NativeNotificationPrefs = {
-  enabled: true,
-  kinds: { approval: true, backgroundDone: true, input: true, turnDone: true, turnError: true }
+const NOTIFICATION_KIND_DESCRIPTIONS: Record<NativeNotificationKind, string> = {
+  message: 'When the assistant sends a new message in a background session.',
+  task_complete: 'When a background task or delegated subtask finishes.',
+  update: 'When an app update is available or has been applied.',
+  error: 'When an agent turn or tool call fails with an error.',
+  info: 'General informational notifications and system messages.'
 }
 
-function readPrefs(): NativeNotificationPrefs {
-  const raw = storedString(STORAGE_KEY)
+export function notificationKindLabel(kind: NativeNotificationKind): string {
+  return NOTIFICATION_KIND_LABELS[kind]
+}
 
-  if (!raw) {
-    return DEFAULT_PREFS
-  }
+export function notificationKindDescription(kind: NativeNotificationKind): string {
+  return NOTIFICATION_KIND_DESCRIPTIONS[kind]
+}
 
+const MASTER_KEY = 'anakot.desktop.nativeNotificationsEnabled'
+
+/** Master toggle — when off, no native notifications fire regardless of per-kind prefs. */
+export const $nativeNotificationsEnabled = atom(storedBoolean(MASTER_KEY, true))
+
+$nativeNotificationsEnabled.subscribe(enabled => {
+  persistBoolean(MASTER_KEY, enabled)
+})
+
+export function setNativeNotificationsEnabled(enabled: boolean): void {
+  $nativeNotificationsEnabled.set(enabled)
+}
+
+/** Per-kind notification prefs, loaded from the Electron backend. */
+export const $nativeNotifyPrefs = atom<Record<NativeNotificationKind, boolean>>({
+  message: true,
+  task_complete: true,
+  update: true,
+  error: true,
+  info: true
+})
+
+/** Load per-kind prefs from the Electron backend. */
+export async function loadNativeNotifyPrefs(): Promise<void> {
   try {
-    const parsed = JSON.parse(raw) as Partial<NativeNotificationPrefs>
-    const kinds = { ...DEFAULT_PREFS.kinds }
-
-    for (const kind of NATIVE_NOTIFICATION_KINDS) {
-      const value = parsed.kinds?.[kind]
-
-      if (typeof value === 'boolean') {
-        kinds[kind] = value
+    const prefs = await window.anakotDesktop?.getNotificationPrefs?.()
+    if (prefs && typeof prefs === 'object') {
+      const mapped: Partial<Record<NativeNotificationKind, boolean>> = {}
+      for (const kind of NATIVE_NOTIFICATION_KINDS) {
+        if (typeof prefs[kind] === 'boolean') {
+          mapped[kind] = prefs[kind]
+        }
+      }
+      if (Object.keys(mapped).length > 0) {
+        $nativeNotifyPrefs.set({ ...$nativeNotifyPrefs.get(), ...mapped } as Record<NativeNotificationKind, boolean>)
       }
     }
-
-    return {
-      enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_PREFS.enabled,
-      kinds
-    }
   } catch {
-    return DEFAULT_PREFS
+    // Backend unavailable — keep defaults.
   }
 }
 
-export const $nativeNotifyPrefs = atom<NativeNotificationPrefs>(readPrefs())
-
-function writePrefs(next: NativeNotificationPrefs) {
+/** Toggle a single notification kind and persist via IPC. */
+export async function setNativeNotifyKind(kind: NativeNotificationKind, enabled: boolean): Promise<void> {
+  const next = { ...$nativeNotifyPrefs.get(), [kind]: enabled }
   $nativeNotifyPrefs.set(next)
-  persistString(STORAGE_KEY, JSON.stringify(next))
-}
-
-export function setNativeNotifyEnabled(enabled: boolean) {
-  writePrefs({ ...$nativeNotifyPrefs.get(), enabled })
-}
-
-export function setNativeNotifyKind(kind: NativeNotificationKind, on: boolean) {
-  const prev = $nativeNotifyPrefs.get()
-  writePrefs({ ...prev, kinds: { ...prev.kinds, [kind]: on } })
-}
-
-// De-dupe replayed events for the same kind+session. Self-evicting: entries
-// older than the window are pruned on every dispatch, so the map can't grow.
-const THROTTLE_MS = 1000
-const lastFiredAt = new Map<string, number>()
-
-function throttled(key: string, now: number): boolean {
-  for (const [k, at] of lastFiredAt) {
-    if (now - at >= THROTTLE_MS) {
-      lastFiredAt.delete(k)
-    }
-  }
-
-  if (lastFiredAt.has(key)) {
-    return true
-  }
-
-  lastFiredAt.set(key, now)
-
-  return false
-}
-
-// "Backgrounded" = the user isn't on Anakot. `document.hidden` only flips when
-// minimized/occluded; an alt-tabbed window is visible-but-unfocused, so we also
-// check `document.hasFocus()`.
-function isBackgrounded(): boolean {
-  if (typeof document === 'undefined') {
-    return false
-  }
-
-  if (document.hidden) {
-    return true
-  }
-
-  return typeof document.hasFocus === 'function' && !document.hasFocus()
-}
-
-function shouldFire(kind: NativeNotificationKind, sessionId?: null | string, global = false): boolean {
-  // Global notifications aren't tied to a chat session (e.g. pet generation,
-  // which runs from the command center with no active conversation). They fire
-  // whenever the user is away, with no session-match requirement — otherwise a
-  // background run started without an open session would be silently dropped.
-  if (global) {
-    return isBackgrounded()
-  }
-
-  // Attention kinds break through for an off-screen session even while focused.
-  if (ATTENTION_KINDS.has(kind)) {
-    return isBackgrounded() || (Boolean(sessionId) && sessionId !== $activeSessionId.get())
-  }
-
-  // Completion kinds: only the active session, only while away — so a busy
-  // gateway (messaging, kanban, cron) can't spam a toast per background session.
-  return isBackgrounded() && Boolean(sessionId) && sessionId === $activeSessionId.get()
-}
-
-export interface NativeNotificationAction {
-  id: string
-  text: string
-}
-
-export interface NativeNotificationInput {
-  kind: NativeNotificationKind
-  title: string
-  body?: string
-  sessionId?: null | string
-  /**
-   * Not tied to a chat session (e.g. pet generation). Fires whenever the user
-   * is away, bypassing the session-match gate that completion kinds normally
-   * require.
-   */
-  global?: boolean
-  silent?: boolean
-  actions?: NativeNotificationAction[]
-}
-
-export function dispatchNativeNotification(input: NativeNotificationInput): void {
-  const prefs = $nativeNotifyPrefs.get()
-
-  if (!prefs.enabled || !prefs.kinds[input.kind]) {
-    return
-  }
-
-  if (!shouldFire(input.kind, input.sessionId, input.global)) {
-    return
-  }
-
-  if (throttled(`${input.kind}:${input.sessionId ?? (input.global ? 'global' : '')}`, Date.now())) {
-    return
-  }
-
-  void window.anakotDesktop?.notify({
-    actions: input.actions,
-    body: input.body,
-    kind: input.kind,
-    sessionId: input.sessionId ?? undefined,
-    silent: input.silent,
-    title: input.title
-  })
-}
-
-// Settings "send test" — bypasses gating. Returns whether the OS accepted it so
-// the panel can flag a silent permission failure instead of looking dead.
-export async function sendTestNativeNotification(title: string, body: string): Promise<boolean> {
-  const bridge = window.anakotDesktop
-
-  if (!bridge?.notify) {
-    return false
-  }
 
   try {
-    return await bridge.notify({ body, kind: 'turnDone', title })
+    await window.anakotDesktop?.setNotificationPrefs?.(next)
+  } catch {
+    // Best-effort persistence.
+  }
+}
+
+/** Reset all notification prefs to defaults. */
+export async function resetNativeNotifyPrefs(): Promise<void> {
+  const defaults: Record<NativeNotificationKind, boolean> = {
+    message: true,
+    task_complete: true,
+    update: true,
+    error: true,
+    info: true
+  }
+  $nativeNotifyPrefs.set(defaults)
+
+  try {
+    await window.anakotDesktop?.setNotificationPrefs?.(defaults)
+  } catch {
+    // Best-effort.
+  }
+}
+
+/**
+ * Map from Hermes/event dispatch kinds to the backend's native-notification pref keys.
+ * This lets the user's per-kind preferences gate every notification source.
+ */
+const KIND_TO_BACKEND: Record<string, string> = {
+  approval: 'message',
+  input: 'message',
+  turnDone: 'task_complete',
+  turnError: 'error'
+}
+
+/**
+ * Throttle state — tracks last-fire timestamp per `kind:sessionId` key.
+ * Prevents rapid-fire duplicates within 1 second.
+ */
+const lastFired = new Map<string, number>()
+const THROTTLE_MS = 1_000
+
+/**
+ * Dispatch a native OS notification, subject to the user's master toggle and
+ * per-kind preferences.
+ *
+ * The `kind` field is used to look up the closest backend pref key. Unknown
+ * kinds (or unmapped ones) default to `'info'`.
+ *
+ * Returns `true` if the notification was dispatched, `false` if it was
+ * suppressed (disabled, throttled, or no bridge available).
+ */
+export function dispatchNativeNotification(payload: {
+  kind: string
+  title: string
+  body: string
+  sessionId?: string | null
+}): boolean {
+  // Master toggle check
+  if (!$nativeNotificationsEnabled.get()) return false
+
+  const { kind, title, body, sessionId } = payload
+
+  // Per-kind pref check via backend key
+  const backendKey = KIND_TO_BACKEND[kind] ?? 'info'
+  const prefs = $nativeNotifyPrefs.get()
+  // Map the backend key back to our NativeNotificationKind for the prefs check
+  const mappedKind = (Object.keys(prefs) as NativeNotificationKind[]).find(k => k === backendKey)
+  if (mappedKind && !prefs[mappedKind]) return false
+
+  // Throttle: 1-second dedup per kind:sessionId
+  const throttleKey = `${kind}:${sessionId ?? ''}`
+  const now = Date.now()
+  const last = lastFired.get(throttleKey)
+  if (last && now - last < THROTTLE_MS) return false
+  lastFired.set(throttleKey, now)
+
+  // Fire via the Electron bridge
+  try {
+    window.anakotDesktop?.notify?.({ title, body, kind: backendKey })
+    return true
   } catch {
     return false
   }

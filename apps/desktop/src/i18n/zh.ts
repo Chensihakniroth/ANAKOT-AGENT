@@ -249,14 +249,18 @@ export const zh: Translations = {
       providerApiKeys: 'API 密钥',
       gateway: '网关',
       apiKeys: '工具与密钥',
+      keys: '密钥',
       keysTools: '工具',
       keysSettings: '设置',
       mcp: 'MCP',
       toolsets: '工具集',
       pets: '宠物',
+      browserProfile: '浏览器配置',
+      notifications: '通知',
       discord: 'Discord 状态',
       archivedChats: '已归档对话',
       freeModels: '免费模型',
+      webhooks: 'Webhooks',
       about: '关于'
     },
     sections: {

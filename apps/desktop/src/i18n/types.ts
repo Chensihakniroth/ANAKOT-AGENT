@@ -202,14 +202,18 @@ export interface Translations {
       providerApiKeys: string
       gateway: string
       apiKeys: string
+      keys: string
       keysTools: string
       keysSettings: string
       mcp: string
       toolsets: string
       pets: string
+      browserProfile: string
+      notifications: string
       discord: string
       archivedChats: string
       freeModels: string
+      webhooks: string
       about: string
     }
     sections: Record<string, string>

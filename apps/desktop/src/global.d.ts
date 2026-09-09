@@ -1,5 +1,31 @@
 export {}
 
+export interface GatewayFavorite {
+  id: string
+  name: string
+  type: 'local' | 'remote' | 'ssh' | 'cloud' | 'agent'
+  config: {
+    remoteUrl?: string
+    sshHost?: string
+    orgId?: string
+    agentId?: string
+  }
+  starred: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GatewayFavoriteInput {
+  name: string
+  type: 'local' | 'remote' | 'ssh' | 'cloud' | 'agent'
+  config?: {
+    remoteUrl?: string
+    sshHost?: string
+    orgId?: string
+    agentId?: string
+  }
+}
+
 declare global {
   interface Window {
     anakotDesktop: {
@@ -19,6 +45,11 @@ declare global {
       probeConnectionConfig: (remoteUrl: string) => Promise<DesktopConnectionProbeResult>
       oauthLoginConnectionConfig: (remoteUrl: string) => Promise<DesktopOauthLoginResult>
       oauthLogoutConnectionConfig: (remoteUrl?: string) => Promise<DesktopOauthLogoutResult>
+      listGatewayFavorites?: () => Promise<GatewayFavorite[]>
+      saveGatewayFavorite?: (payload: GatewayFavoriteInput) => Promise<GatewayFavorite>
+      deleteGatewayFavorite?: (id: string) => Promise<{ ok: boolean }>
+      reorderGatewayFavorites?: (ids: string[]) => Promise<GatewayFavorite[]>
+      toggleGatewayFavoriteStarred?: (id: string, starred: boolean) => Promise<GatewayFavorite | null>
       profile: {
         get: () => Promise<DesktopActiveProfile>
         // Persists the desktop's profile choice and relaunches the local

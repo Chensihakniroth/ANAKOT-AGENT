@@ -4,7 +4,7 @@ import type { AnakotGateway } from '@/anakot'
 import type { IconComponent } from '@/lib/icons'
 import type { EnvVarInfo } from '@/types/anakot'
 
-export type SettingsView = 'about' | 'discord' | 'freeModels' | 'gateway' | 'keys' | 'mcp' | 'pets' | 'providers' | 'sessions' | 'toolsets' | `config:${string}`
+export type SettingsView = 'about' | 'browserProfile' | 'discord' | 'freeModels' | 'gateway' | 'keys' | 'mcp' | 'notifications' | 'pets' | 'providers' | 'sessions' | 'toolsets' | 'webhooks' | `config:${string}`
 export type EnvPatch = Partial<Pick<EnvVarInfo, 'is_set' | 'redacted_value'>>
 
 export interface SettingsPageProps {

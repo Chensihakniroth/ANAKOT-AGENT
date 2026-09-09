@@ -8242,6 +8242,29 @@ class GatewayRunner:
         if canonical == "status":
             return await self._handle_status_command(event)
 
+        if canonical == "context":
+            return await self._handle_context_command(event)
+
+        if canonical == "learn":
+            # /learn rewrites the event to the skill-distillation meta-prompt
+            # and falls through to normal agent processing.
+            try:
+                from agent.learn_prompt import build_learn_prompt, parse_learn_args
+
+                raw_args = event.get_command_args().strip()
+                parsed = parse_learn_args(raw_args)
+                prompt = build_learn_prompt(
+                    parsed["user_request"],
+                    from_chat=parsed["from_chat"],
+                    from_dir=parsed.get("from_dir"),
+                    from_url=parsed.get("from_url"),
+                )
+                event.text = prompt
+                command = None  # fall through to normal agent processing
+            except Exception as exc:
+                logger.warning("/learn failed: %s", exc, exc_info=True)
+                return f"(._.) Failed to build learn prompt: {exc}"
+
         if canonical == "agents":
             return await self._handle_agents_command(event)
 
@@ -10537,6 +10560,35 @@ class GatewayRunner:
         ])
 
         return "\n".join(lines)
+
+    async def _handle_context_command(self, event: MessageEvent) -> str:
+        """Handle /context — context-window usage breakdown for messaging platforms."""
+        source = event.source
+        session_entry = self.session_store.get_or_create_session(source)
+        session_key = session_entry.session_key
+        agent = self._running_agents.get(session_key)
+
+        if agent is None or agent is _AGENT_PENDING_SENTINEL:
+            return "(._.) No active agent — send a message first."
+
+        try:
+            from agent.context_breakdown import (
+                compute_session_context_breakdown,
+                compute_context_details,
+                render_context_breakdown_lines,
+            )
+
+            raw_args = event.get_command_args().strip().lower()
+            expanded = raw_args in {"all", "full", "details"}
+
+            messages = getattr(agent, "_messages", None) or []
+            payload = compute_session_context_breakdown(agent, messages)
+            details = compute_context_details(agent) if expanded else None
+            lines = render_context_breakdown_lines(payload, details=details, grid=True)
+            return "\n".join(lines)
+        except Exception as exc:
+            logger.warning("/context failed: %s", exc, exc_info=True)
+            return f"(._.) Failed to compute context breakdown: {exc}"
 
     async def _handle_agents_command(self, event: MessageEvent) -> str:
         """Handle /agents command - list active agents and running tasks."""
