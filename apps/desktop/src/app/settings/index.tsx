@@ -24,6 +24,7 @@ import { SECTIONS } from './constants'
 import { DiscordRpcSettings } from './discord-rpc-settings'
 import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
+import { ConnectionsRegistryPanel } from './connections-registry'
 import { CustomEndpointsSettings } from './custom-endpoints-settings'
 import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
@@ -53,6 +54,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'notifications',
   'discord',
   'customEndpoints',
+  'connections',
   'freeModels',
   'webhooks',
   'about'
@@ -276,6 +278,13 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('customEndpoints')}
           />
           <OverlayNavItem
+            active={activeView === 'connections'}
+            icon={Globe}
+            label={t.settings.nav.connections ?? 'Connections'}
+            nested
+            onClick={() => setActiveView('connections')}
+          />
+          <OverlayNavItem
             active={activeView === 'webhooks'}
             icon={Globe}
             label={t.settings.nav.webhooks ?? 'Webhooks'}
@@ -353,10 +362,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <NotificationsSettings />
           ) : activeView === 'discord' ? (
             <DiscordRpcSettings />
-          ) : activeView === 'freeModels' ? (
-            <FreeModelSuiteSettings gateway={gateway} onMainModelChanged={onMainModelChanged} />
           ) : activeView === 'customEndpoints' ? (
             <CustomEndpointsSettings />
+          ) : activeView === 'connections' ? (
+            <ConnectionsRegistryPanel />
+          ) : activeView === 'freeModels' ? (
+            <FreeModelSuiteSettings gateway={gateway} onMainModelChanged={onMainModelChanged} />
           ) : activeView === 'webhooks' ? (
             <WebhooksSettings />
           ) : (

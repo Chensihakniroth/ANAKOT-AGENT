@@ -267,6 +267,7 @@ export const zh: Translations = {
       notifications: '通知',
       discord: 'Discord 状态',
       customEndpoints: '自定义端点',
+      connections: '连接',
       archivedChats: '已归档对话',
       freeModels: '免费模型',
       webhooks: 'Webhooks',

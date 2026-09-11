@@ -7508,6 +7508,97 @@ ipcMain.handle('anakot:computer-use:check', () => {
   }
 })
 
+// ── Connections Registry ──────────────────────────────────────────────────
+// Manages named connections (local, remote API, SSH) with primary selection.
+// Stored in userData/connections.json for device-local persistence.
+
+const connectionsFilePath = () => path.join(app.getPath('userData'), 'connections.json')
+
+function loadConnections() {
+  try {
+    const filePath = connectionsFilePath()
+    if (!fs.existsSync(filePath)) return []
+    const raw = fs.readFileSync(filePath, 'utf8')
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function saveConnections(connections) {
+  try {
+    const filePath = connectionsFilePath()
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
+    fs.writeFileSync(filePath, JSON.stringify(connections, null, 2))
+    return true
+  } catch {
+    return false
+  }
+}
+
+ipcMain.handle('anakot:connections:list', () => {
+  const connections = loadConnections()
+  return { ok: true, registry: { connections, activeId: connections.find(c => c.isPrimary)?.id || null } }
+})
+
+ipcMain.handle('anakot:connections:save', (_event, input) => {
+  const connections = loadConnections()
+  const existingIndex = connections.findIndex(c => c.id === input.id)
+
+  if (existingIndex >= 0) {
+    connections[existingIndex] = { ...connections[existingIndex], ...input }
+  } else {
+    connections.push(input)
+  }
+
+  if (input.isPrimary) {
+    connections.forEach(c => { if (c.id !== input.id) c.isPrimary = false })
+  }
+
+  saveConnections(connections)
+  return { ok: true, registry: { connections, activeId: connections.find(c => c.isPrimary)?.id || null } }
+})
+
+ipcMain.handle('anakot:connections:remove', (_event, id) => {
+  let connections = loadConnections()
+  connections = connections.filter(c => c.id !== id)
+  saveConnections(connections)
+  return { ok: true, registry: { connections, activeId: connections.find(c => c.isPrimary)?.id || null } }
+})
+
+ipcMain.handle('anakot:connections:set-primary', (_event, id) => {
+  const connections = loadConnections()
+  connections.forEach(c => { c.isPrimary = c.id === id })
+  saveConnections(connections)
+  return { ok: true, registry: { connections, activeId: id } }
+})
+
+ipcMain.handle('anakot:connections:probe', (_event, { url }) => {
+  try {
+    const http = require('http')
+    const https = require('https')
+    const { URL } = require('url')
+    const parsed = new URL(url)
+    const mod = parsed.protocol === 'https:' ? https : http
+
+    return new Promise((resolve) => {
+      const req = mod.get(url, { timeout: 5000 }, (res) => {
+        resolve({ ok: true, reachable: res.statusCode < 500, status: res.statusCode })
+      })
+      req.on('error', (err) => {
+        resolve({ ok: true, reachable: false, error: err.message })
+      })
+      req.on('timeout', () => {
+        req.destroy()
+        resolve({ ok: true, reachable: false, error: 'Connection timed out' })
+      })
+    })
+  } catch (err) {
+    return { ok: false, reachable: false, error: err?.message || String(err) }
+  }
+})
+
 // ── Terminal Backend Probing ──────────────────────────────────────────────
 // Probe available terminal execution backends (local, docker, ssh, modal, daytona).
 

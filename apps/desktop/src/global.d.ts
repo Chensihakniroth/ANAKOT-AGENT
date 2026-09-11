@@ -348,6 +348,40 @@ declare global {
         set: (backend: string) => Promise<{ ok: boolean; active: string }>
       }
 
+      // Connections — manage named connections (local, remote, ssh)
+      connections: {
+        list: () => Promise<{
+          ok: boolean
+          registry: {
+            connections: Array<{
+              id: string
+              kind: 'local' | 'remote' | 'ssh'
+              label: string
+              url?: string
+              host?: string
+              is_primary?: boolean
+              last_used?: number
+            }>
+            activeId: string | null
+          }
+        }>
+        save: (input: Record<string, unknown>) => Promise<{
+          ok: boolean
+          registry: {
+            connections: Array<Record<string, unknown>>
+            activeId: string | null
+          }
+        }>
+        remove: (id: string) => Promise<{ ok: boolean }>
+        setPrimary: (id: string) => Promise<{ ok: boolean }>
+        probe: (payload: { url: string }) => Promise<{
+          ok: boolean
+          reachable: boolean
+          status?: number
+          error?: string
+        }>
+      }
+
       // Computer Use — check availability (macOS + cua-driver)
       computerUse: {
         check: () => Promise<{

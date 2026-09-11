@@ -219,6 +219,7 @@ export interface Translations {
       notifications: string
       discord: string
       customEndpoints: string
+      connections: string
       archivedChats: string
       freeModels: string
       webhooks: string

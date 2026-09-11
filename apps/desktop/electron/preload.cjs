@@ -266,6 +266,15 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Connections — manage named connections (local, remote, ssh)
+  connections: {
+    list: () => ipcRenderer.invoke('anakot:connections:list'),
+    save: (input: Record<string, unknown>) => ipcRenderer.invoke('anakot:connections:save', input),
+    remove: (id: string) => ipcRenderer.invoke('anakot:connections:remove', id),
+    setPrimary: (id: string) => ipcRenderer.invoke('anakot:connections:set-primary', id),
+    probe: (payload: { url: string }) => ipcRenderer.invoke('anakot:connections:probe', payload)
+  },
+
   // Computer Use — check availability (macOS + cua-driver)
   computerUse: {
     check: () => ipcRenderer.invoke('anakot:computer-use:check')
