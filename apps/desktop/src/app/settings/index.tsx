@@ -6,7 +6,7 @@ import { setApiRequestProfile } from '@/anakot'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Bell, Discord, Globe, Info, KeyRound, Leaf, PawPrint, Settings2, Sparkles, Terminal, Wrench, Zap, Palette } from '@/lib/icons'
+import { Archive, Bell, Brain, Discord, Globe, Info, KeyRound, Leaf, Lock, Mic, Monitor, PawPrint, Settings2, Sparkles, Terminal, Wrench, Zap, Palette } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import { useStore } from '@nanostores/react'
@@ -56,6 +56,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'customEndpoints',
   'connections',
   'freeModels',
+  'sessions',
   'webhooks',
   'about'
 ]
@@ -178,6 +179,42 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             label={t.settings.sections.terminal ?? 'Terminal'}
             onClick={() => setActiveView('config:terminal')}
           />
+          <OverlayNavItem
+            active={activeView === 'config:workspace'}
+            icon={Monitor}
+            label={t.settings.sections.workspace ?? 'Workspace'}
+            onClick={() => setActiveView('config:workspace')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:safety'}
+            icon={Lock}
+            label={t.settings.sections.safety ?? 'Safety'}
+            onClick={() => setActiveView('config:safety')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:memory'}
+            icon={Brain}
+            label={t.settings.sections.memory ?? 'Memory & Context'}
+            onClick={() => setActiveView('config:memory')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:voice'}
+            icon={Mic}
+            label={t.settings.sections.voice ?? 'Voice'}
+            onClick={() => setActiveView('config:voice')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:obsidian'}
+            icon={Sparkles}
+            label={t.settings.sections.obsidian ?? 'Markdown Library'}
+            onClick={() => setActiveView('config:obsidian')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:advanced'}
+            icon={Wrench}
+            label={t.settings.sections.advanced ?? 'Advanced'}
+            onClick={() => setActiveView('config:advanced')}
+          />
           <div className="my-2 h-px bg-border/30" />
           <OverlayNavItem
             active={activeView === 'providers'}
@@ -296,6 +333,20 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             label={t.settings.nav.webhooks ?? 'Webhooks'}
             nested
             onClick={() => setActiveView('webhooks')}
+          />
+          <OverlayNavItem
+            active={activeView === 'freeModels'}
+            icon={Leaf}
+            label={t.settings.nav.freeModels ?? 'Free Models'}
+            nested
+            onClick={() => setActiveView('freeModels')}
+          />
+          <OverlayNavItem
+            active={activeView === 'sessions'}
+            icon={Archive}
+            label={t.settings.nav.archivedChats ?? 'Sessions'}
+            nested
+            onClick={() => setActiveView('sessions')}
           />
           <OverlayNavItem
             active={activeView === 'about'}

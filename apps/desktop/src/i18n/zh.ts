@@ -270,6 +270,7 @@ export const zh: Translations = {
       connections: '连接',
       archivedChats: '已归档对话',
       freeModels: '免费模型',
+      sessions: '会话',
       webhooks: 'Webhooks',
       about: '关于'
     },
@@ -282,6 +283,7 @@ export const zh: Translations = {
       safety: '安全',
       memory: '记忆与上下文',
       voice: '语音',
+      obsidian: 'Markdown 库',
       advanced: '高级'
     },
     searchPlaceholder: {

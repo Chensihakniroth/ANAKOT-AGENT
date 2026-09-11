@@ -276,6 +276,7 @@ export const en: Translations = {
       connections: 'Connections',
       archivedChats: 'Archived Chats',
       freeModels: 'Free Models',
+      sessions: 'Sessions',
       webhooks: 'Webhooks',
       about: 'About'
     },
@@ -288,6 +289,7 @@ export const en: Translations = {
       safety: 'Safety',
       memory: 'Memory & Context',
       voice: 'Voice',
+      obsidian: 'Markdown Library',
       advanced: 'Advanced'
     },
     searchPlaceholder: {

@@ -222,6 +222,7 @@ export interface Translations {
       connections: string
       archivedChats: string
       freeModels: string
+      sessions: string
       webhooks: string
       about: string
     }
