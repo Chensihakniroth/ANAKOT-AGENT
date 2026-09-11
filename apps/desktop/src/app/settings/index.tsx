@@ -22,6 +22,7 @@ import { SECTIONS } from './constants'
 import { DiscordRpcSettings } from './discord-rpc-settings'
 import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
+import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { McpSettings } from './mcp-settings'
 import { NotificationsSettings } from './notifications-settings'
@@ -39,6 +40,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
   'providers',
   'gateway',
+  'keybinds',
   'keys',
   'mcp',
   'toolsets',
@@ -190,6 +192,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('gateway')}
           />
           <OverlayNavItem
+            active={activeView === 'keybinds'}
+            icon={KeyRound}
+            label={t.settings.nav.keybinds ?? 'Keyboard shortcuts'}
+            onClick={() => setActiveView('keybinds')}
+          />
+          <OverlayNavItem
             active={activeView === 'keys'}
             icon={KeyRound}
             label={t.settings.nav.apiKeys}
@@ -307,6 +315,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             />
           ) : activeView === 'providers' ? (
             <ProvidersSettings onViewChange={setProviderView} view={providerView} />
+          ) : activeView === 'keybinds' ? (
+            <KeybindSettings />
           ) : activeView === 'keys' ? (
             <KeysSettings view={keysView} />
           ) : activeView === 'toolsets' ? (

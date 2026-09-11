@@ -160,7 +160,8 @@ export const en: Translations = {
     resetAll: 'Reset all',
     pressKey: 'Press a key…',
     set: 'set',
-    conflictWith: label => `Also bound to “${label}”`,
+    search: 'Search shortcuts…',
+    conflictWith: label => `Also bound to "${label}"`,
     categories: {
       composer: 'Composer',
       profiles: 'Profiles',
@@ -254,6 +255,7 @@ export const en: Translations = {
       providerAccounts: 'Accounts',
       providerApiKeys: 'API keys',
       gateway: 'Gateway',
+      keybinds: 'Keyboard shortcuts',
       apiKeys: 'Tools & Keys',
       keys: 'Keys',
       keysTools: 'Tools',
@@ -1294,7 +1296,8 @@ export const en: Translations = {
       ageNow: 'now',
       ageDay: 'd',
       ageHour: 'h',
-      ageMin: 'm'
+      ageMin: 'm',
+      todoProgress: 'Task progress'
     }
   },
 

@@ -173,6 +173,7 @@ export interface Translations {
     resetAll: string
     pressKey: string
     set: string
+    search: string
     conflictWith: (label: string) => string
     categories: Record<string, string>
     actions: Record<string, string>
@@ -201,6 +202,7 @@ export interface Translations {
       providerAccounts: string
       providerApiKeys: string
       gateway: string
+      keybinds: string
       apiKeys: string
       keys: string
       keysTools: string
@@ -1044,6 +1046,7 @@ export interface Translations {
       ageDay: string
       ageHour: string
       ageMin: string
+      todoProgress: string
     }
   }
 

@@ -156,7 +156,8 @@ export const zh: Translations = {
     resetAll: '全部重置',
     pressKey: '请按下按键…',
     set: '设置',
-    conflictWith: label => `已绑定到“${label}”`,
+    search: '搜索快捷键…',
+    conflictWith: label => `已绑定到"${label}"`,
     categories: {
       composer: '输入框',
       profiles: '配置',
@@ -248,6 +249,7 @@ export const zh: Translations = {
       providerAccounts: '账号',
       providerApiKeys: 'API 密钥',
       gateway: '网关',
+      keybinds: '键盘快捷键',
       apiKeys: '工具与密钥',
       keys: '密钥',
       keysTools: '工具',
@@ -1436,7 +1438,8 @@ export const zh: Translations = {
       ageNow: '刚刚',
       ageDay: '天',
       ageHour: '时',
-      ageMin: '分'
+      ageMin: '分',
+      todoProgress: '任务进度'
     }
   },
 
