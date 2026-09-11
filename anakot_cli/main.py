@@ -2888,7 +2888,7 @@ def select_provider_and_model(args=None):
     # Step 2: Provider-specific setup + model selection
     if selected_provider == "openrouter":
         _model_flow_openrouter(config, current_model)
-    elif selected_provider == "callmemo":
+    elif selected_provider == "nous":
         _model_flow_callmemo(config, current_model, args=args)
     elif selected_provider == "openai-codex":
         _model_flow_openai_codex(config, current_model)
@@ -3480,7 +3480,7 @@ def _model_flow_openrouter(config, current_model=""):
 
 
 def _model_flow_callmemo(config, current_model="", args=None):
-    """callmemo Portal provider: ensure logged in, then pick model."""
+    """Nous Portal provider: ensure logged in, then pick model."""
     from anakot_cli.auth import (
         get_provider_auth_state,
         _prompt_model_selection,
@@ -3502,7 +3502,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
 
     state = get_provider_auth_state("callmemo")
     if not state or not state.get("access_token"):
-        print("Not logged into callmemo Portal. Starting login...")
+        print("Not logged into Nous Portal. Starting login...")
         print()
         try:
             mock_args = argparse.Namespace(
@@ -3515,7 +3515,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
                 ca_bundle=getattr(args, "ca_bundle", None),
                 insecure=bool(getattr(args, "insecure", False)),
             )
-            _login_callmemo(mock_args, PROVIDER_REGISTRY["callmemo"])
+            _login_callmemo(mock_args, PROVIDER_REGISTRY["nous"])
             # Offer Tool Gateway enablement for paid subscribers
             try:
                 _refreshed = load_config() or {}
@@ -3545,7 +3545,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
 
     model_ids = get_curated_callmemo_model_ids()
     if not model_ids:
-        print("No curated models available for callmemo Portal.")
+        print("No curated models available for Nous Portal.")
         return
 
     # Verify credentials are still valid (catches expired sessions early)
@@ -3556,7 +3556,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
         msg = format_auth_error(exc) if isinstance(exc, AuthError) else str(exc)
         if relogin:
             print(f"Session expired: {msg}")
-            print("Re-authenticating with callmemo Portal...\n")
+            print("Re-authenticating with Nous Portal...\n")
             try:
                 mock_args = argparse.Namespace(
                     portal_url=None,
@@ -3568,7 +3568,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
                     ca_bundle=None,
                     insecure=False,
                 )
-                _login_callmemo(mock_args, PROVIDER_REGISTRY["callmemo"])
+                _login_callmemo(mock_args, PROVIDER_REGISTRY["nous"])
             except Exception as login_exc:
                 print(f"Re-login failed: {login_exc}")
             return
@@ -3576,7 +3576,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
         return
 
     # Fetch live pricing (non-blocking — returns empty dict on failure)
-    pricing = get_pricing_for_provider("callmemo")
+    pricing = get_pricing_for_provider("nous")
 
     # Force fresh account data for model selection so recent credit purchases
     # are reflected immediately.
@@ -3597,7 +3597,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
     # freeRecommendedModels endpoint below.
     _callmemo_portal_url = ""
     try:
-        _nous_state = get_provider_auth_state("callmemo")
+        _nous_state = get_provider_auth_state("nous")
         if _nous_state:
             _callmemo_portal_url = _nous_state.get("portal_base_url", "")
     except Exception:
@@ -3625,7 +3625,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
             unavailable_message = (
                 format_callmemo_portal_entitlement_message(
                     _account_info,
-                    capability="paid callmemo models",
+                    capability="paid Nous Portal models",
                 )
                 or ""
             )
@@ -3643,7 +3643,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
         )
 
     if not model_ids and not unavailable_models:
-        print("No models available for callmemo Portal after filtering.")
+        print("No models available for Nous Portal after filtering.")
         return
 
     if free_tier and not model_ids:
@@ -3671,7 +3671,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
         _save_model_choice(selected)
         # Reactivate callmemo as the provider and update config
         inference_url = creds.get("base_url", "")
-        _update_config_for_provider("callmemo", inference_url)
+        _update_config_for_provider("nous", inference_url)
         current_model_cfg = config.get("model")
         if isinstance(current_model_cfg, dict):
             model_cfg = dict(current_model_cfg)
@@ -3679,7 +3679,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
             model_cfg = {"default": current_model_cfg.strip()}
         else:
             model_cfg = {}
-        model_cfg["provider"] = "callmemo"
+        model_cfg["provider"] = "nous"
         model_cfg["default"] = selected
         if inference_url and inference_url.strip():
             model_cfg["base_url"] = inference_url.rstrip("/")
@@ -3691,7 +3691,7 @@ def _model_flow_callmemo(config, current_model="", args=None):
             save_env_value("OPENAI_BASE_URL", "")
             save_env_value("OPENAI_API_KEY", "")
         save_config(config)
-        print(f"Default model set to: {selected} (via callmemo Portal)")
+        print(f"Default model set to: {selected} (via Nous Portal)")
         # Offer Tool Gateway enablement for paid subscribers
         prompt_enable_tool_gateway(config)
     else:
@@ -13039,7 +13039,7 @@ def main():
     model_parser.add_argument(
         "--client-id",
         default=None,
-        help="OAuth client id to use for callmemo login (default: anakot-cli)",
+        help="OAuth client id to use for Nous Portal login (default: hermes-cli)",
     )
     model_parser.add_argument(
         "--scope", default=None, help="OAuth scope to request for callmemo login"
@@ -13400,7 +13400,7 @@ def main():
     )
     proxy_start.add_argument(
         "--provider",
-        default="callmemo",
+        default="nous",
         help="Upstream provider: nous or xai (default: nous). See `anakot proxy providers`.",
     )
     proxy_start.add_argument(
@@ -13566,7 +13566,7 @@ def main():
     )
     login_parser.add_argument(
         "--provider",
-        choices=["callmemo", "openai-codex", "xai-oauth"],
+        choices=["nous", "openai-codex", "xai-oauth"],
         default=None,
         help="Provider to authenticate with (default: nous)",
     )
@@ -13578,7 +13578,7 @@ def main():
         help="Inference API base URL (default: production inference API)",
     )
     login_parser.add_argument(
-        "--client-id", default=None, help="OAuth client id to use (default: anakot-cli)"
+        "--client-id", default=None, help="OAuth client id to use (default: hermes-cli)"
     )
     login_parser.add_argument("--scope", default=None, help="OAuth scope to request")
     login_parser.add_argument(
@@ -13612,7 +13612,7 @@ def main():
     )
     logout_parser.add_argument(
         "--provider",
-        choices=["callmemo", "openai-codex", "xai-oauth", "spotify"],
+        choices=["nous", "openai-codex", "xai-oauth", "spotify"],
         default=None,
         help="Provider to log out from (default: active provider)",
     )

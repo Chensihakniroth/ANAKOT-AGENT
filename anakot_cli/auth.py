@@ -33,9 +33,9 @@ import threading
 import time
 import uuid
 import webbrowser
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
@@ -69,7 +69,7 @@ AUTH_LOCK_TIMEOUT_SECONDS = 15.0
 # Nous Portal OAuth constants
 DEFAULT_NOUS_PORTAL_URL = "https://portal.nousresearch.com"
 DEFAULT_NOUS_INFERENCE_URL = "https://inference-api.nousresearch.com/v1"
-DEFAULT_NOUS_CLIENT_ID = "anakot-cli"
+DEFAULT_NOUS_CLIENT_ID = "hermes-cli"
 NOUS_INFERENCE_INVOKE_SCOPE = "inference:invoke"
 DEFAULT_NOUS_SCOPE = NOUS_INFERENCE_INVOKE_SCOPE
 
@@ -550,6 +550,13 @@ NOUS_DEVICE_CODE_SOURCE = "device_code"
 
 DEFAULT_CALLMEMO_SCOPE = "inference:invoke"
 
+# Filename for the shared cross-profile Nous auth store
+NOUS_SHARED_STORE_FILENAME = "nous_auth.json"
+
+# Source/path tag when credentials are resolved from providers.nous.agent_key
+# in the auth store (JSON path in auth.json).
+NOUS_AUTH_PATH_INVOKE_JWT = "providers.nous.agent_key"
+
 
 # ---------------------------------------------------------------------------
 # JWT / token validation helpers
@@ -599,7 +606,7 @@ def _is_terminal_nous_refresh_error(exc: Exception) -> bool:
     """
     return (
         isinstance(exc, AuthError)
-        and exc.provider == "callmemo"
+        and exc.provider in {"callmemo", "nous"}
         and exc.code in {
             "invalid_grant",
             "invalid_token",
@@ -615,17 +622,40 @@ def _is_terminal_nous_refresh_error(exc: Exception) -> bool:
 # Shared credential store (cross-profile)
 # ---------------------------------------------------------------------------
 
-def _nous_shared_store_path() -> Optional[str]:
+def _nous_shared_store_path() -> Optional[Path]:
     """Return the path to the shared Nous auth file, or None on error.
 
     File lives at <anakot-root>/shared/nous_auth.json — OUTSIDE any named
     profile so all profiles share it.
+
+    Seat belt: when PYTEST_CURRENT_TEST is set and ANAKOT_SHARED_AUTH_DIR
+    is not overridden, raise RuntimeError to prevent writes to the real
+    user's shared store during test runs.
+
+    A profile can legitimately have no shared store yet (for example, a
+    fresh install or a test that only exercises the local auth store). In
+    that case the caller can suppress the guard with
+    ``allow_missing=True``; shared-store readers/writers still raise so a
+    test cannot silently touch real user data.
     """
+    # Env override — tests and multi-profile setups redirect here
+    env_override = os.environ.get("ANAKOT_SHARED_AUTH_DIR")
+    if env_override:
+        return Path(env_override) / NOUS_SHARED_STORE_FILENAME
+
+    # Seat belt under pytest
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        raise RuntimeError(
+            "Refusing to touch real user shared callmemo auth store during "
+            "test run. Set ANAKOT_SHARED_AUTH_DIR to a tmp_path in your "
+            "test fixture, or run via scripts/run_tests.sh."
+        )
+
     try:
         from anakot_constants import get_default_anakot_root
         root = get_default_anakot_root()
         shared_dir = root / "shared"
-        return str(shared_dir / "nous_auth.json")
+        return shared_dir / NOUS_SHARED_STORE_FILENAME
     except Exception:
         return None
 
@@ -634,27 +664,61 @@ _nous_shared_lock = threading.Lock()
 
 
 def _write_shared_nous_state(state: Dict[str, Any]) -> None:
-    """Persist Nous credentials to the shared cross-profile store."""
-    path = _nous_shared_store_path()
+    """Persist Nous credentials to the shared cross-profile store.
+
+    - Skips write when ``refresh_token`` is absent/empty (nothing to share).
+    - Strips volatile ``agent_key`` fields (24h TTL, profile-specific).
+    - Sets file permissions to 0o600 where the platform supports it.
+    """
+    try:
+        path = _nous_shared_store_path()
+    except RuntimeError:
+        # Seat belt tripped (pytest without ANAKOT_SHARED_AUTH_DIR) —
+        # skip silently; the caller's local auth store is still written.
+        return
     if not path:
         return
+    # Skip write when refresh_token is missing — nothing useful to share
+    if not state.get("refresh_token"):
+        return
     try:
+        # Strip volatile agent_key fields before persisting
+        to_write = {k: v for k, v in state.items() if not k.startswith("agent_key")}
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps(state, indent=2, default=str) + "\n")
+        target.write_text(json.dumps(to_write, indent=2, default=str) + "\n")
+        # Set 0o600 where supported (POSIX), ignore on Windows
+        try:
+            target.chmod(0o600)
+        except (OSError, NotImplementedError):
+            pass
     except Exception:
         logger.debug("Failed to write shared Nous state to %s", path, exc_info=True)
 
 
 def _read_shared_nous_state() -> Optional[Dict[str, Any]]:
-    """Read Nous credentials from the shared cross-profile store."""
-    path = _nous_shared_store_path()
+    """Read Nous credentials from the shared cross-profile store.
+
+    Returns None when the file is missing, malformed, or lacks
+    required fields (``refresh_token``).
+    """
+    path = None
+    try:
+        path = _nous_shared_store_path()
+    except RuntimeError:
+        # Seat belt tripped (pytest without ANAKOT_SHARED_AUTH_DIR)
+        return None
     if not path:
         return None
     try:
         raw = Path(path).read_text()
         data = json.loads(raw)
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        # Refresh token is the minimum viable credential
+        if not data.get("refresh_token"):
+            return None
+        return data
     except FileNotFoundError:
         return None
     except Exception:
@@ -662,44 +726,44 @@ def _read_shared_nous_state() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _try_import_shared_nous_state(
+def refresh_nous_oauth_from_state(
+    state: Dict[str, Any],
     *,
+    force_refresh: bool = False,
     timeout_seconds: float = 15.0,
-) -> Optional[Dict[str, Any]]:
-    """Try to refresh and import Nous credentials from the shared store.
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """Refresh Nous OAuth tokens using the portal and return the updated state.
 
-    Reads the shared ``nous_auth.json``, attempts a token refresh using
-    the stored refresh_token, and returns the refreshed state on success.
-    Returns None if import/refresh fails (caller falls back to device-code).
+    Delegates to ``_refresh_access_token`` for the actual HTTP call.
+    The caller (``_try_import_shared_nous_state``) is responsible for
+    persisting the returned state to the shared store or auth store.
     """
-    state = _read_shared_nous_state()
-    if not state:
-        return None
-
-    refresh_token = state.get("refresh_token")
+    refresh_token = state.get("refresh_token", "")
     if not refresh_token:
-        return None
+        raise AuthError(
+            "No refresh token available",
+            provider="nous",
+            code="nous_auth_missing_refresh_token",
+            relogin_required=True,
+        )
 
     portal_base_url = state.get("portal_base_url") or DEFAULT_NOUS_PORTAL_URL
     client_id = state.get("client_id") or DEFAULT_NOUS_CLIENT_ID
     tls = state.get("tls") or {}
-    insecure = tls.get("insecure", False)
-    ca_bundle = tls.get("ca_bundle")
+    insecure = tls.get("insecure", False) if isinstance(tls, dict) else False
+    ca_bundle = tls.get("ca_bundle") if isinstance(tls, dict) else None
 
-    try:
-        with httpx.Client(
-            timeout=httpx.Timeout(timeout_seconds),
-            verify=(ca_bundle or (False if insecure else True)),
-        ) as client:
-            token_resp = _refresh_access_token(
-                client=client,
-                portal_base_url=portal_base_url,
-                client_id=client_id,
-                refresh_token=refresh_token,
-            )
-    except Exception:
-        logger.debug("Shared Nous state refresh failed", exc_info=True)
-        return None
+    with httpx.Client(
+        timeout=httpx.Timeout(timeout_seconds),
+        verify=(ca_bundle or (False if insecure else True)),
+    ) as client:
+        token_resp = _refresh_access_token(
+            client=client,
+            portal_base_url=portal_base_url,
+            client_id=client_id,
+            refresh_token=refresh_token,
+        )
 
     now_iso = datetime.now(timezone.utc).isoformat()
     expires_in = int(token_resp.get("expires_in", 3600))
@@ -716,14 +780,77 @@ def _try_import_shared_nous_state(
         datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     ).isoformat()
     updated["obtained_at"] = now_iso
-    # The agent_key is the access_token for Nous invoke JWTs
+    # agent_key mirrors the access_token for invoke JWTs
     updated["agent_key"] = new_access
     updated["agent_key_expires_at"] = updated["expires_at"]
     updated["agent_key_expires_in"] = expires_in
     updated["agent_key_reused"] = False
     updated["agent_key_obtained_at"] = now_iso
 
-    _write_shared_nous_state(updated)
+    return updated
+
+
+def _try_import_shared_nous_state(
+    *,
+    timeout_seconds: float = 15.0,
+) -> Optional[Dict[str, Any]]:
+    """Try to refresh and import Nous credentials from the shared store.
+
+    Reads the shared ``nous_auth.json``, attempts a token refresh via
+    ``refresh_nous_oauth_from_state``, and returns the refreshed state on
+    success.  Returns None if import/refresh fails (caller falls back to
+    device-code).
+
+    On refresh failure with a rotated refresh_token, the rotated token
+    is persisted back to the shared store to prevent replay revocation.
+    """
+    state = _read_shared_nous_state()
+    if not state:
+        return None
+
+    refresh_token = state.get("refresh_token")
+    if not refresh_token:
+        return None
+
+    try:
+        updated = refresh_nous_oauth_from_state(
+            state,
+            force_refresh=True,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:
+        logger.debug("Shared Nous state refresh failed: %s", exc, exc_info=True)
+        # If the portal rotated the refresh_token before rejecting the
+        # access_token, persist the rotated token so the next import
+        # attempt doesn't replay the consumed one (portal reuse revocation).
+        new_refresh = getattr(exc, "refresh_token", None)
+        if new_refresh and new_refresh != refresh_token:
+            rotated = dict(state)
+            rotated["refresh_token"] = new_refresh
+            _write_shared_nous_state(rotated)
+        else:
+            # No rotation — clear shared store so callers don't keep
+            # trying a dead refresh_token
+            try:
+                sp = _nous_shared_store_path()
+            except RuntimeError:
+                sp = None
+            if sp:
+                try:
+                    Path(sp).unlink(missing_ok=True)
+                except Exception:
+                    pass
+        return None
+
+    # Validate the returned access token is a usable JWT
+    new_access = updated.get("access_token", "")
+    if not _nous_invoke_jwt_is_usable(new_access, min_ttl_seconds=0):
+        # Token isn't a usable invoke JWT — but the refresh DID rotate
+        # the refresh_token.  Persist the rotated token so the next
+        # attempt doesn't replay the consumed one.
+        _write_shared_nous_state(updated)
+        return None
+
     return updated
 
 
@@ -793,6 +920,7 @@ class _NousPersistResult:
     access_token: str = ""
     refresh_token: Optional[str] = None
     auth_type: str = "oauth"
+    agent_key: Optional[str] = None
 
 
 def persist_nous_credentials(
@@ -808,6 +936,7 @@ def persist_nous_credentials(
         PooledCredential,
         AUTH_TYPE_OAUTH as _CP_AUTH_TYPE_OAUTH,
         load_pool,
+        label_from_token as _label_from_token,
     )
 
     access_token = state.get("access_token", "")
@@ -899,13 +1028,69 @@ def persist_nous_credentials(
     # Return a PooledCredential-like result
     result = _NousPersistResult(
         id=uuid.uuid4().hex[:6],
-        label=label or label_from_token(access_token, NOUS_DEVICE_CODE_SOURCE),
+        label=label or _label_from_token(access_token, NOUS_DEVICE_CODE_SOURCE),
         source=NOUS_DEVICE_CODE_SOURCE,
         access_token=access_token,
         refresh_token=refresh_token,
         auth_type=_CP_AUTH_TYPE_OAUTH,
+        agent_key=agent_key,
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# invoke JWT → agent_key mirroring + pool sync
+# ---------------------------------------------------------------------------
+
+def _set_nous_agent_key_from_invoke_jwt(state: Dict[str, Any]) -> None:
+    """Mirror ``access_token`` → ``agent_key`` in *state* (idempotent).
+
+    When ``agent_key`` already equals ``access_token`` and
+    ``agent_key_obtained_at`` is present the obtained_at timestamp is
+    preserved to avoid unnecessary auth.json writes.
+    """
+    access_token = state.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        return
+    existing_obtained_at = state.get("agent_key_obtained_at")
+    reuse = (
+        state.get("agent_key") == access_token
+        and isinstance(existing_obtained_at, str)
+        and existing_obtained_at
+    )
+    obtained_at = existing_obtained_at if reuse else datetime.now(timezone.utc).isoformat()
+    claims = _decode_jwt_claims(access_token)
+    exp = claims.get("exp")
+    expires_at: Optional[str] = None
+    if isinstance(exp, (int, float)):
+        with suppress(Exception):
+            expires_at = datetime.fromtimestamp(float(exp), tz=timezone.utc).isoformat()
+    expires_at = expires_at or state.get("expires_at")
+    expires_in = 0
+    if isinstance(expires_at, str):
+        with suppress(Exception):
+            expires_in = max(0, int(datetime.fromisoformat(expires_at).timestamp() - time.time()))
+    # Update provider-level expiry too (matches Hermes _set_nous_agent_key_from_invoke_jwt)
+    if expires_at:
+        state["expires_at"] = expires_at
+        state["expires_in"] = expires_in
+    state.update(
+        agent_key=access_token,
+        agent_key_id=None,
+        agent_key_expires_at=expires_at,
+        agent_key_expires_in=expires_in,
+        agent_key_reused=False,
+        agent_key_obtained_at=obtained_at,
+    )
+
+
+def _sync_nous_pool_from_auth_store() -> None:
+    """Best-effort pool reseed after ``providers.nous`` changes; never fail login."""
+    try:
+        from agent.credential_pool import load_pool
+        load_pool("nous")
+    except Exception as exc:
+        logger.debug("Failed to sync Nous credential pool from auth store: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -922,55 +1107,12 @@ def resolve_nous_runtime_credentials(
     Reads providers.nous from auth.json, refreshes the access_token if
     expiring or force_refreshed, and returns {"api_key": ..., ...}.
     """
-    from agent.credential_pool import load_pool, PooledCredential
+    # Read providers.nous directly (like Hermes _provider_state_transaction)
+    with _auth_store_lock():
+        auth_store = _load_auth_store()
+        state = _load_provider_state(auth_store, "nous")
 
-    # Try the credential pool first (where `anakot auth add nous` stores creds)
-    pool_token = ""
-    pool_state: Optional[Dict[str, Any]] = None
-    try:
-        pool = load_pool("nous")
-        if pool and pool.has_credentials():
-            entry = pool.select()
-            if entry is not None:
-                api_key = (
-                    getattr(entry, "runtime_api_key", None)
-                    or getattr(entry, "access_token", "")
-                )
-                if api_key:
-                    pool_token = api_key
-                    pool_state = {
-                        "access_token": getattr(entry, "access_token", ""),
-                        "refresh_token": getattr(entry, "refresh_token"),
-                        "agent_key": getattr(entry, "agent_key"),
-                        "agent_key_expires_at": getattr(entry, "agent_key_expires_at"),
-                        "expires_at": getattr(entry, "expires_at"),
-                        "portal_base_url": getattr(entry, "portal_base_url") or DEFAULT_NOUS_PORTAL_URL,
-                        "inference_base_url": getattr(entry, "inference_base_url") or DEFAULT_NOUS_INFERENCE_URL,
-                        "client_id": getattr(entry, "client_id") or DEFAULT_NOUS_CLIENT_ID,
-                        "scope": getattr(entry, "scope") or DEFAULT_NOUS_SCOPE,
-                        "tls": getattr(entry, "extra", {}).get("tls") if isinstance(getattr(entry, "extra", None), dict) else None,
-                    }
-    except Exception:
-        pass
-
-    # Fall back to legacy provider state
-    if not pool_token:
-        with _auth_store_lock():
-            auth_store = _load_auth_store()
-            state = _load_provider_state(auth_store, "nous")
-
-        if not state or not isinstance(state, dict):
-            raise AuthError(
-                "Anakot is not logged into Nous Portal. "
-                "Run `anakot auth add nous` to authenticate.",
-                provider="callmemo", code="nous_auth_missing",
-                relogin_required=True,
-            )
-
-        pool_state = state
-        pool_token = state.get("access_token") or state.get("agent_key") or ""
-
-    if not pool_token:
+    if not state or not isinstance(state, dict):
         raise AuthError(
             "Anakot is not logged into Nous Portal. "
             "Run `anakot auth add nous` to authenticate.",
@@ -978,9 +1120,14 @@ def resolve_nous_runtime_credentials(
             relogin_required=True,
         )
 
-    # Check if refresh is needed
-    state = pool_state or {}
-    access_token = state.get("access_token") or state.get("agent_key") or pool_token
+    access_token = state.get("access_token") or state.get("agent_key") or ""
+    if not access_token:
+        raise AuthError(
+            "No access token found in Nous Portal credentials. "
+            "Run `anakot auth add nous` to authenticate.",
+            provider="callmemo", code="nous_auth_missing",
+            relogin_required=True,
+        )
     refresh_token = state.get("refresh_token")
     portal_base_url = state.get("portal_base_url") or DEFAULT_NOUS_PORTAL_URL
     client_id = state.get("client_id") or DEFAULT_NOUS_CLIENT_ID
@@ -988,6 +1135,44 @@ def resolve_nous_runtime_credentials(
     insecure = tls.get("insecure", False) if isinstance(tls, dict) else False
     ca_bundle = tls.get("ca_bundle") if isinstance(tls, dict) else None
     scope = state.get("scope") or DEFAULT_NOUS_SCOPE
+
+    # ── Shared-store-first: adopt a newer refresh_token from a sibling profile
+    # ── before attempting to refresh with the potentially-stale local token.
+    # ── This prevents portal reuse revocation when a sibling profile already
+    # ── rotated the single-use refresh token.
+    if not force_refresh and refresh_token:
+        try:
+            shared = _read_shared_nous_state()
+        except Exception:
+            # Seat belt trips under pytest without ANAKOT_SHARED_AUTH_DIR,
+            # or the store is absent — skip adoption, use local token.
+            shared = None
+        if shared and shared.get("refresh_token") and shared["refresh_token"] != refresh_token:
+            # The shared store has a different (newer) refresh token — adopt it
+            shared_access = shared.get("access_token", "")
+            shared_refresh = shared["refresh_token"]
+            if shared_access and _nous_invoke_jwt_is_usable(shared_access, min_ttl_seconds=0):
+                # Shared token is still usable — adopt directly without refresh
+                state["access_token"] = shared_access
+                state["refresh_token"] = shared_refresh
+                state["expires_at"] = shared.get("expires_at", state.get("expires_at"))
+                state["expires_in"] = shared.get("expires_in", state.get("expires_in"))
+                access_token = shared_access
+                refresh_token = shared_refresh
+                # Persist adopted shared tokens to local auth store
+                with _auth_store_lock():
+                    auth_store = _load_auth_store()
+                    _save_provider_state(auth_store, "nous", state)
+                    _save_auth_store(auth_store)
+            else:
+                # Shared token not usable yet, but the refresh_token is newer
+                # — adopt the refresh_token so we refresh with the right one
+                state["refresh_token"] = shared_refresh
+                refresh_token = shared_refresh
+                with _auth_store_lock():
+                    auth_store = _load_auth_store()
+                    _save_provider_state(auth_store, "nous", state)
+                    _save_auth_store(auth_store)
 
     needs_refresh = bool(force_refresh)
     if not needs_refresh and refresh_token:
@@ -997,6 +1182,19 @@ def resolve_nous_runtime_credentials(
             expires_at=state.get("agent_key_expires_at") or state.get("expires_at"),
             min_ttl_seconds=ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
         )
+        # Also check state-level expiry (may differ from JWT's exp when
+        # metadata is stale, e.g. expires_in=0 or expires_at in the past).
+        if not needs_refresh:
+            state_expires_at = state.get("agent_key_expires_at") or state.get("expires_at")
+            if state_expires_at:
+                try:
+                    state_exp_dt = datetime.fromisoformat(state_expires_at)
+                    if state_exp_dt.tzinfo is None:
+                        state_exp_dt = state_exp_dt.replace(tzinfo=timezone.utc)
+                    if state_exp_dt <= datetime.now(timezone.utc) + timedelta(seconds=ACCESS_TOKEN_REFRESH_SKEW_SECONDS):
+                        needs_refresh = True
+                except Exception:
+                    pass
 
     if needs_refresh and refresh_token:
         try:
@@ -1036,12 +1234,94 @@ def resolve_nous_runtime_credentials(
                 _save_auth_store(auth_store)
             _write_shared_nous_state(updated)
 
+            # Mutate state so downstream mirror/assert blocks see refreshed tokens
+            state.update(updated)
             access_token = new_access
         except Exception as exc:
             if _is_terminal_nous_refresh_error(exc):
+                # Quarantine: clear tokens + pool + shared store
+                _quarantine_nous_oauth_state(state, exc)
+                # Clear provider tokens
+                with _auth_store_lock():
+                    auth_store = _load_auth_store()
+                    cleared = _load_provider_state(auth_store, "nous") or {}
+                    cleared["refresh_token"] = None
+                    cleared["access_token"] = None
+                    cleared["agent_key"] = None
+                    cleared["last_auth_error"] = {
+                        "code": getattr(exc, "code", None),
+                        "message": str(exc),
+                    }
+                    _save_provider_state(auth_store, "nous", cleared)
+                    # Clear credential pool
+                    pool = auth_store.get("credential_pool", {})
+                    if isinstance(pool, dict):
+                        pool["nous"] = []
+                    _save_auth_store(auth_store)
+                # Clear shared store
+                try:
+                    sp = _nous_shared_store_path()
+                except RuntimeError:
+                    sp = None
+                if sp:
+                    try:
+                        Path(sp).unlink(missing_ok=True)
+                    except Exception:
+                        pass
                 raise
             logger.warning("Nous token refresh failed (non-terminal): %s", exc)
             # Use whatever access_token we have — may still be valid
+
+    # ── Assert invoke scope (after refresh-or-skip) ────────────────────
+    # First: check if the token is even a valid JWT (not just scope/expiry issues)
+    claims = _decode_jwt_claims(access_token)
+    if not claims:
+        # Token doesn't decode as JWT at all — persist the refreshed tokens
+        # before raising so callers can observe the rotated refresh_token
+        with _auth_store_lock():
+            auth_store = _load_auth_store()
+            _save_provider_state(auth_store, "nous", state)
+            _save_auth_store(auth_store)
+        raise AuthError(
+            "Access token is not a valid JWT",
+            provider="callmemo",
+            code="access_token_not_jwt",
+            relogin_required=True,
+        )
+    if not _nous_invoke_jwt_is_usable(
+        access_token, scope=scope,
+        expires_at=state.get("agent_key_expires_at") or state.get("expires_at"),
+        min_ttl_seconds=ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
+    ):
+        token_scopes = _scope_values(claims.get("scope") or claims.get("scp"))
+        if "inference:invoke" not in token_scopes:
+            raise AuthError(
+                "Nous Portal access token does not have inference:invoke scope. "
+                "Run `anakot auth add nous` to re-authenticate.",
+                provider="callmemo",
+                code="missing_inference_invoke_scope",
+                relogin_required=True,
+            )
+        raise AuthError(
+            "Nous Portal access token is not a usable inference JWT. "
+            "Run `anakot auth add nous` to re-authenticate.",
+            provider="callmemo",
+            code="invoke_jwt_expiring",
+            relogin_required=True,
+        )
+
+    # ── Mirror invoke JWT → agent_key (idempotent) + persist ────────────
+    state_before = dict(state)
+    _set_nous_agent_key_from_invoke_jwt(state)
+    # Only persist when the mirror actually changed something
+    if state.get("agent_key") != state_before.get("agent_key") or \
+       state.get("agent_key_expires_at") != state_before.get("agent_key_expires_at"):
+        with _auth_store_lock():
+            auth_store = _load_auth_store()
+            _save_provider_state(auth_store, "nous", state)
+            _save_auth_store(auth_store)
+        _write_shared_nous_state(state)
+        _sync_nous_pool_from_auth_store()
 
     base_url = (
         os.getenv("ANAKOT_NOUS_BASE_URL", "").strip().rstrip("/")
@@ -1049,11 +1329,15 @@ def resolve_nous_runtime_credentials(
         or DEFAULT_NOUS_INFERENCE_URL
     )
 
+    logger.info("using NAS invoke JWT")
     return {
         "provider": "nous",
         "base_url": base_url,
-        "api_key": access_token,
-        "source": "anakot-auth-store",
+        "api_key": state.get("agent_key"),
+        "source": NOUS_AUTH_PATH_INVOKE_JWT,
+        "auth_path": NOUS_AUTH_PATH_INVOKE_JWT,
+        "key_id": state.get("agent_key_id"),
+        "expires_at": state.get("agent_key_expires_at"),
         "last_refresh": state.get("obtained_at"),
         "auth_mode": "oauth_device_code",
     }
@@ -1070,58 +1354,139 @@ def resolve_nous_access_token(
     timeout_seconds: float = 15.0,
     **kwargs: Any,
 ) -> Any:
-    """Return the current Nous access token, refreshing if needed."""
-    try:
-        creds = resolve_nous_runtime_credentials(
-            force_refresh=force_refresh,
-            timeout_seconds=timeout_seconds,
-        )
-        return creds.get("api_key")
-    except Exception:
-        return None
+    """Return the current Nous access token, refreshing if needed.
+
+    Propagates terminal AuthError (revoked/invalid refresh tokens) instead
+    of swallowing them, so callers can quarantine stale credentials.
+    Also checks the shared store for a newer token when the local one is
+    stale (same hazard as resolve_nous_runtime_credentials).
+    """
+    # Quick path: check shared store for a usable newer token
+    if not force_refresh:
+        try:
+            shared = _read_shared_nous_state()
+        except Exception:
+            shared = None
+        if shared and shared.get("access_token") and shared.get("refresh_token"):
+            # Check if local token is stale
+            local_state = None
+            try:
+                with _auth_store_lock():
+                    auth_store = _load_auth_store()
+                    local_state = _load_provider_state(auth_store, "nous")
+            except Exception:
+                pass
+            if local_state:
+                local_refresh = local_state.get("refresh_token")
+                if local_refresh and shared["refresh_token"] != local_refresh:
+                    # Shared has a different (newer) refresh token — adopt the shared access_token
+                    # Persist adopted tokens to local profile state
+                    local_state["access_token"] = shared["access_token"]
+                    local_state["refresh_token"] = shared["refresh_token"]
+                    with _auth_store_lock():
+                        auth_store = _load_auth_store()
+                        _save_provider_state(auth_store, "nous", local_state)
+                        _save_auth_store(auth_store)
+                    return shared["access_token"]
+
+    creds = resolve_nous_runtime_credentials(
+        force_refresh=force_refresh,
+        timeout_seconds=timeout_seconds,
+    )
+    return creds.get("api_key")
+
+
+def invalidate_nous_auth_status_cache() -> None:
+    """No-op cache invalidation for get_nous_auth_status().
+
+    In the current implementation there is no persistent cache, so this
+    is a no-op.  Tests call it to ensure a clean slate between assertions
+    on credential pool state.
+    """
 
 
 def get_nous_auth_status() -> Dict[str, Any]:
-    """Status snapshot for Nous Portal auth."""
+    """Status snapshot for Nous Portal auth.
+
+    Checks credential pool first (with opaque key rejection), then falls
+    back to auth store via resolve_nous_runtime_credentials.  Runtime
+    auth store result takes priority over stale pool entries.
+    """
+    auth_store_path = str(_auth_file_path())
+    result: Dict[str, Any] = {"auth_store": auth_store_path}
+
+    # 1. Check credential pool
+    pool_entry = None
     try:
         from agent.credential_pool import load_pool
 
         pool = load_pool("nous")
         if pool and pool.has_credentials():
-            entry = pool.select()
-            if entry is not None:
-                api_key = (
-                    getattr(entry, "runtime_api_key", None)
-                    or getattr(entry, "access_token", "")
-                )
-                if api_key and _nous_invoke_jwt_is_usable(api_key, min_ttl_seconds=0):
-                    return {
-                        "logged_in": True,
-                        "auth_store": str(_auth_file_path()),
-                        "last_refresh": getattr(entry, "last_refresh", None),
-                        "auth_mode": "oauth_device_code",
-                        "source": f"pool:{getattr(entry, 'label', 'unknown')}",
-                        "api_key": api_key,
-                    }
+            pool_entry = pool.select()
     except Exception:
         pass
 
+    if pool_entry is not None:
+        api_key = (
+            getattr(pool_entry, "runtime_api_key", None)
+            or getattr(pool_entry, "access_token", "")
+            or getattr(pool_entry, "agent_key", "")
+        )
+        portal_url = getattr(pool_entry, "portal_base_url", None)
+        inference_url = getattr(pool_entry, "inference_base_url", None) or getattr(pool_entry, "base_url", None)
+
+        # Opaque (non-JWT) agent_keys are NOT inference credentials
+        if api_key and _nous_invoke_jwt_is_usable(api_key, min_ttl_seconds=0):
+            result.update({
+                "logged_in": True,
+                "last_refresh": getattr(pool_entry, "last_refresh", None),
+                "auth_mode": "oauth_device_code",
+                "source": f"pool:{getattr(pool_entry, 'label', 'unknown')}",
+                "api_key": api_key,
+                "portal_base_url": portal_url,
+                "inference_base_url": inference_url,
+            })
+            return result
+        else:
+            # Pool has an entry but it's an opaque key, not an inference JWT
+            result.update({
+                "logged_in": False,
+                "inference_credential_present": False,
+                "credential_source": None,
+            })
+            # Fall through to auth store check
+
+    # 2. Fallback: auth store via resolve_callmemo_runtime_credentials
+    #    (runtime auth store is preferred over stale pool)
+    #    NOTE: call through the alias so monkeypatching in tests works.
     try:
-        creds = resolve_nous_runtime_credentials()
-        return {
+        creds = resolve_callmemo_runtime_credentials()
+        # Read portal_base_url from the provider state for display
+        with _auth_store_lock():
+            auth_store = _load_auth_store()
+            provider_state = _load_provider_state(auth_store, "nous") or {}
+        result.update({
             "logged_in": True,
-            "auth_store": str(_auth_file_path()),
             "last_refresh": creds.get("last_refresh"),
             "auth_mode": creds.get("auth_mode"),
-            "source": creds.get("source"),
+            "source": "runtime:portal",
             "api_key": creds.get("api_key"),
-        }
+            "portal_base_url": provider_state.get("portal_base_url"),
+            "inference_base_url": creds.get("base_url"),
+        })
+        return result
     except AuthError as exc:
-        return {
+        # Read portal_base_url from auth store for error context
+        with _auth_store_lock():
+            auth_store = _load_auth_store()
+            provider_state = _load_provider_state(auth_store, "nous") or {}
+        result.update({
             "logged_in": False,
-            "auth_store": str(_auth_file_path()),
+            "relogin_required": getattr(exc, "relogin_required", True),
             "error": str(exc),
-        }
+            "portal_base_url": provider_state.get("portal_base_url"),
+        })
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -1129,12 +1494,100 @@ def get_nous_auth_status() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _login_callmemo(args: Any, provider_config: Any) -> None:
-    """Stub: callmemo Portal login is not available in the Anakot fork."""
-    raise AuthError(
-        "callmemo Portal login is not available in the Anakot fork. "
-        "Use `anakot auth add <provider>` with a supported provider instead.",
-        relogin_required=False,
+    """Nous Portal OAuth device-code login.
+
+    1. Run device code flow → get auth state
+    2. Persist credentials
+    3. Prompt user to pick a model (or skip)
+    4. If user picks a model → switch provider + model
+    5. If user skips → preserve current provider (or clear if none)
+    """
+    from anakot_cli.config import read_raw_config
+
+    # Step 1: Device code login
+    state = _nous_device_code_login(
+        portal_base_url=getattr(args, "portal_url", None),
+        inference_base_url=getattr(args, "inference_url", None),
+        client_id=getattr(args, "client_id", None),
+        scope=getattr(args, "scope", None),
+        open_browser=not getattr(args, "no_browser", False),
+        timeout_seconds=getattr(args, "timeout", 15.0),
+        insecure=getattr(args, "insecure", False),
+        ca_bundle=getattr(args, "ca_bundle", None),
     )
+
+    # Step 2: Persist credentials
+    persist_nous_credentials(state)
+
+    # Step 3: Model selection
+    model_ids = []
+    try:
+        from anakot_cli import models as _models_mod
+        get_ids_fn = getattr(_models_mod, "get_nous_model_ids", None)
+        if get_ids_fn:
+            model_ids = get_ids_fn() or []
+        pricing_fn = getattr(_models_mod, "get_pricing_for_provider", None)
+        pricing = pricing_fn("nous") if pricing_fn else {}
+        free_tier_fn = getattr(_models_mod, "check_callmemo_free_tier", None)
+        free_tier_result = free_tier_fn(force_fresh=True) if free_tier_fn else None
+        if free_tier_result is not None and model_ids:
+            part_fn = getattr(_models_mod, "partition_callmemo_models_by_tier", None)
+            if part_fn:
+                free_ids, paid_ids = part_fn(model_ids, free_tier_result, free_tier=True)
+                model_ids = list(free_ids) + list(paid_ids)
+    except Exception:
+        pricing = {}
+
+    # Read current model for display
+    try:
+        config = read_raw_config()
+        current_model = (config.get("model") or {}).get("default", "")
+    except Exception:
+        current_model = ""
+
+    chosen_model = _prompt_model_selection(
+        model_ids,
+        current_model=current_model,
+        pricing=pricing if isinstance(pricing, dict) and pricing else None,
+        portal_url=state.get("portal_base_url", ""),
+    )
+
+    # Step 4/5: Apply or skip
+    prior_provider = None
+    try:
+        config = read_raw_config()
+        prior_provider = (config.get("model") or {}).get("provider")
+    except Exception:
+        pass
+
+    if chosen_model:
+        # User picked a model → switch to nous
+        _update_config_for_provider(
+            "nous",
+            state.get("inference_base_url", DEFAULT_NOUS_INFERENCE_URL),
+            default_model=chosen_model,
+        )
+        try:
+            from anakot_cli import models as _models_mod
+            prompt_fn = getattr(_models_mod, "prompt_enable_tool_gateway", None)
+            if prompt_fn:
+                prompt_fn(read_raw_config())
+        except Exception:
+            pass
+    else:
+        # User skipped → preserve prior provider, or clear if none
+        if prior_provider:
+            # Restore prior provider in active_provider
+            with _auth_store_lock():
+                auth_store = _load_auth_store()
+                auth_store["active_provider"] = prior_provider
+                _save_auth_store(auth_store)
+        else:
+            # No prior provider — clear active_provider
+            with _auth_store_lock():
+                auth_store = _load_auth_store()
+                auth_store["active_provider"] = ""
+                _save_auth_store(auth_store)
 
 
 # ---------------------------------------------------------------------------
@@ -4960,7 +5413,7 @@ def _refresh_access_token(
     lowered = description.lower()
     if code == "refresh_token_reused" or "reuse" in lowered or "reuse detected" in lowered:
         description = (
-            "callmemo Portal detected refresh-token reuse and revoked this session.\n"
+            "Nous Portal detected refresh-token reuse and revoked this session.\n"
             "This usually means an external process (monitoring script, "
             "custom self-heal hook, or another Anakot install sharing "
             "~/.anakot/auth.json) called POST /api/oauth/token with Anakot's "

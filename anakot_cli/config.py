@@ -2492,8 +2492,8 @@ REQUIRED_ENV_VARS = {}
 OPTIONAL_ENV_VARS = {
     # ── Provider (handled in provider selection, not shown in checklists) ──
     "NOUS_BASE_URL": {
-        "description": "callmemo Portal base URL override",
-        "prompt": "callmemo Portal base URL (leave empty for default)",
+        "description": "Nous Portal base URL override",
+        "prompt": "Nous Portal base URL (leave empty for default)",
         "url": None,
         "password": False,
         "category": "provider",

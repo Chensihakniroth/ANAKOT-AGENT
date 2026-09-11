@@ -1,8 +1,8 @@
-"""Regression tests for callmemo OAuth refresh and inference JWT interactions.
+"""Regression tests for Nous Portal OAuth refresh and inference JWT interactions.
 
-NOTE: The callmemo Portal was removed in the Anakot fork. These tests are
-skipped by default since they test portal-specific OAuth flows that no longer
-exist. The stub functions in anakot_cli.auth return safe no-ops.
+The Nous Portal (formerly callmemo Portal) uses an OAuth device-code flow for
+authentication. These tests verify the credential lifecycle: login, persist,
+refresh, expiry detection, scope validation, and quarantine behavior.
 """
 
 import base64
@@ -17,7 +17,7 @@ import pytest
 
 from anakot_cli.auth import AuthError, get_provider_auth_state, resolve_callmemo_runtime_credentials
 
-pytestmark = pytest.mark.skip(reason="callmemo Portal removed in Anakot fork")
+
 
 
 # =============================================================================
@@ -1629,7 +1629,7 @@ def test_shared_store_write_and_read_roundtrip(shared_store_env):
 
     # Permissions should be 0600 where the platform supports it.
     mode = path.stat().st_mode & 0o777
-    assert mode == 0o600 or mode == 0o644  # 0o644 on platforms without chmod
+    assert mode in {0o600, 0o644, 0o666}  # 0o644 on platforms without chmod, 0o666 on Windows
 
     loaded = _read_shared_nous_state()
     assert loaded is not None

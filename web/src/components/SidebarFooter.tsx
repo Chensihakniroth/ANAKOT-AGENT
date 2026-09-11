@@ -21,7 +21,7 @@ export function SidebarFooter({ status }: SidebarFooterProps) {
       </Typography>
 
       <a
-        href="https://callmemo.ai"
+        href="https://nousresearch.com"
         target="_blank"
         rel="noopener noreferrer"
         className={cn(

@@ -98,7 +98,7 @@ logger = logging.getLogger(__name__)
 # Production Portal URL. Override via ANAKOT_DASHBOARD_PORTAL_URL for
 # staging (portal.rewbs.uk) or a custom deployment. Contract docs name
 # this as the production issuer.
-_DEFAULT_PORTAL_URL = "https://portal.callmemo.ai"
+_DEFAULT_PORTAL_URL = "https://portal.nousresearch.com"
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ class NousDashboardAuthProvider(DashboardAuthProvider):
     """callmemo Portal OAuth via authorization-code + PKCE (S256)."""
 
     name = "nous"
-    display_name = "callmemo"
+    display_name = "Nous Portal"
 
     def __init__(self, *, client_id: str, portal_url: str) -> None:
         if not client_id.startswith("agent:"):

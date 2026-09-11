@@ -882,7 +882,7 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("lmstudio", "LM Studio", "LM Studio (Local desktop app with built-in model server)"),
     ProviderEntry("omniroute", "Omni Route", "Omni Route (Local OpenAI-compatible model gateway)"),
     ProviderEntry("ollama-cloud", "Ollama Cloud", "Ollama Cloud (Cloud-hosted open models, ollama.com)"),
-    ProviderEntry("callmemo", "callmemo Portal", "callmemo Portal (Everything your agent needs, 300+ models with bundled tool use)"),
+    ProviderEntry("nous", "Nous Portal", "Nous Portal (Everything your agent needs, 300+ models with bundled tool use)"),
     ProviderEntry("openrouter", "OpenRouter", "OpenRouter (Pay-per-use API aggregator)"),
     ProviderEntry("anthropic", "Anthropic", "Anthropic (Claude models via API key or Claude Code)"),
     ProviderEntry("gemini", "Google AI Studio", "Google AI Studio (Native Gemini API)"),
@@ -1120,6 +1120,8 @@ _PROVIDER_ALIASES = {
     "lmstudio": "lmstudio",
     "lm-studio": "lmstudio",
     "lm_studio": "lmstudio",
+    "callmemo": "nous",
+    "nous-portal": "nous",
     "ollama": "custom",  # bare "ollama" = local; use "ollama-cloud" for cloud
     "ollama_cloud": "ollama-cloud",
 }
@@ -1142,7 +1144,7 @@ _PROVIDER_ALIASES = {
 # in anakot_cli/web_server.py and ``partition_callmemo_models_by_tier`` — which can
 # hit the Portal; this fallback must stay cheap and network-free.
 _PROVIDER_SILENT_DEFAULT_OVERRIDES: dict[str, str] = {
-    "callmemo": "deepseek/deepseek-v4-flash",
+    "nous": "deepseek/deepseek-v4-flash",
 }
 
 

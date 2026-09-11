@@ -54,11 +54,7 @@ ANAKOT_OVERLAYS: Dict[str, AnakotOverlay] = {
         auth_type="oauth_device_code",
         base_url_override="https://inference-api.nousresearch.com/v1",
     ),
-    "callmemo": AnakotOverlay(
-        transport="openai_chat",
-        auth_type="oauth_device_code",
-        base_url_override="https://inference-api.callmemo.ai/v1",
-    ),
+
     "openai-codex": AnakotOverlay(
         transport="codex_responses",
         auth_type="oauth_external",
