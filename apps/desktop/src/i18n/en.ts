@@ -172,6 +172,7 @@ export const en: Translations = {
     actions: {
       'keybinds.openPanel': 'Open keyboard shortcuts',
       'nav.commandPalette': 'Open command palette',
+      'nav.sessionPicker': 'Open session picker',
       'nav.commandCenter': 'Open command center',
       'nav.settings': 'Open settings',
       'nav.profiles': 'Open profiles',

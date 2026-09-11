@@ -65,7 +65,8 @@ export const KEYBIND_ACTIONS: readonly KeybindActionMeta[] = [
 
   // ── Navigation ───────────────────────────────────────────────────────────
   { id: 'nav.commandPalette', category: 'navigation', defaults: ['mod+k', 'mod+p'] },
-  { id: 'nav.commandCenter', category: 'navigation', defaults: ['mod+.'] },
+  { id: 'nav.sessionPicker', category: 'navigation', defaults: ['mod+shift+p'] },
+  { id: 'nav.commandCenter', category: 'navigation', defaults: ['mod+.' ] },
   { id: 'nav.settings', category: 'navigation', defaults: ['mod+,'] },
   { id: 'nav.profiles', category: 'navigation', defaults: [] },
   { id: 'nav.skills', category: 'navigation', defaults: [] },

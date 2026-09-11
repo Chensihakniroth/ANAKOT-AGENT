@@ -168,6 +168,7 @@ export const zh: Translations = {
     actions: {
       'keybinds.openPanel': '打开键盘快捷键',
       'nav.commandPalette': '打开命令面板',
+      'nav.sessionPicker': '打开会话选择器',
       'nav.commandCenter': '打开命令中心',
       'nav.settings': '打开设置',
       'nav.profiles': '打开配置',

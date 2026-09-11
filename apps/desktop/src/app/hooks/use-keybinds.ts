@@ -5,6 +5,7 @@ import { setRightSidebarTab } from '@/app/right-sidebar/store'
 import { PROFILE_SLOT_COUNT } from '@/lib/keybinds/actions'
 import { comboAllowedInInput, comboFromEvent, isEditableTarget } from '@/lib/keybinds/combo'
 import { toggleCommandPalette } from '@/store/command-palette'
+import { toggleSessionPicker } from '@/app/session-picker/store'
 import { $capture, $comboIndex, endCapture, setBinding, toggleKeybindPanel } from '@/store/keybinds'
 import {
   requestSessionSearchFocus,
@@ -93,6 +94,7 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     'composer.modelPicker': () => setModelPickerOpen(true),
 
     'nav.commandPalette': toggleCommandPalette,
+    'nav.sessionPicker': toggleSessionPicker,
     'nav.commandCenter': deps.toggleCommandCenter,
     'nav.settings': () => navigate(SETTINGS_ROUTE),
     'nav.profiles': () => navigate(PROFILES_ROUTE),
