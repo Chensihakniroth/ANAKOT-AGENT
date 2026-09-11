@@ -218,6 +218,7 @@ export interface Translations {
       browserProfile: string
       notifications: string
       discord: string
+      customEndpoints: string
       archivedChats: string
       freeModels: string
       webhooks: string

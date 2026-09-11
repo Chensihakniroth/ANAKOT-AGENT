@@ -24,6 +24,7 @@ import { SECTIONS } from './constants'
 import { DiscordRpcSettings } from './discord-rpc-settings'
 import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
+import { CustomEndpointsSettings } from './custom-endpoints-settings'
 import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
 import { SettingsProfileScope } from './profile-scope'
@@ -51,7 +52,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'browserProfile',
   'notifications',
   'discord',
-  'sessions',
+  'customEndpoints',
   'freeModels',
   'webhooks',
   'about'
@@ -268,6 +269,13 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('discord')}
           />
           <OverlayNavItem
+            active={activeView === 'customEndpoints'}
+            icon={Globe}
+            label={t.settings.nav.customEndpoints ?? 'Custom Endpoints'}
+            nested
+            onClick={() => setActiveView('customEndpoints')}
+          />
+          <OverlayNavItem
             active={activeView === 'webhooks'}
             icon={Globe}
             label={t.settings.nav.webhooks ?? 'Webhooks'}
@@ -347,6 +355,8 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <DiscordRpcSettings />
           ) : activeView === 'freeModels' ? (
             <FreeModelSuiteSettings gateway={gateway} onMainModelChanged={onMainModelChanged} />
+          ) : activeView === 'customEndpoints' ? (
+            <CustomEndpointsSettings />
           ) : activeView === 'webhooks' ? (
             <WebhooksSettings />
           ) : (

@@ -272,6 +272,7 @@ export const en: Translations = {
       browserProfile: 'Browser Profile',
       notifications: 'Notifications',
       discord: 'Discord Presence',
+      customEndpoints: 'Custom Endpoints',
       archivedChats: 'Archived Chats',
       freeModels: 'Free Models',
       webhooks: 'Webhooks',

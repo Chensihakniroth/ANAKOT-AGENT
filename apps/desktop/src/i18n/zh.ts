@@ -266,6 +266,7 @@ export const zh: Translations = {
       browserProfile: '浏览器配置',
       notifications: '通知',
       discord: 'Discord 状态',
+      customEndpoints: '自定义端点',
       archivedChats: '已归档对话',
       freeModels: '免费模型',
       webhooks: 'Webhooks',
