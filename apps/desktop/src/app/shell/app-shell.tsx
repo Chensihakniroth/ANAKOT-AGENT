@@ -37,6 +37,7 @@ import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
 import { SessionSwitcher } from '../session-switcher'
 import { SessionPickerDialog } from '../session-picker/SessionPickerDialog'
+import { AppContextMenu } from '../context-menu'
 import { useWakeIndicatorIntegration } from '../hooks/use-wake-indicator'
 
 const KAOMOJIS = ['૮ • ﻌ - ა', '∪･ω･∪', '∪￣-￣∪', '꒰ᐢ. ̫ .ᐢ꒱', '∪･ｪ･∪', '(=`ω´=)']
@@ -260,6 +261,7 @@ export function AppShell({
       <FloatingPet />
       <SessionSwitcher />
       <SessionPickerDialog />
+      <AppContextMenu />
     </SidebarProvider>
   )
 }
