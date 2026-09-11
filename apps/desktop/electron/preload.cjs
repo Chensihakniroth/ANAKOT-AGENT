@@ -280,6 +280,15 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     check: () => ipcRenderer.invoke('anakot:computer-use:check')
   },
 
+  // Local Models — manage local model runtimes and downloads
+  localModels: {
+    list: () => ipcRenderer.invoke('anakot:local-models:list'),
+    download: (payload: { model: string }) => ipcRenderer.invoke('anakot:local-models:download', payload),
+    remove: (payload: { id: string }) => ipcRenderer.invoke('anakot:local-models:remove', payload),
+    startRuntime: (payload: { type: string }) => ipcRenderer.invoke('anakot:local-models:start-runtime', payload),
+    stopRuntime: (payload: { type: string }) => ipcRenderer.invoke('anakot:local-models:stop-runtime', payload)
+  },
+
   // Terminal backends — probe available execution backends
   terminalBackends: {
     get: () => ipcRenderer.invoke('anakot:terminal:backends'),

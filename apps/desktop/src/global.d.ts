@@ -331,6 +331,30 @@ declare global {
         ) => void) => () => void
       }
 
+      // Local Models — manage local model runtimes and downloads
+      localModels: {
+        list: () => Promise<{
+          ok: boolean
+          models: Array<{
+            id: string
+            name: string
+            size: string
+            runtime: string
+            status: string
+          }>
+          runtimes: Array<{
+            name: string
+            type: string
+            status: string
+            version?: string
+          }>
+        }>
+        download: (payload: { model: string }) => Promise<{ ok: boolean; error?: string }>
+        remove: (payload: { id: string }) => Promise<{ ok: boolean; error?: string }>
+        startRuntime: (payload: { type: string }) => Promise<{ ok: boolean; error?: string }>
+        stopRuntime: (payload: { type: string }) => Promise<{ ok: boolean; error?: string }>
+      }
+
       // Terminal backends — probe available execution backends
       terminalBackends: {
         get: () => Promise<{

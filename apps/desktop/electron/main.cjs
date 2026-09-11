@@ -7599,6 +7599,108 @@ ipcMain.handle('anakot:connections:probe', (_event, { url }) => {
   }
 })
 
+// ── Local Models ──────────────────────────────────────────────────────────
+// Manage local model runtimes (Ollama, llama.cpp) and model downloads.
+
+ipcMain.handle('anakot:local-models:list', () => {
+  // Probe for installed runtimes
+  const { execSync } = require('child_process')
+  const fs = require('fs')
+  const os = require('os')
+  const path = require('path')
+
+  const runtimes = []
+
+  // Check Ollama
+  let ollamaStatus = 'not_installed'
+  let ollamaVersion
+  try {
+    const out = execSync('ollama --version', { stdio: 'pipe', timeout: 3000 }).toString().trim()
+    ollamaVersion = out.replace(/^ollama version /, '')
+    ollamaStatus = 'stopped'
+    // Check if running
+    try {
+      execSync('ollama list', { stdio: 'pipe', timeout: 3000 })
+      ollamaStatus = 'running'
+    } catch { /* not running */ }
+  } catch { /* not installed */ }
+  runtimes.push({ name: 'Ollama', type: 'ollama', status: ollamaStatus, version: ollamaVersion })
+
+  // Check llama.cpp (llama-server)
+  let llamaStatus = 'not_installed'
+  try {
+    execSync('llama-server --version', { stdio: 'pipe', timeout: 3000 })
+    llamaStatus = 'stopped'
+  } catch {
+    // Also check common paths
+    const llamaPaths = ['/usr/local/bin/llama-server', '/opt/homebrew/bin/llama-server']
+    for (const p of llamaPaths) {
+      if (fs.existsSync(p)) { llamaStatus = 'stopped'; break }
+    }
+  }
+  runtimes.push({ name: 'llama.cpp', type: 'llama.cpp', status: llamaStatus })
+
+  // Get model lists from Ollama
+  const models = []
+  try {
+    const listOut = execSync('ollama list', { stdio: 'pipe', timeout: 5000 }).toString().trim()
+    const lines = listOut.split('\n').slice(1) // skip header
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/)
+      if (parts.length >= 3) {
+        models.push({
+          id: parts[0],
+          name: parts[0],
+          size: parts[2],
+          runtime: 'ollama',
+          status: 'ready'
+        })
+      }
+    }
+  } catch { /* ignore */ }
+
+  return { ok: true, models, runtimes }
+})
+
+ipcMain.handle('anakot:local-models:download', (_event, { model }) => {
+  // TODO: implement download via Ollama pull or llama.cpp download
+  return { ok: false, error: 'Download not yet implemented' }
+})
+
+ipcMain.handle('anakot:local-models:remove', (_event, { id }) => {
+  try {
+    const { execSync } = require('child_process')
+    execSync(`ollama rm ${id}`, { stdio: 'pipe', timeout: 30000 })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
+ipcMain.handle('anakot:local-models:start-runtime', (_event, { type }) => {
+  try {
+    const { spawn } = require('child_process')
+    if (type === 'ollama') {
+      spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' })
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
+ipcMain.handle('anakot:local-models:stop-runtime', (_event, { type }) => {
+  try {
+    const { execSync } = require('child_process')
+    if (type === 'ollama') {
+      execSync('ollama stop', { stdio: 'pipe', timeout: 10000 })
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
 // ── Terminal Backend Probing ──────────────────────────────────────────────
 // Probe available terminal execution backends (local, docker, ssh, modal, daytona).
 

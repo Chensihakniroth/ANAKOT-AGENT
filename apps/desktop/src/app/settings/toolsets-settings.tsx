@@ -10,6 +10,7 @@ import { ToolsetConfigPanel } from './toolset-config-panel'
 import { PoolLimitsPanel } from './pool-limits-panel'
 import { TerminalBackendPanel } from './terminal-backend-panel'
 import { ComputerUsePanel } from './computer-use-panel'
+import { LocalModelsPanel } from './local-models-panel'
 import { SettingsContent, SettingsSection } from './primitives'
 
 export function ToolsetsSettings() {
@@ -104,6 +105,19 @@ export function ToolsetsSettings() {
             </p>
           </div>
           <ComputerUsePanel />
+        </div>
+      </SettingsSection>
+
+      {/* Local Models — download and manage local model runtimes */}
+      <SettingsSection>
+        <div className="rounded-xl border bg-background/60 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-medium">Local Models</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Download and run models locally with Ollama or llama.cpp.
+            </p>
+          </div>
+          <LocalModelsPanel />
         </div>
       </SettingsSection>
     </SettingsContent>
