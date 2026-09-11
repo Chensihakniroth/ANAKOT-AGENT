@@ -331,6 +331,23 @@ declare global {
         ) => void) => () => void
       }
 
+      // Terminal backends — probe available execution backends
+      terminalBackends: {
+        get: () => Promise<{
+          ok: boolean
+          backends: Array<{
+            name: string
+            label: string
+            description: string
+            status: 'ready' | 'needs_setup' | 'unavailable'
+            active: boolean
+            detail: string
+          }>
+          active: string
+        }>
+        set: (backend: string) => Promise<{ ok: boolean; active: string }>
+      }
+
       // Pool limits — device-local backend pool sizing preference
       poolLimits: {
         get: () => Promise<{

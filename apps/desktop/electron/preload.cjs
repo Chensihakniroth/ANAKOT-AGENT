@@ -266,6 +266,12 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Terminal backends — probe available execution backends
+  terminalBackends: {
+    get: () => ipcRenderer.invoke('anakot:terminal:backends'),
+    set: (backend: string) => ipcRenderer.invoke('anakot:terminal:backends:set', backend)
+  },
+
   // Pool limits — device-local backend pool sizing preference
   poolLimits: {
     get: () => ipcRenderer.invoke('anakot:pool-limits:get'),

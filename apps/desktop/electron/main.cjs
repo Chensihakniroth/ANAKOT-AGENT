@@ -7467,6 +7467,75 @@ ipcMain.handle('anakot:terminal:resize', (_event, id, size = {}) => {
 })
 ipcMain.handle('anakot:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
 
+// ── Terminal Backend Probing ──────────────────────────────────────────────
+// Probe available terminal execution backends (local, docker, ssh, modal, daytona).
+
+function probeTerminalBackends() {
+  const os = require('os')
+  const fs = require('fs')
+  const path = require('path')
+
+  const backends = []
+
+  backends.push({
+    name: 'local',
+    label: 'Local',
+    description: 'Run commands directly on this machine. No isolation.',
+    status: 'ready',
+    active: true,
+    detail: os.hostname() || 'localhost'
+  })
+
+  let dockerStatus = 'unavailable'
+  let dockerDetail = 'Docker not found'
+  try {
+    const { execFileSync } = require('child_process')
+    const searchPaths = ['/usr/local/bin/docker', '/opt/homebrew/bin/docker', '/Applications/Docker.app/Contents/Resources/bin/docker']
+    let dockerPath = 'docker'
+    for (const p of searchPaths) {
+      if (fs.existsSync(p)) { dockerPath = p; break }
+    }
+    execFileSync(dockerPath, ['version', '--format', '{{.Server.Version}}'], { stdio: 'pipe', timeout: 5000 })
+    dockerStatus = 'ready'
+    dockerDetail = 'Docker daemon running'
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.message?.includes('not found')) {
+      dockerStatus = 'needs_setup'
+      dockerDetail = 'Docker not installed'
+    } else {
+      dockerStatus = 'needs_setup'
+      dockerDetail = 'Docker daemon not reachable'
+    }
+  }
+  backends.push({ name: 'docker', label: 'Docker', description: 'Run commands in an isolated Docker container.', status: dockerStatus, active: false, detail: dockerDetail })
+
+  const sshDir = path.join(os.homedir(), '.ssh')
+  let sshStatus = 'needs_setup'
+  let sshDetail = 'No SSH hosts configured'
+  try {
+    const sshConfig = path.join(sshDir, 'config')
+    if (fs.existsSync(sshConfig)) {
+      const content = fs.readFileSync(sshConfig, 'utf8')
+      const hosts = content.match(/^Host\s+(.+)$/m)?.[1]
+      if (hosts) { sshStatus = 'ready'; sshDetail = hosts.trim() }
+    }
+  } catch { /* ignore */ }
+  backends.push({ name: 'ssh', label: 'SSH', description: 'Run commands on a remote host over SSH.', status: sshStatus, active: false, detail: sshDetail })
+
+  backends.push({ name: 'modal', label: 'Modal', description: 'Run commands on Modal cloud containers.', status: process.env.MODAL_TOKEN_ID ? 'ready' : 'needs_setup', active: false, detail: process.env.MODAL_TOKEN_ID ? 'Modal configured' : 'Set MODAL_TOKEN_ID to enable' })
+
+  backends.push({ name: 'daytona', label: 'Daytona', description: 'Run commands on Daytona workspaces.', status: process.env.DAYTONA_TOKEN ? 'ready' : 'needs_setup', active: false, detail: process.env.DAYTONA_TOKEN ? 'Daytona configured' : 'Set DAYTONA_TOKEN to enable' })
+
+  return { ok: true, backends, active: 'local' }
+}
+
+ipcMain.handle('anakot:terminal:backends', () => probeTerminalBackends())
+
+ipcMain.handle('anakot:terminal:backends:set', (_event, backend) => {
+  // TODO: persist via config API
+  return { ok: true, active: backend }
+})
+
 ipcMain.handle('anakot:updates:check', async () =>
   checkUpdates().catch(error => ({
     supported: true,
