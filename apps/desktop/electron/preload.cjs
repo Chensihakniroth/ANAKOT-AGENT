@@ -253,6 +253,19 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Wake Indicator — always-on-top light that shows wake-word detection state.
+  wakeIndicator: {
+    show: () => ipcRenderer.invoke('anakot:wake-indicator:show'),
+    hide: () => ipcRenderer.invoke('anakot:wake-indicator:hide'),
+    getState: () => ipcRenderer.invoke('anakot:wake-indicator:get-state'),
+    setState: state => ipcRenderer.invoke('anakot:wake-indicator:set-state', state),
+    onState: cb => {
+      const listener = (_event, state) => cb(state)
+      ipcRenderer.on('anakot:wake-indicator:state', listener)
+      return () => ipcRenderer.removeListener('anakot:wake-indicator:state', listener)
+    }
+  },
+
   // Quick Entry — global-hotkey mini composer. The quick window itself is a
   // dumb capture surface; the primary renderer owns the submit path.
   quickEntry: {

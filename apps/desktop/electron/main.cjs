@@ -641,6 +641,8 @@ function registerRendererProtocol() {
 let mainWindow = null
 let keepAwakeBlockerId = null
 let petOverlayWindow = null
+let wakeIndicatorWindow = null
+let wakeIndicatorState = 'hidden'
 let anakotProcess = null
 let connectionPromise = null
 // Additional per-profile backends, keyed by profile name. The PRIMARY backend
@@ -5109,6 +5111,74 @@ function spawnPetOverlayWindow(bounds) {
   return win
 }
 
+// ── Wake Indicator Window ──────────────────────────────────────────────────
+// A tiny always-on-top transparent window that shows a light when wake word
+// is detected. Similar to pet overlay but minimal — just a colored dot.
+
+function spawnWakeIndicatorWindow() {
+  const { width, height } = require('electron').screen.getPrimaryDisplay().workAreaSize
+  const win = new BrowserWindow({
+    width: 120,
+    height: 120,
+    x: Math.round((width - 120) / 2),
+    y: Math.round(height * 0.15),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    focusable: false,
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      devTools: true,
+      backgroundThrottling: false
+    }
+  })
+
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces?.(true)
+  win.loadFile(path.join(__dirname, 'wake-indicator.html'))
+
+  win.on('closed', () => {
+    if (wakeIndicatorWindow === win) {
+      wakeIndicatorWindow = null
+    }
+  })
+
+  return win
+}
+
+function openWakeIndicator() {
+  if (!wakeIndicatorWindow || wakeIndicatorWindow.isDestroyed()) {
+    wakeIndicatorWindow = spawnWakeIndicatorWindow()
+  }
+  wakeIndicatorWindow.showInactive()
+  return wakeIndicatorWindow
+}
+
+function closeWakeIndicator() {
+  if (wakeIndicatorWindow && !wakeIndicatorWindow.isDestroyed()) {
+    wakeIndicatorWindow.hide()
+  }
+}
+
+function setWakeIndicatorState(state) {
+  wakeIndicatorState = state
+  if (wakeIndicatorWindow && !wakeIndicatorWindow.isDestroyed()) {
+    wakeIndicatorWindow.webContents.send('anakot:wake-indicator:state', state)
+  }
+}
+
 function openPetOverlay(bounds) {
   if (petOverlayWindow && !petOverlayWindow.isDestroyed()) {
     if (bounds) {
@@ -7775,7 +7845,28 @@ ipcMain.handle('anakot:pet-overlay:close', async () => {
 
   return { ok: true }
 })
-// Drag/resize: the overlay reports new absolute screen bounds (it already knows
+
+// ── Wake Indicator IPC ─────────────────────────────────────────────────────
+ipcMain.handle('anakot:wake-indicator:show', () => {
+  openWakeIndicator()
+  return { ok: true, state: wakeIndicatorState }
+})
+
+ipcMain.handle('anakot:wake-indicator:hide', () => {
+  closeWakeIndicator()
+  return { ok: true }
+})
+
+ipcMain.handle('anakot:wake-indicator:set-state', (_event, state) => {
+  setWakeIndicatorState(state)
+  return { ok: true }
+})
+
+ipcMain.handle('anakot:wake-indicator:get-state', () => {
+  return { ok: true, state: wakeIndicatorState }
+})
+
+// Drag/resize:
 // the pointer's screen coords). Drag keeps the size constant; the wheel-to-scale
 // gesture grows/shrinks it so the sprite is never cropped by the window edge.
 // The window is created non-resizable (no stray edge-drag on the transparent

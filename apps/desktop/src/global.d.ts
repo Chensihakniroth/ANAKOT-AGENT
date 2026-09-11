@@ -370,6 +370,15 @@ declare global {
         onSubmit: (callback: (payload: { text: string; targetSessionId?: string | null }) => void) => () => void
         onShown: (callback: () => void) => () => void
       }
+
+      // Wake Indicator — always-on-top light showing wake-word detection state
+      wakeIndicator: {
+        show: () => Promise<{ ok: boolean; state: string }>
+        hide: () => Promise<{ ok: boolean }>
+        getState: () => Promise<{ ok: boolean; state: string }>
+        setState: (state: string) => Promise<{ ok: boolean }>
+        onState: (callback: (state: string) => void) => () => void
+      }
     }
   }
 

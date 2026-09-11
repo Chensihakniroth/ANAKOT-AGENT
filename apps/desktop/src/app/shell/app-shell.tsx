@@ -36,6 +36,7 @@ import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
 import { SessionSwitcher } from '../session-switcher'
+import { useWakeIndicatorIntegration } from '../hooks/use-wake-indicator'
 
 const KAOMOJIS = ['૮ • ﻌ - ა', '∪･ω･∪', '∪￣-￣∪', '꒰ᐢ. ̫ .ᐢ꒱', '∪･ｪ･∪', '(=`ω´=)']
 
@@ -73,6 +74,8 @@ export function AppShell({
   statusbarItems,
   titlebarTools
 }: AppShellProps) {
+  useWakeIndicatorIntegration()
+
   const sidebarOpen = useStore($sidebarOpen)
   const fileBrowserOpen = useStore($fileBrowserOpen)
   const panesFlipped = useStore($panesFlipped)
