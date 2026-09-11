@@ -348,6 +348,16 @@ declare global {
         set: (backend: string) => Promise<{ ok: boolean; active: string }>
       }
 
+      // Computer Use — check availability (macOS + cua-driver)
+      computerUse: {
+        check: () => Promise<{
+          ok: boolean
+          available: boolean
+          platform: string
+          reason?: string
+        }>
+      }
+
       // Pool limits — device-local backend pool sizing preference
       poolLimits: {
         get: () => Promise<{

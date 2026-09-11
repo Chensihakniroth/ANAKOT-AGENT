@@ -266,6 +266,11 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Computer Use — check availability (macOS + cua-driver)
+  computerUse: {
+    check: () => ipcRenderer.invoke('anakot:computer-use:check')
+  },
+
   // Terminal backends — probe available execution backends
   terminalBackends: {
     get: () => ipcRenderer.invoke('anakot:terminal:backends'),

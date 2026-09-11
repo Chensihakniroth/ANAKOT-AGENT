@@ -9,6 +9,7 @@ import type { ToolsetInfo } from '@/types/anakot'
 import { ToolsetConfigPanel } from './toolset-config-panel'
 import { PoolLimitsPanel } from './pool-limits-panel'
 import { TerminalBackendPanel } from './terminal-backend-panel'
+import { ComputerUsePanel } from './computer-use-panel'
 import { SettingsContent, SettingsSection } from './primitives'
 
 export function ToolsetsSettings() {
@@ -90,6 +91,19 @@ export function ToolsetsSettings() {
             </p>
           </div>
           <TerminalBackendPanel />
+        </div>
+      </SettingsSection>
+
+      {/* Computer Use — AI desktop control (macOS) */}
+      <SettingsSection>
+        <div className="rounded-xl border bg-background/60 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-medium">Computer Use</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Let the AI control your desktop — mouse, keyboard, and screen.
+            </p>
+          </div>
+          <ComputerUsePanel />
         </div>
       </SettingsSection>
     </SettingsContent>

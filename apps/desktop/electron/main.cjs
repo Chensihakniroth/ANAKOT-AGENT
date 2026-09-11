@@ -7467,6 +7467,47 @@ ipcMain.handle('anakot:terminal:resize', (_event, id, size = {}) => {
 })
 ipcMain.handle('anakot:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
 
+// ── Computer Use ──────────────────────────────────────────────────────────
+ipcMain.handle('anakot:computer-use:check', () => {
+  const os = require('os')
+  const fs = require('fs')
+  const sysPlatform = os.platform()
+
+  // Only macOS is supported
+  if (sysPlatform !== 'darwin') {
+    return { ok: true, available: false, platform: sysPlatform, reason: 'macOS only' }
+  }
+
+  // Check if cua-driver binary is available
+  const searchPaths = [
+    '/usr/local/bin/cua-driver',
+    '/opt/homebrew/bin/cua-driver',
+    '/usr/bin/cua-driver'
+  ]
+  let found = false
+  for (const p of searchPaths) {
+    try {
+      if (fs.existsSync(p)) { found = true; break }
+    } catch { /* ignore */ }
+  }
+
+  // Also check PATH
+  if (!found) {
+    try {
+      const { execSync } = require('child_process')
+      execSync('which cua-driver', { stdio: 'pipe', timeout: 3000 })
+      found = true
+    } catch { /* not in PATH */ }
+  }
+
+  return {
+    ok: true,
+    available: found,
+    platform: sysPlatform,
+    reason: found ? undefined : 'cua-driver binary not found'
+  }
+})
+
 // ── Terminal Backend Probing ──────────────────────────────────────────────
 // Probe available terminal execution backends (local, docker, ssh, modal, daytona).
 
