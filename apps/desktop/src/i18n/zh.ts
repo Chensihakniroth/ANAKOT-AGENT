@@ -244,6 +244,11 @@ export const zh: Translations = {
     resetConfirm: '将所有设置恢复为 Anakot 默认值？',
     exportFailed: '导出失败',
     resetFailed: '重置失败',
+    profileScope: {
+      appliesTo: '适用于',
+      allProfiles: '所有配置文件',
+      editingProfile: '正在编辑 "{name}" 的设置'
+    },
     nav: {
       providers: '提供方',
       providerAccounts: '账号',

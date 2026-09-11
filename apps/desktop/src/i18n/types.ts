@@ -197,6 +197,11 @@ export interface Translations {
     resetConfirm: string
     exportFailed: string
     resetFailed: string
+    profileScope: {
+      appliesTo: string
+      allProfiles: string
+      editingProfile: string
+    }
     nav: {
       providers: string
       providerAccounts: string

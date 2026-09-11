@@ -2,11 +2,13 @@ import { IconDownload, IconRefresh, IconUpload } from '@tabler/icons-react'
 import { useEffect, useRef } from 'react'
 
 import { getAnakotConfigDefaults, getAnakotConfigRecord, getAnakotConfigSchema, getEnvVars, saveAnakotConfig } from '@/anakot'
+import { setApiRequestProfile } from '@/anakot'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Archive, Bell, Discord, Globe, Info, KeyRound, Leaf, PawPrint, Settings2, Sparkles, Wrench, Zap, Palette } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
+import { $settingsScopeOverride } from '@/store/settings-scope'
 import { useStore } from '@nanostores/react'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -24,6 +26,7 @@ import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
 import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
+import { SettingsProfileScope } from './profile-scope'
 import { McpSettings } from './mcp-settings'
 import { NotificationsSettings } from './notifications-settings'
 import { PetSettings } from './pet-settings'
@@ -60,6 +63,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
   const [providerView, setProviderView] = useRouteEnumParam<ProviderView>('pview', PROVIDER_VIEWS, 'accounts')
   const [keysView, setKeysView] = useRouteEnumParam<KeysView>('kview', KEYS_VIEWS, 'tools')
   const store = useStore(searchStore)
+  const scopeOverride = useStore($settingsScopeOverride)
+
+  // Sync settings scope override to the API request profile
+  useEffect(() => {
+    setApiRequestProfile(scopeOverride)
+  }, [scopeOverride])
 
   // Initialize search with all config keys and sections from schema and env vars
   useEffect(() => {
@@ -274,6 +283,11 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
         </OverlaySidebar>
 
         <OverlayMain className="px-0 pb-0 pt-[calc(var(--titlebar-height)+1rem)]">
+          {/* Profile scope selector */}
+          <div className="px-4 pb-3">
+            <SettingsProfileScope />
+          </div>
+
           {/* Search results overview when query is active */}
           {store.query && (
             <div className="mb-4 p-3 bg-muted/50 rounded-lg">

@@ -250,6 +250,11 @@ export const en: Translations = {
     resetConfirm: 'Reset all settings to Anakot defaults?',
     exportFailed: 'Export failed',
     resetFailed: 'Reset failed',
+    profileScope: {
+      appliesTo: 'Applies to',
+      allProfiles: 'All profiles',
+      editingProfile: 'Editing settings for "{name}"'
+    },
     nav: {
       providers: 'Providers',
       providerAccounts: 'Accounts',
