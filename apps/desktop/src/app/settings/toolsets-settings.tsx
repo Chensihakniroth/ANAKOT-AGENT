@@ -7,6 +7,7 @@ import { notifyError } from '@/store/notifications'
 import type { ToolsetInfo } from '@/types/anakot'
 
 import { ToolsetConfigPanel } from './toolset-config-panel'
+import { PoolLimitsPanel } from './pool-limits-panel'
 import { SettingsContent, SettingsSection } from './primitives'
 
 export function ToolsetsSettings() {
@@ -64,6 +65,19 @@ export function ToolsetsSettings() {
           </div>
         </SettingsSection>
       ))}
+
+      {/* Pool limits — device-local backend pool sizing */}
+      <SettingsSection>
+        <div className="rounded-xl border bg-background/60 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-medium">Backend Pool</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Control how many bot backends stay running for instant profile switching.
+            </p>
+          </div>
+          <PoolLimitsPanel />
+        </div>
+      </SettingsSection>
     </SettingsContent>
   )
 }

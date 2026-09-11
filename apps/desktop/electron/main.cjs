@@ -655,8 +655,63 @@ const backendPool = new Map() // profile -> { process, port, token, connectionPr
 // Keep the pool light: cap concurrent profile backends (LRU eviction) and reap
 // idle ones. A user idles at exactly the primary backend; pool backends only
 // exist while a non-primary profile is actively being chatted through.
-const POOL_MAX_BACKENDS = Math.max(1, Number(process.env.ANAKOT_DESKTOP_POOL_MAX) || 3)
-const POOL_IDLE_MS = Math.max(60_000, Number(process.env.ANAKOT_DESKTOP_POOL_IDLE_MS) || 10 * 60_000)
+// Device-local preference persisted in userData; falls back to env-var overrides
+// then hard-coded defaults.
+const POOL_LIMITS_DEFAULTS = { maxBackends: 3, idleMs: 10 * 60_000 }
+const POOL_LIMITS_MIN = { maxBackends: 1, idleMs: 60_000 }
+const POOL_LIMITS_BOUNDS = { maxBackendsMax: 64, idleMsMax: 7 * 24 * 60 * 60_000 }
+let poolLimits = loadPoolLimits()
+
+function loadPoolLimits() {
+  const defaults = {
+    maxBackends: Math.max(POOL_LIMITS_MIN.maxBackends, Number(process.env.ANAKOT_DESKTOP_POOL_MAX) || POOL_LIMITS_DEFAULTS.maxBackends),
+    idleMs: Math.max(POOL_LIMITS_MIN.idleMs, Number(process.env.ANAKOT_DESKTOP_POOL_IDLE_MS) || POOL_LIMITS_DEFAULTS.idleMs)
+  }
+  try {
+    const userDataPath = app.getPath('userData')
+    const limitsPath = path.join(userDataPath, 'pool-limits.json')
+    if (!fs.existsSync(limitsPath)) return defaults
+    const raw = fs.readFileSync(limitsPath, 'utf8')
+    const parsed = JSON.parse(raw)
+    return clampPoolLimits({
+      maxBackends: typeof parsed?.maxBackends === 'number' ? parsed.maxBackends : undefined,
+      idleMs: typeof parsed?.idleMs === 'number' ? parsed.idleMs : undefined
+    })
+  } catch {
+    return defaults
+  }
+}
+
+function clampPoolLimits(raw) {
+  return {
+    maxBackends: Number.isFinite(raw?.maxBackends)
+      ? Math.min(POOL_LIMITS_BOUNDS.maxBackendsMax, Math.max(POOL_LIMITS_MIN.maxBackends, Math.floor(Number(raw.maxBackends))))
+      : POOL_LIMITS_DEFAULTS.maxBackends,
+    idleMs: Number.isFinite(raw?.idleMs)
+      ? Math.min(POOL_LIMITS_BOUNDS.idleMsMax, Math.max(POOL_LIMITS_MIN.idleMs, Math.floor(Number(raw.idleMs))))
+      : POOL_LIMITS_DEFAULTS.idleMs
+  }
+}
+
+function savePoolLimits(limits) {
+  try {
+    const userDataPath = app.getPath('userData')
+    const limitsPath = path.join(userDataPath, 'pool-limits.json')
+    fs.mkdirSync(userDataPath, { recursive: true })
+    fs.writeFileSync(limitsPath, JSON.stringify(limits, null, 2))
+  } catch {
+    // Best-effort; defaults persist in memory
+  }
+}
+
+function setPoolLimits(raw) {
+  poolLimits = clampPoolLimits(raw)
+  savePoolLimits(poolLimits)
+  return poolLimits
+}
+
+const POOL_MAX_BACKENDS = () => poolLimits.maxBackends
+const POOL_IDLE_MS = () => poolLimits.idleMs
 // A backend touched within this window has a live renderer socket (the keepalive
 // pings every 60s for every open profile). LRU eviction must spare these — a
 // concurrent multi-profile session keeps several backends "fresh" at once, and
@@ -4611,7 +4666,7 @@ async function ensureBackend(profile) {
     return existing.connectionPromise
   }
 
-  evictLruPoolBackends(POOL_MAX_BACKENDS - 1)
+  evictLruPoolBackends(POOL_MAX_BACKENDS() - 1)
 
   const entry = { process: null, port: null, token: null, connectionPromise: null, lastActiveAt: Date.now() }
   entry.connectionPromise = spawnPoolBackend(key, entry).catch(error => {
@@ -4646,7 +4701,7 @@ function evictLruPoolBackends(keep) {
   let removable = backendPool.size - Math.max(0, keep)
   for (const [profile] of evictable) {
     if (removable <= 0) break
-    rememberLog(`Evicting idle profile backend "${profile}" (LRU cap ${POOL_MAX_BACKENDS})`)
+    rememberLog(`Evicting idle profile backend "${profile}" (LRU cap ${POOL_MAX_BACKENDS()})`)
     stopPoolBackend(profile)
     removable -= 1
   }
@@ -4657,8 +4712,8 @@ function startPoolIdleReaper() {
   poolIdleReaper = setInterval(() => {
     const now = Date.now()
     for (const [profile, entry] of [...backendPool.entries()]) {
-      if (now - (entry.lastActiveAt || 0) > POOL_IDLE_MS) {
-        rememberLog(`Reaping idle profile backend "${profile}" (idle > ${Math.round(POOL_IDLE_MS / 1000)}s)`)
+      if (now - (entry.lastActiveAt || 0) > POOL_IDLE_MS()) {
+        rememberLog(`Reaping idle profile backend "${profile}" (idle > ${Math.round(POOL_IDLE_MS() / 1000)}s)`)
         stopPoolBackend(profile)
       }
     }
@@ -5564,6 +5619,16 @@ ipcMain.handle('anakot:connection', async (_event, profile) => ensureBackend(pro
 ipcMain.handle('anakot:backend:touch', async (_event, profile) => {
   touchPoolBackend(profile)
   return { ok: true }
+})
+
+// Pool limits — device-local preference for backend pool sizing
+ipcMain.handle('anakot:pool-limits:get', () => {
+  return { ok: true, limits: poolLimits, bounds: POOL_LIMITS_BOUNDS, defaults: POOL_LIMITS_DEFAULTS }
+})
+
+ipcMain.handle('anakot:pool-limits:set', (_event, raw) => {
+  const limits = setPoolLimits(raw)
+  return { ok: true, limits }
 })
 ipcMain.handle('anakot:gateway:ws-url', async (_event, profile) => freshGatewayWsUrl(profile))
 ipcMain.handle('anakot:bootstrap:reset', async () => {

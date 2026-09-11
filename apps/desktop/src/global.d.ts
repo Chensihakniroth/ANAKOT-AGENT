@@ -331,6 +331,20 @@ declare global {
         ) => void) => () => void
       }
 
+      // Pool limits — device-local backend pool sizing preference
+      poolLimits: {
+        get: () => Promise<{
+          ok: boolean
+          limits: { maxBackends: number; idleMs: number }
+          bounds: { maxBackendsMax: number; idleMsMax: number }
+          defaults: { maxBackends: number; idleMs: number }
+        }>
+        set: (limits: { maxBackends?: number; idleMs?: number }) => Promise<{
+          ok: boolean
+          limits: { maxBackends: number; idleMs: number }
+        }>
+      }
+
       // Quick Entry — global-hotkey mini composer. The quick window pushes
       // state to the primary renderer and submits text through the same
       // prompt-submit path the normal composer uses.

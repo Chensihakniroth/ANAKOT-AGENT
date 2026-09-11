@@ -266,6 +266,12 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Pool limits — device-local backend pool sizing preference
+  poolLimits: {
+    get: () => ipcRenderer.invoke('anakot:pool-limits:get'),
+    set: (limits: { maxBackends?: number; idleMs?: number }) => ipcRenderer.invoke('anakot:pool-limits:set', limits)
+  },
+
   // Quick Entry — global-hotkey mini composer. The quick window itself is a
   // dumb capture surface; the primary renderer owns the submit path.
   quickEntry: {
