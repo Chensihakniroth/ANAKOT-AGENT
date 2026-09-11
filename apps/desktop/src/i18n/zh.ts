@@ -277,6 +277,7 @@ export const zh: Translations = {
       model: '模型',
       chat: '对话',
       appearance: '外观',
+      terminal: '终端',
       workspace: '工作区',
       safety: '安全',
       memory: '记忆与上下文',

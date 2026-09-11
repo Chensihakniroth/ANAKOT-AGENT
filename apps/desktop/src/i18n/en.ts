@@ -283,6 +283,7 @@ export const en: Translations = {
       model: 'Model',
       chat: 'Chat',
       appearance: 'Appearance',
+      terminal: 'Terminal',
       workspace: 'Workspace',
       safety: 'Safety',
       memory: 'Memory & Context',

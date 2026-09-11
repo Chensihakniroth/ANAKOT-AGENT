@@ -6,7 +6,7 @@ import { setApiRequestProfile } from '@/anakot'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Bell, Discord, Globe, Info, KeyRound, Leaf, PawPrint, Settings2, Sparkles, Wrench, Zap, Palette } from '@/lib/icons'
+import { Archive, Bell, Discord, Globe, Info, KeyRound, Leaf, PawPrint, Settings2, Sparkles, Terminal, Wrench, Zap, Palette } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import { useStore } from '@nanostores/react'
@@ -171,6 +171,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             icon={Palette}
             label={t.settings.sections.appearance ?? 'Appearance'}
             onClick={() => setActiveView('config:appearance')}
+          />
+          <OverlayNavItem
+            active={activeView === 'config:terminal'}
+            icon={Terminal}
+            label={t.settings.sections.terminal ?? 'Terminal'}
+            onClick={() => setActiveView('config:terminal')}
           />
           <div className="my-2 h-px bg-border/30" />
           <OverlayNavItem
