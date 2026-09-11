@@ -16,7 +16,15 @@ import {
   setSidebarOpen
 } from '@/store/layout'
 import { $paneWidthOverride } from '@/store/panes'
-import { $connection, $selectedStoredSessionId, $sessions } from '@/store/session'
+import { $activeSessionId, $connection, $selectedStoredSessionId, $sessions } from '@/store/session'
+import {
+  $switcherIndex,
+  $switcherOpen,
+  closeSwitcher,
+  moveSwitcherIndex,
+  openSwitcher,
+  setSwitcherIndex
+} from '@/store/session-switcher'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { useDiscordRpc } from '@/lib/discord-rpc'
 import { $wakeFired, $wakeWord } from '@/store/wake-word'
@@ -27,6 +35,7 @@ import { KeybindPanel } from './keybind-panel'
 import { StatusbarControls, type StatusbarItem } from './statusbar-controls'
 import { TITLEBAR_HEIGHT, titlebarControlsPosition } from './titlebar'
 import { TitlebarControls, type TitlebarTool } from './titlebar-controls'
+import { SessionSwitcher } from '../session-switcher'
 
 const KAOMOJIS = ['૮ • ﻌ - ა', '∪･ω･∪', '∪￣-￣∪', '꒰ᐢ. ̫ .ᐢ꒱', '∪･ｪ･∪', '(=`ω´=)']
 
@@ -80,6 +89,9 @@ export function AppShell({
 
   const sessionLabel = activeSession ? sessionTitle(activeSession) : null
 
+  // Import session switcher store actions
+  const switcherOpen = useStore($switcherOpen)
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const modifier = event.metaKey || event.ctrlKey
@@ -88,24 +100,45 @@ export function AppShell({
         return
       }
 
-
       event.preventDefault()
-      const currentIndex = sessions.findIndex(session => session.id === selectedStoredSessionId)
-      const direction = event.shiftKey ? -1 : 1
-      const start = currentIndex >= 0 ? currentIndex : 0
-      const nextIndex = (start + direction + sessions.length) % sessions.length
-      const next = sessions[nextIndex]
 
-      if (next) {
-        navigate(sessionRoute(next.id))
+      if ($switcherOpen.get()) {
+        // Switcher is open — cycle through sessions
+        const direction = event.shiftKey ? -1 : 1
+        moveSwitcherIndex(direction, sessions.length)
+      } else {
+        // Open the switcher and start cycling
+        openSwitcher()
+        if (event.shiftKey) {
+          // Shift+Tab opens at the previous session
+          const currentIndex = sessions.findIndex(session => session.id === selectedStoredSessionId)
+          const startIndex = currentIndex > 0 ? currentIndex - 1 : sessions.length - 1
+          setSwitcherIndex(startIndex)
+        }
+      }
+    }
 
+    const onKeyUp = (event: KeyboardEvent) => {
+      // Release of Ctrl/Cmd commits the selection
+      if ((event.key === 'Control' || event.key === 'Meta') && $switcherOpen.get()) {
+        event.preventDefault()
+        const idx = $switcherIndex.get()
+        const session = sessions[idx]
+        if (session) {
+          closeSwitcher()
+          navigate(sessionRoute(session.id))
+        }
       }
     }
 
     window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
 
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [navigate, selectedStoredSessionId, sessions])
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+    }
+  }, [navigate, selectedStoredSessionId, sessions, switcherOpen])
 
   const MAX_STATE_CHARS = 128
 
@@ -221,6 +254,7 @@ export function AppShell({
       <FindBar />
       <WakeStatusPill />
       <FloatingPet />
+      <SessionSwitcher />
     </SidebarProvider>
   )
 }
