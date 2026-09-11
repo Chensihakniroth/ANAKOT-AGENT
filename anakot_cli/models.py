@@ -151,43 +151,6 @@ def _xai_curated_models() -> list[str]:
 
 
 _PROVIDER_MODELS: dict[str, list[str]] = {
-    "callmemo": [
-        # Anthropic
-        "anthropic/claude-opus-4.8",
-        "anthropic/claude-sonnet-4.6",
-        "anthropic/claude-haiku-4.5",
-        # OpenAI
-        "openai/gpt-5.5",
-        "openai/gpt-5.5-pro",
-        "openai/gpt-5.4-mini",
-        # Google
-        "google/gemini-3-pro-preview",
-        "google/gemini-3.1-pro-preview",
-        "google/gemini-3.5-flash",
-        # xAI
-        "x-ai/grok-4.3",
-        # DeepSeek
-        "deepseek/deepseek-v4-pro",
-        "deepseek/deepseek-v4-flash",
-        # Qwen
-        "qwen/qwen3.7-max",
-        "qwen/qwen3.7-plus",
-        "qwen/qwen3.6-35b-a3b",
-        # MoonshotAI
-        "moonshotai/kimi-k2.6",
-        # MiniMax
-        "minimax/minimax-m3",
-        # Z-AI
-        "z-ai/glm-5.1",
-        # Xiaomi
-        "xiaomi/mimo-v2.5-pro",
-        # Tencent
-        "tencent/hy3-preview",
-        # StepFun
-        "stepfun/step-3.7-flash",
-        # NVIDIA
-        "nvidia/nemotron-3-super-120b-a12b",
-    ],
     # Native OpenAI Chat Completions (api.openai.com). Used by /model counts and
     # provider_model_ids fallback when /v1/models is unavailable.
     "openai": [
@@ -710,8 +673,8 @@ _FREE_TIER_CACHE_TTL: int = 180  # seconds (3 minutes)
 _free_tier_cache: tuple[bool, float] | None = None  # (result, timestamp)
 
 
-def check_callmemo_free_tier(*, force_fresh: bool = False) -> bool:
-    """Check if the current callmemo Portal user is on a free (unpaid) tier.
+def check_nous_free_tier(*, force_fresh: bool = False) -> bool:
+    """Check if the current Nous Portal user is on a free (unpaid) tier.
 
     Results are cached for ``_FREE_TIER_CACHE_TTL`` seconds to avoid
     hitting the Portal API on every call.  The cache is short-lived so
@@ -740,7 +703,7 @@ def check_callmemo_free_tier(*, force_fresh: bool = False) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# callmemo Portal recommended models
+# Nous Portal recommended models
 #
 # The Portal publishes a curated list of suggested models (separated into
 # paid and free tiers) plus dedicated recommendations for compaction (text
@@ -765,13 +728,13 @@ _NOUS_RECOMMENDED_CACHE_TTL: int = 600  # seconds (10 minutes)
 _nous_recommended_cache: dict[str, tuple[dict[str, Any], float]] = {}
 
 
-def fetch_callmemo_recommended_models(
+def fetch_nous_recommended_models(
     portal_base_url: str = "",
     timeout: float = 5.0,
     *,
     force_refresh: bool = False,
 ) -> dict[str, Any]:
-    """Fetch the callmemo Portal's curated recommended-models payload.
+    """Fetch the Nous Portal's curated recommended-models payload.
 
     Hits ``<portal>/api/nous/recommended-models``. The endpoint is public —
     no auth is required. Results are cached per portal URL for
@@ -807,20 +770,20 @@ def fetch_callmemo_recommended_models(
     return data
 
 
-def _resolve_callmemo_portal_url() -> str:
+def _resolve_nous_portal_url() -> str:
     """Best-effort lookup of the Portal base URL the user is authed against."""
     try:
         from anakot_cli.auth import (
-            DEFAULT_CALLMEMO_PORTAL_URL,
+            DEFAULT_NOUS_PORTAL_URL,
             get_provider_auth_state,
         )
-        state = get_provider_auth_state("callmemo") or {}
+        state = get_provider_auth_state("nous") or {}
         portal = str(state.get("portal_base_url") or "").strip()
         if portal:
             return portal.rstrip("/")
-        return str(DEFAULT_CALLMEMO_PORTAL_URL).rstrip("/")
+        return str(DEFAULT_NOUS_PORTAL_URL).rstrip("/")
     except Exception:
-        return "https://portal.callmemo.ai"
+        return "https://portal.nousresearch.com"
 
 
 def _extract_model_name(entry: Any) -> Optional[str]:
@@ -833,7 +796,7 @@ def _extract_model_name(entry: Any) -> Optional[str]:
     return None
 
 
-def get_callmemo_recommended_aux_model(
+def get_nous_recommended_aux_model(
     *,
     vision: bool = False,
     free_tier: Optional[bool] = None,
@@ -850,7 +813,7 @@ def get_callmemo_recommended_aux_model(
                          ``freeRecommendedCompactionModel``
 
     When ``free_tier`` is ``None`` (default) the user's tier is auto-detected
-    via :func:`check_callmemo_free_tier`. Pass an explicit bool to bypass the
+    via :func:`check_nous_free_tier`. Pass an explicit bool to bypass the
     detection — useful for tests or when the caller already knows the tier.
 
     For paid-tier users we prefer the paid recommendation but gracefully fall
@@ -861,14 +824,14 @@ def get_callmemo_recommended_aux_model(
     fails — callers should fall back to their own default (currently
     ``google/gemini-3-flash-preview``).
     """
-    base = portal_base_url or _resolve_callmemo_portal_url()
-    payload = fetch_callmemo_recommended_models(base, force_refresh=force_refresh)
+    base = portal_base_url or _resolve_nous_portal_url()
+    payload = fetch_nous_recommended_models(base, force_refresh=force_refresh)
     if not payload:
         return None
 
     if free_tier is None:
         try:
-            free_tier = check_callmemo_free_tier()
+            free_tier = check_nous_free_tier()
         except Exception:
             # On any detection error, assume paid — paid users see both fields
             # anyway so this is a safe default that maximises model quality.
@@ -888,6 +851,15 @@ def get_callmemo_recommended_aux_model(
         if name:
             return name
     return None
+
+
+# Backwards-compatible aliases — keep callmemo names working for any
+# existing callers (tests, third-party plugins) while the codebase
+# moves to Nous branding.
+check_callmemo_free_tier = check_nous_free_tier
+fetch_callmemo_recommended_models = fetch_nous_recommended_models
+get_callmemo_recommended_aux_model = get_nous_recommended_aux_model
+_resolve_callmemo_portal_url = _resolve_nous_portal_url
 
 
 # ---------------------------------------------------------------------------

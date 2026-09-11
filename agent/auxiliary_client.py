@@ -8,7 +8,7 @@ Resolution order for text tasks (auto mode):
   1. User's main provider + main model (used regardless of provider type —
      aggregators, direct API-key providers, native Anthropic, Codex, etc.)
   2. OpenRouter  (OPENROUTER_API_KEY)
-  3. callmemo Portal (~/.anakot/auth.json active provider)
+  3. Nous Portal (~/.anakot/auth.json active provider)
   4. Custom endpoint (config.yaml model.base_url + OPENAI_API_KEY)
   5. Native Anthropic
   6. Direct API-key providers (z.ai/GLM, Kimi/Moonshot, MiniMax, MiniMax-CN)
@@ -17,7 +17,7 @@ Resolution order for text tasks (auto mode):
 Resolution order for vision/multimodal tasks (auto mode):
   1. Selected main provider, if it is one of the supported vision backends below
   2. OpenRouter
-  3. callmemo Portal
+  3. Nous Portal
   4. Native Anthropic
   5. Custom endpoint (for local vision models: Qwen-VL, LLaVA, Pixtral, etc.)
   6. None
@@ -389,16 +389,16 @@ def build_nvidia_nim_headers(base_url: str | None) -> dict:
 # in lockstep with anakot_cli.__version__ across every Portal call site
 # (main loop, aux, compression, web_extract). Do not inline a literal here;
 # see agent/portal_tags.py for the rationale.
-from agent.portal_tags import callmemo_portal_tags as _callmemo_portal_tags
+from agent.portal_tags import nous_portal_tags as _nous_portal_tags
 
 
 def _nous_extra_body() -> dict:
-    """Return a fresh callmemo Portal ``extra_body`` dict.
+    """Return a fresh Nous Portal ``extra_body`` dict.
 
     Computed at call time so a hot-reloaded ``anakot_cli.__version__`` is
     reflected without restarting long-running processes.
     """
-    return {"tags": _callmemo_portal_tags()}
+    return {"tags": _nous_portal_tags()}
 
 
 # Backwards-compatible module attribute. Some callers (tests, third-party
@@ -413,7 +413,7 @@ auxiliary_is_nous: bool = False
 # Default auxiliary models per provider
 _OPENROUTER_MODEL = "google/gemini-3-flash-preview"
 _NOUS_MODEL = "google/gemini-3-flash-preview"
-_NOUS_DEFAULT_BASE_URL = "https://inference-api.callmemo.ai/v1"
+_NOUS_DEFAULT_BASE_URL = "https://inference-api.nousresearch.com/v1"
 _ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
 _AUTH_JSON_PATH = get_anakot_home() / "auth.json"
 
@@ -1202,9 +1202,9 @@ def _maybe_wrap_anthropic(
 
 
 def _read_nous_auth() -> Optional[dict]:
-    """Read and validate ~/.anakot/auth.json for an active callmemo provider.
+    """Read and validate ~/.anakot/auth.json for an active Nous provider.
 
-    Returns the provider state dict if callmemo is active with tokens,
+    Returns the provider state dict if Nous is active with tokens,
     otherwise None.
     """
     pool_present, entry = _select_pool_entry("nous")
@@ -1235,12 +1235,12 @@ def _read_nous_auth() -> Optional[dict]:
             return None
         return provider
     except Exception as exc:
-        logger.debug("Could not read callmemo auth: %s", exc)
+        logger.debug("Could not read Nous auth: %s", exc)
         return None
 
 
 def _nous_api_key(provider: dict) -> str:
-    """Extract a usable callmemo inference JWT from stored auth state."""
+    """Extract a usable Nous inference JWT from stored auth state."""
     from anakot_cli.auth import _nous_invoke_jwt_is_usable
 
     for token_key, expiry_key in (
@@ -1548,15 +1548,15 @@ def _describe_openrouter_unavailable() -> str:
 
 
 def _try_nous(vision: bool = False) -> Tuple[Optional[OpenAI], Optional[str]]:
-    # Check cross-session rate limit guard before attempting callmemo —
-    # if another session already recorded a 429, skip callmemo entirely
+    # Check cross-session rate limit guard before attempting Nous —
+    # if another session already recorded a 429, skip Nous entirely
     # to avoid piling more requests onto the tapped RPH bucket.
     try:
         from agent.callmemo_rate_guard import nous_rate_limit_remaining
         _remaining = nous_rate_limit_remaining()
         if _remaining is not None and _remaining > 0:
             logger.debug(
-                "Auxiliary: skipping callmemo Portal (rate-limited, resets in %.0fs)",
+                "Auxiliary: skipping Nous Portal (rate-limited, resets in %.0fs)",
                 _remaining,
             )
             _mark_provider_unhealthy("nous", ttl=_remaining)
@@ -1568,30 +1568,30 @@ def _try_nous(vision: bool = False) -> Tuple[Optional[OpenAI], Optional[str]]:
     runtime = _resolve_nous_runtime_api(force_refresh=False)
     if runtime is None and not nous:
         logger.warning(
-            "Auxiliary callmemo client unavailable: no callmemo authentication found "
+            "Auxiliary Nous client unavailable: no Nous authentication found "
             "(run: anakot auth)."
         )
         _mark_provider_unhealthy("nous", ttl=60)
         return None, None
     if runtime is None and nous:
         logger.debug(
-            "Auxiliary callmemo: runtime JWT refresh failed; checking stored "
+            "Auxiliary Nous: runtime JWT refresh failed; checking stored "
             "auth.json token."
         )
     global auxiliary_is_nous
     auxiliary_is_nous = True
-    logger.debug("Auxiliary client: callmemo Portal")
+    logger.debug("Auxiliary client: Nous Portal")
 
     # Ask the Portal which model it currently recommends for this task type.
     # The /api/nous/recommended-models endpoint is the authoritative source:
-    # it distinguishes paid vs free tier recommendations, and get_callmemo_recommended_aux_model
-    # auto-detects the caller's tier via check_callmemo_free_tier().  Fall back to
-    # _NOUS_MODEL (google/gemini-3-flash-preview) when the Portal is unreachable
-    # or returns a null recommendation for this task type.
+    # it distinguishes paid vs free tier recommendations, and
+    # get_nous_recommended_aux_model auto-detects the caller's tier via
+    # check_nous_free_tier().  Fall back to _NOUS_MODEL when the Portal
+    # is unreachable or returns a null recommendation for this task type.
     model = _NOUS_MODEL
     try:
-        from anakot_cli.models import get_callmemo_recommended_aux_model
-        recommended = get_callmemo_recommended_aux_model(vision=vision)
+        from anakot_cli.models import get_nous_recommended_aux_model
+        recommended = get_nous_recommended_aux_model(vision=vision)
         if recommended:
             model = recommended
             logger.debug(
@@ -1655,12 +1655,12 @@ def _refresh_nous_recommended_model(
     stale = (stale_model or "").strip().lower()
     fresh: Optional[str] = None
     try:
-        from anakot_cli.models import get_callmemo_recommended_aux_model
+        from anakot_cli.models import get_nous_recommended_aux_model
 
-        fresh = get_callmemo_recommended_aux_model(vision=vision, force_refresh=True)
+        fresh = get_nous_recommended_aux_model(vision=vision, force_refresh=True)
     except Exception as exc:
         logger.debug(
-            "callmemo recommended-model refresh failed (%s); using default %s",
+            "Nous recommended-model refresh failed (%s); using default %s",
             exc, _NOUS_MODEL,
         )
     if fresh and fresh.strip().lower() != stale:
@@ -2354,8 +2354,8 @@ def _is_payment_error(exc: Exception) -> bool:
     return False
 
 
-def _callmemo_portal_account_has_fresh_paid_access() -> bool:
-    """Return True only when the fresh callmemo account API says paid access is allowed."""
+def _nous_portal_account_has_fresh_paid_access() -> bool:
+    """Return True only when the fresh Nous account API says paid access is allowed."""
     try:
         from anakot_cli.callmemo_account import get_callmemo_portal_account_info
 
@@ -2641,7 +2641,7 @@ def _recoverable_pool_provider(
         return "openai-codex"
     if base_url_host_matches(base, "openrouter.ai"):
         return "openrouter"
-    if base_url_host_matches(base, "inference-api.callmemo.ai"):
+    if base_url_host_matches(base, "inference-api.nousresearch.com"):
         return "nous"
     if base_url_host_matches(base, "api.anthropic.com"):
         return "anthropic"
@@ -5163,7 +5163,7 @@ def call_llm(
         # known-good default). Only applies to callmemo-routed calls.
         _heal_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_base_info, "inference-api.callmemo.ai")
+            or base_url_host_matches(_base_info, "inference-api.nousresearch.com")
         )
         if _is_model_not_found_error(first_err) and _heal_is_nous:
             healed_model = _refresh_nous_recommended_model(
@@ -5184,7 +5184,7 @@ def call_llm(
         # ── callmemo auth refresh parity with main agent ──────────────────
         client_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_base_info, "inference-api.callmemo.ai")
+            or base_url_host_matches(_base_info, "inference-api.nousresearch.com")
         )
         if (
             _is_payment_error(first_err)
@@ -5625,7 +5625,7 @@ async def async_call_llm(
         # fresh Portal fetch and retry once with the current recommendation.
         _heal_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_client_base, "inference-api.callmemo.ai")
+            or base_url_host_matches(_client_base, "inference-api.nousresearch.com")
         )
         if _is_model_not_found_error(first_err) and _heal_is_nous:
             healed_model = _refresh_nous_recommended_model(
@@ -5646,7 +5646,7 @@ async def async_call_llm(
         # ── callmemo auth refresh parity with main agent ──────────────────
         client_is_nous = (
             resolved_provider == "nous"
-            or base_url_host_matches(_client_base, "inference-api.callmemo.ai")
+            or base_url_host_matches(_client_base, "inference-api.nousresearch.com")
         )
         if (
             _is_payment_error(first_err)

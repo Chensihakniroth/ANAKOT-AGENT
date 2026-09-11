@@ -1,0 +1,66 @@
+  Agent of the Future                                                                                                   │
+                                                                                                                        │ Sessions                      0
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮ │active
+ │                                                                                                                    │ │no live sessions
+ │  Anakot Agent                                                                                                      │ │
+ │  vtest                                                                                                             │ │
+ │                                                                                                                    │ │
+ │  MODEL: test-model                                                                                                 │ │
+ │  REPO: D:\School\PROJECT\anakot-agent-home\anakot-agent\ui-tui                                                     │ │
+ │                                                                                                                    │ │
+ │  ▾ Available Tools                                                                                                 │ │
+ │                                                                                                                    │ │
+ │  ▸ Available Skills (0)                                                                                            │ │
+ │  0 tools · 0 skills · /help for commands                                                                           │ │
+ │                                                                                                                    │ │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+                                                                                                                        │
+                                                                                                                        │
+ ▸ │ test                                                                                                               │
+                                                                                                                        │
+                                                                                                                        │
+                                                                                                                        │
+ ─ summoning anakot… │                                                                                                  │ + new session
+ ❯ Try "/help" for commands                                                                                             │
+  ERROR  Raw mode is not supported on the stdin provided to Ink.
+        Read about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported
+
+ - Read about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported
+ - handleSetRawMode (packages/anakot-ink/dist/entry-exports.js:10721:15)
+ -  (packages/anakot-ink/dist/entry-exports.js:6819:5)
+ -Object.react_stack_bottom_fram (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:1768
+                                1:20)
+ - runWithFiberInDEV (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:2508:13)
+ -commitHookEffectListMount (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:10861:29)
+
+ - commitHookLayoutEffects (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:10825:11)
+ -commitLayoutEffectOnFiber (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:11490:13)
+
+ -recursivelyTraverseLayoutEffect (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:126
+                                 53:11)
+ -commitLayoutEffectOnFiber (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:11605:11)
+
+ -recursivelyTraverseLayoutEffect (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:126
+                                 53:11)
+
+  ERROR  Raw mode is not supported on the stdin provided to Ink.
+        Read about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported
+
+ - Read about how to prevent this error on https://github.com/vadimdemedes/ink/#israwmodesupported
+ - handleSetRawMode (packages/anakot-ink/dist/entry-exports.js:10721:15)
+ -  (packages/anakot-ink/dist/entry-exports.js:6819:5)
+ -Object.react_stack_bottom_fram (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:1768
+                                1:20)
+ - runWithFiberInDEV (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:2508:13)
+ -commitHookEffectListMount (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:10861:29)
+
+ - commitHookLayoutEffects (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:10825:11)
+ -commitLayoutEffectOnFiber (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:11490:13)
+
+ -recursivelyTraverseLayoutEffect (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:126
+                                 53:11)
+ -commitLayoutEffectOnFiber (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:11605:11)
+
+ -recursivelyTraverseLayoutEffect (D:/School/PROJECT/anakot-agent-home/anakot-agent/node_modules/react-reconciler/cjs/react-reconciler.development.js:126
+                                 53:11)
+

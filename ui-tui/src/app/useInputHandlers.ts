@@ -19,7 +19,7 @@ import type { InputHandlerContext, InputHandlerResult } from './interfaces.js'
 import { $isBlocked, $overlayState, patchOverlayState } from './overlayStore.js'
 import { turnController } from './turnController.js'
 import { patchTurnState } from './turnStore.js'
-import { getUiState } from './uiStore.js'
+import { getUiState, patchUiState } from './uiStore.js'
 
 const isCtrl = (key: { ctrl: boolean }, ch: string, target: string) => key.ctrl && ch.toLowerCase() === target
 
@@ -481,6 +481,13 @@ export function useInputHandlers(ctx: InputHandlerContext): InputHandlerResult {
 
     if (isCtrl(key, ch, 'x')) {
       return patchOverlayState({ sessions: true })
+    }
+
+    // opencode `<leader> b` toggles the right-hand session sidebar.
+    if (key.meta && ch.toLowerCase() === 'b') {
+      patchUiState({ sidebar: getUiState().sidebar === 'shown' ? 'hidden' : 'shown' })
+
+      return
     }
 
     if (key.ctrl && ch.toLowerCase() === 'c') {

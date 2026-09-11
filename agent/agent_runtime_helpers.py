@@ -733,7 +733,7 @@ def try_recover_primary_transport(
     Anthropic, OpenAI, local models) where a TCP-level hiccup does not
     mean the provider is down.
 
-    Skipped for proxy/aggregator providers (OpenRouter, callmemo) which
+    Skipped for proxy/aggregator providers (OpenRouter, Nous) which
     already manage connection pools and retries server-side — if our
     retries through them are exhausted, one more rebuilt client won't help.
     """
@@ -1193,10 +1193,10 @@ def anthropic_prompt_cache_policy(
     provider_lower = eff_provider.lower()
     is_claude = "claude" in model_lower
     is_openrouter = base_url_host_matches(eff_base_url, "openrouter.ai")
-    # callmemo Portal proxies to OpenRouter behind the scenes — identical
+    # Nous Portal proxies to OpenRouter behind the scenes — identical
     # OpenAI-wire envelope cache_control semantics. Treat it as an
     # OpenRouter-equivalent endpoint for caching layout purposes.
-    is_callmemo_portal = "nousresearch" in eff_base_url.lower()
+    is_nous_portal = "nousresearch" in eff_base_url.lower()
     is_anthropic_wire = eff_api_mode == "anthropic_messages"
     is_native_anthropic = (
         is_anthropic_wire
@@ -1205,16 +1205,16 @@ def anthropic_prompt_cache_policy(
 
     if is_native_anthropic:
         return True, True
-    if (is_openrouter or is_callmemo_portal) and is_claude:
+    if (is_openrouter or is_nous_portal) and is_claude:
         return True, False
-    # callmemo Portal Qwen (e.g. qwen3.6-plus) takes the same envelope-layout
+    # Nous Portal Qwen (e.g. qwen3.6-plus) takes the same envelope-layout
     # cache_control path as Portal Claude. Portal proxies to OpenRouter
     # and the upstream Qwen route accepts cache_control markers; without
     # this branch the alibaba-family check below only matches
     # provider=opencode/alibaba and Portal traffic falls through to
     # (False, False), serving 0% cache hits and re-billing the full
     # prompt on every turn.
-    if is_callmemo_portal and "qwen" in model_lower:
+    if is_nous_portal and "qwen" in model_lower:
         return True, False
     if is_anthropic_wire and is_claude:
         # Third-party Anthropic-compatible gateway.

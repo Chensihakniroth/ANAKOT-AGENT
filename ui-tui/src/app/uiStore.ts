@@ -24,6 +24,7 @@ const buildUiState = (): UiState => ({
   sections: {},
   showCost: false,
   showReasoning: false,
+  sidebar: 'auto',
   sid: null,
   status: 'summoning anakot…',
   statusBar: 'top',

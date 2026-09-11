@@ -67,7 +67,11 @@ describe('MessageLine', () => {
       .split('\n')
       .find(line => line.includes('Okay'))
 
-    expect(renderedLine).toContain('▸    Okay')
+    // User row keeps the compound prompt glyph in the gutter, then the
+    // opencode-style left-rail border (│) before the bubble text.
+    expect(renderedLine).toMatch(/^▸/)
+    expect(renderedLine).toContain('│')
+    expect(renderedLine).toContain('Okay')
   })
 })
 

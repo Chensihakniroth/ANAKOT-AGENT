@@ -49,6 +49,11 @@ ANAKOT_OVERLAYS: Dict[str, AnakotOverlay] = {
         is_aggregator=True,
         base_url_env_var="OPENROUTER_BASE_URL",
     ),
+    "nous": AnakotOverlay(
+        transport="openai_chat",
+        auth_type="oauth_device_code",
+        base_url_override="https://inference-api.nousresearch.com/v1",
+    ),
     "callmemo": AnakotOverlay(
         transport="openai_chat",
         auth_type="oauth_device_code",

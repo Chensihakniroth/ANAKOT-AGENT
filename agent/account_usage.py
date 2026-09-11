@@ -145,7 +145,10 @@ def build_nous_credits_snapshot(account_info) -> Optional[AccountUsageSnapshot]:
     account info to show (fail-open: caller just shows nothing).
     """
     try:
-        from anakot_cli.callmemo_account import callmemo_portal_billing_url
+        from anakot_cli.callmemo_account import (  # noqa: F401 - backwards compat alias
+            callmemo_portal_billing_url as nous_portal_billing_url,
+            get_callmemo_portal_account_info as get_nous_portal_account_info,
+        )
 
         if account_info is None or not getattr(account_info, "logged_in", False):
             return None
@@ -213,14 +216,14 @@ def build_nous_credits_snapshot(account_info) -> Optional[AccountUsageSnapshot]:
         if not windows and not details:
             return None
 
-        details.append(f"Manage / top up: {callmemo_portal_billing_url(account_info)}")
+        details.append(f"Manage / top up: {nous_portal_billing_url(account_info)}")
 
         plan = getattr(sub, "plan", None) if sub is not None else None
         return AccountUsageSnapshot(
             provider="nous",
             source="portal-account",
             fetched_at=_utc_now(),
-            title="callmemo credits",
+            title="nous credits",
             plan=plan,
             windows=tuple(windows),
             details=tuple(details),
@@ -230,9 +233,9 @@ def build_nous_credits_snapshot(account_info) -> Optional[AccountUsageSnapshot]:
 
 
 def nous_credits_lines(*, markdown: bool = False, timeout: float = 10.0) -> list[str]:
-    """Return rendered callmemo-credits /usage lines, or [] when there's nothing to show.
+    """Return rendered Nous-credits /usage lines, or [] when there's nothing to show.
 
-    Account-independent of any live agent: gated on "a callmemo account is logged in"
+Account-independent of any live agent: gated on "a Nous account is logged in"
     (a cheap local auth-state check), then a wall-clock-bounded portal fetch. Shared
     by the CLI ``_show_usage`` and the TUI ``session.usage`` RPC so both surfaces show
     the same block regardless of session API-call count or resume state. Fail-open:
@@ -264,11 +267,11 @@ def nous_credits_lines(*, markdown: bool = False, timeout: float = 10.0) -> list
     try:
         import concurrent.futures
 
-        from anakot_cli.callmemo_account import get_callmemo_portal_account_info
+        from anakot_cli.callmemo_account import get_callmemo_portal_account_info as get_nous_portal_account_info
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             account = pool.submit(
-                get_callmemo_portal_account_info, force_fresh=True
+                get_nous_portal_account_info, force_fresh=True
             ).result(timeout=timeout)
         snapshot = build_nous_credits_snapshot(account)
         return render_account_usage_lines(snapshot, markdown=markdown)
@@ -329,7 +332,7 @@ def _snapshot_from_credits_state(state) -> Optional[AccountUsageSnapshot]:
             provider="nous",
             source="dev-fixture",
             fetched_at=_utc_now(),
-            title="callmemo credits",
+            title="nous credits",
             windows=tuple(windows),
             details=tuple(details),
         )

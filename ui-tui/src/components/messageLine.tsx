@@ -67,6 +67,10 @@ export const MessageLine = memo(function MessageLine({
   const systemIsLong = msg.role === 'system' && msg.text.length > SYSTEM_COLLAPSE_CHARS
   const [systemOpen, setSystemOpen] = useState(false)
 
+  // opencode-style user bubble chrome: charcoal panel that brightens to the
+  // element tone on hover, with a left rail in the user-message accent.
+  const [userHover, setUserHover] = useState(false)
+
   if (msg.kind === 'trail' && msg.todos?.length) {
     return (
       <TodoPanel
@@ -131,6 +135,7 @@ export const MessageLine = memo(function MessageLine({
 
   const { body, glyph, prefix } = ROLE[msg.role](t)
   const gutterWidth = transcriptGutterWidth(msg.role, t.brand.prompt)
+  const bodyWidth = transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)
 
   const showDetails =
     (toolsMode !== 'hidden' && Boolean(msg.tools?.length)) || (thinkingMode !== 'hidden' && Boolean(thinking))
@@ -246,11 +251,23 @@ export const MessageLine = memo(function MessageLine({
         </NoSelect>
 
         {msg.role === 'user' ? (
-          <Box backgroundColor={t.color.userMsgBg} paddingX={1} width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>
+          <Box
+            backgroundColor={userHover ? t.color.bgElement : t.color.bgPanel}
+            borderBottom={false}
+            borderColor={prefix}
+            borderLeft
+            borderRight={false}
+            borderStyle="round"
+            borderTop={false}
+            onMouseEnter={() => setUserHover(true)}
+            onMouseLeave={() => setUserHover(false)}
+            paddingX={1}
+            width={bodyWidth}
+          >
             {content}
           </Box>
         ) : (
-          <Box width={transcriptBodyWidth(cols, msg.role, t.brand.prompt, TERMUX_TUI_MODE)}>{content}</Box>
+          <Box width={bodyWidth}>{content}</Box>
         )}
       </Box>
     </Box>

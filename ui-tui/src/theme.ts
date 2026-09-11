@@ -49,10 +49,16 @@ export interface ThemeColors {
   // Background extensions
   bgElevated: string
   bgHover: string
+  // opencode-style surface tokens: thin panels (sidebar, quoted user
+  // message) vs. single "element" cells that brighten on hover/selection.
+  bgPanel: string
+  bgElement: string
 
   // Border extensions
   borderAccent: string
   borderWarn: string
+  // Active ring / focus border (selected sidebar row, left rail highlight).
+  borderActive: string
 
   // Context bar (usage indicator) — progressive colors
   ctxHealthy: string
@@ -334,8 +340,11 @@ export const DARK_THEME: Theme = {
     textInverse: '#141414',
     bgElevated: '#191928',
     bgHover: '#232337',
+    bgPanel: '#181828',
+    bgElement: '#232337',
     borderAccent: '#FFD700',
     borderWarn: '#ffa726',
+    borderActive: '#FFBF00',
     ctxHealthy: '#4caf50',
     ctxWarn: '#ffa726',
     ctxCritical: '#FF6B6B',
@@ -394,8 +403,11 @@ export const LIGHT_THEME: Theme = {
     textInverse: '#FFFFFF',
     bgElevated: '#F0F0F0',
     bgHover: '#E8E8E8',
+    bgPanel: '#F0F0F8',
+    bgElement: '#E8E8E8',
     borderAccent: '#A0651C',
     borderWarn: '#E65100',
+    borderActive: '#A0651C',
     ctxHealthy: '#2E7D32',
     ctxWarn: '#E65100',
     ctxCritical: '#C62828',
@@ -625,8 +637,8 @@ export function fromSkin(
       statusCritical: d.color.statusCritical,
       selectionBg: c('selection_bg') ?? c('completion_menu_current_bg') ?? (hasSkinColors ? completionCurrentBg : d.color.selectionBg),
 
-      diffAdded: d.color.diffAdded,
-      diffRemoved: d.color.diffRemoved,
+      diffAdded: c('diff_added') ?? d.color.diffAdded,
+      diffRemoved: c('diff_removed') ?? d.color.diffRemoved,
       diffAddedWord: d.color.diffAddedWord,
       diffRemovedWord: d.color.diffRemovedWord,
       shellDollar: c('shell_dollar') ?? d.color.shellDollar,
@@ -639,8 +651,11 @@ export function fromSkin(
       textInverse: d.color.textInverse,
       bgElevated: d.color.bgElevated,
       bgHover: d.color.bgHover,
+      bgPanel: c('bg_panel') ?? d.color.bgPanel,
+      bgElement: c('bg_element') ?? d.color.bgElement,
       borderAccent: d.color.borderAccent,
       borderWarn: d.color.borderWarn,
+      borderActive: c('border_active') ?? d.color.borderActive,
       ctxHealthy: c('ui_ok') ?? d.color.ctxHealthy,
       ctxWarn: c('ui_warn') ?? d.color.ctxWarn,
       ctxCritical: d.color.statusCritical,

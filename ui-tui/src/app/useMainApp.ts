@@ -24,6 +24,7 @@ import { composerPromptWidth } from '../lib/inputMetrics.js'
 import { appendTranscriptMessage } from '../lib/messages.js'
 import { DEFAULT_VOICE_RECORD_KEY, isMac, type ParsedVoiceRecordKey } from '../lib/platform.js'
 import { asRpcResult, rpcErrorMessage } from '../lib/rpc.js'
+import { effectiveChatCols, isSidebarVisible } from '../lib/sidebar.js'
 import { terminalParityHints } from '../lib/terminalParity.js'
 import { buildToolTrailLine, formatAbandonedClarify, sameToolTrailGroup, toolTrailLabel } from '../lib/text.js'
 import { estimatedMsgHeight, messageHeightKey } from '../lib/virtualHeights.js'
@@ -138,14 +139,14 @@ export async function startPromptLiveSession({
 export function useMainApp(gw: GatewayClient) {
   const { exit } = useApp()
   const { stdout } = useStdout()
-  const [cols, setCols] = useState(stdout?.columns ?? 80)
+  const [termCols, setTermCols] = useState(stdout?.columns ?? 80)
 
   useEffect(() => {
     if (!stdout) {
       return
     }
 
-    const sync = () => setCols(stdout.columns ?? 80)
+    const sync = () => setTermCols(stdout.columns ?? 80)
 
     stdout.on('resize', sync)
 
@@ -179,6 +180,12 @@ export function useMainApp(gw: GatewayClient) {
   const ui = useStore($uiState)
   const overlay = useStore($overlayState)
 
+  // Sidebar chevron on wide terminals. Every width consumer (composer wrap,
+  // message body width, virtual-height keys, backend session cols) agrees on
+  // the effective chat width so toggling the rail reflows coherently.
+  const sidebarVisible = isSidebarVisible(ui.sidebar, termCols)
+  const chatCols = effectiveChatCols(termCols, sidebarVisible)
+
   const turnLiveTailActive = useTurnSelector(state =>
     Boolean(
       state.streaming ||
@@ -194,7 +201,7 @@ export function useMainApp(gw: GatewayClient) {
 
   const slashFlightRef = useRef(0)
   const slashRef = useRef<(cmd: string) => boolean>(() => false)
-  const colsRef = useRef(cols)
+  const colsRef = useRef(chatCols)
   const scrollRef = useRef<null | ScrollBoxHandle>(null)
   const onEventRef = useRef<(ev: GatewayEvent) => void>(() => {})
   const clipboardPasteRef = useRef<(quiet?: boolean) => Promise<void> | void>(() => {})
@@ -208,7 +215,7 @@ export function useMainApp(gw: GatewayClient) {
   const msgIdSeqRef = useRef(0)
   const heightCachesRef = useRef(new Map<string, Map<string, number>>())
 
-  colsRef.current = cols
+  colsRef.current = chatCols
   historyItemsRef.current = historyItems
   lastUserMsgRef.current = lastUserMsg
 
@@ -308,8 +315,8 @@ export function useMainApp(gw: GatewayClient) {
   // off live geometry. Cost: per-row local state (e.g. systemOpen toggles)
   // resets on resize; small UX hit for a hard correctness win.
   const virtualRows = useMemo<TranscriptRow[]>(
-    () => historyItems.map((msg, index) => ({ index, key: `${messageId(msg)}:c${cols}`, msg })),
-    [cols, historyItems, messageId]
+    () => historyItems.map((msg, index) => ({ index, key: `${messageId(msg)}:c${chatCols}`, msg })),
+    [chatCols, historyItems, messageId]
   )
 
   const detailsLayoutKey = useMemo(() => {
@@ -324,7 +331,7 @@ export function useMainApp(gw: GatewayClient) {
   const toolsDetailsVisible = toolsDetailsMode !== 'hidden'
   const detailsVisible = thinkingDetailsVisible || toolsDetailsVisible
   const userPromptWidth = composerPromptWidth(ui.theme.brand.prompt)
-  const heightCacheKey = `${ui.sid ?? 'draft'}:${cols}:${userPromptWidth}:${ui.compact ? '1' : '0'}:${detailsLayoutKey}`
+  const heightCacheKey = `${ui.sid ?? 'draft'}:${chatCols}:${userPromptWidth}:${ui.compact ? '1' : '0'}:${detailsLayoutKey}`
 
   const heightCache = useMemo(() => {
     let cache = heightCachesRef.current.get(heightCacheKey)
@@ -348,7 +355,7 @@ export function useMainApp(gw: GatewayClient) {
 
   const estimateRowHeight = useCallback(
     (index: number) =>
-      estimatedMsgHeight(virtualRows[index]!.msg, cols, {
+      estimatedMsgHeight(virtualRows[index]!.msg, chatCols, {
         compact: ui.compact,
         details: detailsVisible,
         leadGap: hasLeadGap(
@@ -365,7 +372,7 @@ export function useMainApp(gw: GatewayClient) {
         withSeparator: virtualRows[index]!.msg.role === 'user' && firstUserIdx >= 0 && index > firstUserIdx
       }),
     [
-      cols,
+      chatCols,
       detailsVisible,
       firstUserIdx,
       thinkingDetailsVisible,
@@ -392,7 +399,7 @@ export function useMainApp(gw: GatewayClient) {
     [heightCache, virtualRows]
   )
 
-  const virtualHistory = useVirtualHistory(scrollRef, virtualRows, cols, {
+  const virtualHistory = useVirtualHistory(scrollRef, virtualRows, chatCols, {
     estimateHeight: estimateRowHeight,
     initialHeights: heightCache,
     liveTailActive: turnLiveTailActive,
@@ -574,7 +581,10 @@ export function useMainApp(gw: GatewayClient) {
           scrollRef.current.scrollToBottom()
         }
 
-        void rpc<TerminalResizeResponse>('terminal.resize', { cols: stdout.columns ?? 80, session_id: ui.sid })
+        void rpc<TerminalResizeResponse>('terminal.resize', {
+          cols: effectiveChatCols(stdout.columns ?? 80, isSidebarVisible(getUiState().sidebar, stdout.columns ?? 80)),
+          session_id: ui.sid
+        })
       }, 100)
     }
 
@@ -1049,7 +1059,7 @@ export function useMainApp(gw: GatewayClient) {
 
   const appComposer = useMemo(
     () => ({
-      cols,
+      cols: chatCols,
       compIdx: composerState.compIdx,
       completions: composerState.completions,
       empty,
@@ -1059,11 +1069,12 @@ export function useMainApp(gw: GatewayClient) {
       pagerPageSize,
       queueEditIdx: composerState.queueEditIdx,
       queuedDisplay: composerState.queuedDisplay,
+      sidebarVisible,
       submit,
       updateInput: composerActions.setInput,
       voiceRecordKey
     }),
-    [cols, composerActions, composerState, empty, pagerPageSize, submit, voiceRecordKey]
+    [chatCols, composerActions, composerState, empty, pagerPageSize, sidebarVisible, submit, voiceRecordKey]
   )
 
   // Pass current progress through unfrozen — streaming update throttling

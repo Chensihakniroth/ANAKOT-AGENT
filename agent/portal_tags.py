@@ -55,10 +55,10 @@ def anakot_client_tag() -> str:
     return f"client=anakot-client-v{_anakot_version()}"
 
 
-def callmemo_portal_tags() -> List[str]:
-    """Return the canonical list of callmemo Portal product tags.
+def nous_portal_tags() -> List[str]:
+    """Return the canonical list of Nous Portal product tags.
 
     Always returns a fresh list so callers can mutate it freely
-    (e.g. ``merged_extra.setdefault("tags", []).extend(callmemo_portal_tags())``).
+    (e.g. ``merged_extra.setdefault("tags", []).extend(nous_portal_tags())``).
     """
     return ["product=anakot-agent", anakot_client_tag()]

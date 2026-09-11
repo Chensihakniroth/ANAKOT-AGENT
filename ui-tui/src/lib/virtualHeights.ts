@@ -104,8 +104,11 @@ export const estimatedMsgHeight = (
   }
 
   const bodyWidth = transcriptBodyWidth(cols, msg.role, userPrompt, TERMUX_TUI_MODE)
+  // User bubbles carry a 1-col left rail border (opencode chrome), which
+  // shrinks the wrap width by one cell relative to the plain body estimate.
+  const wrapWidth = bodyWidth - (msg.role === 'user' ? 1 : 0)
   const text = msg.text
-  let h = wrappedLines(text || ' ', bodyWidth)
+  let h = wrappedLines(text || ' ', wrapWidth)
 
   if (!compact && msg.role === 'assistant') {
     // Paragraph gaps add up to 6 extra rows of breathing room. Slice

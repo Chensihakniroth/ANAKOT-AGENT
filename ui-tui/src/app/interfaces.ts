@@ -32,6 +32,10 @@ export type BusyInputMode = 'interrupt' | 'queue' | 'steer'
 
 export type NoticeLevel = 'error' | 'info' | 'success' | 'warn'
 
+// `auto` shows the opencode-style right rail only on wide terminals;
+// `shown`/`hidden` force it on/off via the meta+b toggle.
+export type SidebarMode = 'auto' | 'hidden' | 'shown'
+
 // Credits/usage notice surfaced in the status bar. Shape is snake_case to
 // match the gateway WS wire (`notification.show` payload) and the existing
 // `Usage` type — no camelCase mapping layer. The `text` already carries its
@@ -130,6 +134,7 @@ export interface UiState {
   showCost: boolean
   showReasoning: boolean
   indicatorStyle: IndicatorStyle
+  sidebar: SidebarMode
   sid: null | string
   status: string
   statusBar: StatusBarMode
@@ -355,6 +360,7 @@ export interface AppLayoutComposerProps {
   pagerPageSize: number
   queueEditIdx: null | number
   queuedDisplay: string[]
+  sidebarVisible: boolean
   submit: (value: string) => void
   updateInput: StateSetter<string>
   voiceRecordKey: ParsedVoiceRecordKey

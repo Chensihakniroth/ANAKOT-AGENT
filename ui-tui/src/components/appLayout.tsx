@@ -27,6 +27,7 @@ import { FpsOverlay } from './fpsOverlay.js'
 import { HelpHint } from './helpHint.js'
 import { MessageLine } from './messageLine.js'
 import { QueuedMessages } from './queuedMessages.js'
+import { SessionSidebar } from './sessionSidebar.js'
 import { LiveTodoPanel, StreamingAssistant } from './streamingAssistant.js'
 import { TextInput, type TextInputMouseApi } from './textInput.js'
 
@@ -435,49 +436,55 @@ export const AppLayout = memo(function AppLayout({
     <Shell {...shellProps}>
       <Box flexDirection="column" flexGrow={1}>
         <Box flexDirection="row" flexGrow={1}>
-          {overlay.agents ? (
-            <PerfPane id="agents">
-              <AgentsOverlayPane />
-            </PerfPane>
-          ) : (
-            <PerfPane id="transcript">
-              <TranscriptPane actions={actions} composer={composer} progress={progress} transcript={transcript} />
-            </PerfPane>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+            {overlay.agents ? (
+              <PerfPane id="agents">
+                <AgentsOverlayPane />
+              </PerfPane>
+            ) : (
+              <PerfPane id="transcript">
+                <TranscriptPane actions={actions} composer={composer} progress={progress} transcript={transcript} />
+              </PerfPane>
+            )}
+
+            <OverlaysInline
+              actions={actions}
+              cols={composer.cols}
+              compIdx={composer.compIdx}
+              completions={composer.completions}
+              overlay={overlay}
+              pagerPageSize={composer.pagerPageSize}
+            />
+
+            {!overlay.agents && (
+              <>
+                <PerfPane id="prompt">
+                  <PromptZone
+                    cols={composer.cols}
+                    onApprovalChoice={actions.answerApproval}
+                    onClarifyAnswer={actions.answerClarify}
+                    onSecretSubmit={actions.answerSecret}
+                    onSudoSubmit={actions.answerSudo}
+                  />
+                </PerfPane>
+
+                <PerfPane id="composer">
+                  <ComposerPane actions={actions} composer={composer} status={status} />
+                </PerfPane>
+
+                {SHOW_FPS && (
+                  <Box flexShrink={0} justifyContent="flex-end" paddingRight={1}>
+                    <FpsOverlay t={ui.theme} />
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
+
+          {composer.sidebarVisible && (
+            <SessionSidebar onNew={actions.newLiveSession} onSelect={actions.activateLiveSession} t={ui.theme} />
           )}
         </Box>
-
-        <OverlaysInline
-          actions={actions}
-          cols={composer.cols}
-          compIdx={composer.compIdx}
-          completions={composer.completions}
-          overlay={overlay}
-          pagerPageSize={composer.pagerPageSize}
-        />
-
-        {!overlay.agents && (
-          <>
-            <PerfPane id="prompt">
-              <PromptZone
-                cols={composer.cols}
-                onApprovalChoice={actions.answerApproval}
-                onClarifyAnswer={actions.answerClarify}
-                onSecretSubmit={actions.answerSecret}
-                onSudoSubmit={actions.answerSudo}
-              />
-            </PerfPane>
-
-            <PerfPane id="composer">
-              <ComposerPane actions={actions} composer={composer} status={status} />
-            </PerfPane>
-
-            {SHOW_FPS && (
-              <Box flexShrink={0} justifyContent="flex-end" paddingRight={1}>
-                <FpsOverlay t={ui.theme} />
-              </Box>
-            )}
-          </>
-        )}
       </Box>
     </Shell>
   )
