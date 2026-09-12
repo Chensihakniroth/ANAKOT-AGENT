@@ -280,6 +280,14 @@ declare global {
           busy: boolean
           awaiting: boolean
           unread: boolean
+          activeWork: Array<{
+            id: string
+            sessionId: string
+            label: string
+            status: 'running' | 'done' | 'error'
+            progress?: number
+            startedAt: number
+          }>
         }) => void
         control: (payload:
           | { type: 'pop-in' }
@@ -329,6 +337,12 @@ declare global {
           | { type: 'toggle-app' }
           | { type: 'scale'; scale: number }
         ) => void) => () => void
+      }
+
+      // Deep links (anakot://...) — main process forwards OS deep links to the renderer
+      deepLink?: {
+        ready: () => Promise<{ ok: boolean }>
+        onDeepLink: (callback: (url: string) => void) => () => void
       }
 
       // Local Models — manage local model runtimes and downloads

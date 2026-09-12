@@ -5,7 +5,7 @@ import { $sessions, $sessionsLoading, $selectedStoredSessionId, $workingSessionI
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { SearchField } from '@/components/ui/search-field'
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
-import { searchSessions, type SessionSearchResult, type SessionInfo, setSessionArchived, deleteSession } from '@/anakot'
+import { searchSessions, type SessionSearchResult, type SessionInfo, setSessionArchived, deleteSession, renameSession } from '@/anakot'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { useI18n } from '@/i18n'
 import { notify, notifyError } from '@/store/notifications'
@@ -177,10 +177,14 @@ export function SessionList({ onSelectSession, onNewSession, onNewSessionInWorks
     setRenameValue(currentTitle || 'Untitled')
   }, [])
 
-  const commitRename = useCallback(() => {
+  const commitRename = useCallback(async () => {
     if (renamingId && renameValue.trim()) {
-      // Optimistic local update — the session title will refresh on next sidebar reload
-      // TODO: wire to gateway session.rename RPC when available
+      const title = renameValue.trim()
+      try {
+        await renameSession(renamingId, title)
+      } catch (err) {
+        notifyError(err, 'Failed to rename session')
+      }
     }
     setRenamingId(null)
     setRenameValue('')

@@ -253,6 +253,16 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
     }
   },
 
+  // Deep links (anakot://...) — main process forwards OS deep links here
+  deepLink: {
+    ready: () => ipcRenderer.invoke('anakot:deep-link-ready'),
+    onDeepLink: cb => {
+      const listener = (_event, url) => cb(url)
+      ipcRenderer.on('anakot:deep-link', listener)
+      return () => ipcRenderer.removeListener('anakot:deep-link', listener)
+    }
+  },
+
   // Wake Indicator — always-on-top light that shows wake-word detection state.
   wakeIndicator: {
     show: () => ipcRenderer.invoke('anakot:wake-indicator:show'),

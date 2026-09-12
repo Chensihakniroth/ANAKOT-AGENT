@@ -80,11 +80,13 @@ import {
   PREVIEW_RAIL_PANE_WIDTH
 } from './chat/right-rail'
 import { CommandPalette } from './command-palette'
+import { useDeepLinkListener } from '@/hooks/use-deep-link-listener'
 import { useGatewayBoot } from './gateway/hooks/use-gateway-boot'
 import { useGatewayRequest } from './gateway/hooks/use-gateway-request'
 import { useKeybinds } from './hooks/use-keybinds'
 import { ModelPickerOverlay } from './model-picker-overlay'
 import { ModelVisibilityOverlay } from './model-visibility-overlay'
+import { McpInstallDeeplinkDialog } from './contrib/mcp-install-deeplink-dialog'
 import { RightSidebarPane } from './right-sidebar'
 import { MultiTerminalPanel } from './right-sidebar/terminal/multi-terminal'
 import { $terminalTakeover } from './right-sidebar/store'
@@ -491,6 +493,9 @@ export function DesktopController() {
     toggleSelectedPin
   })
 
+  // Listen for OS deep links (anakot://mcp/install?...) and route them
+  useDeepLinkListener()
+
   // A profile switch/create drops to a fresh new-session draft so the previously
   // open session doesn't bleed across contexts. Skip the initial value.
   const freshSessionRequest = useStore($freshSessionRequest)
@@ -690,6 +695,7 @@ export function DesktopController() {
       <BootFailureOverlay />
       <CommandPalette />
       <SessionImportDialog />
+      <McpInstallDeeplinkDialog />
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsView

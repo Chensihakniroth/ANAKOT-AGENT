@@ -4,6 +4,8 @@ import { persistBoolean, persistString, storedBoolean, storedString } from '@/li
 import { $petActivity, $petInfo, $petUnread, clearPetUnread, type PetActivity, type PetInfo } from '@/store/pet'
 import { $awaitingResponse, $busy } from '@/store/session'
 
+import { $activeWork, type ActiveWork } from '@/store/active-work'
+
 /**
  * Controller for the pop-out pet overlay (main-renderer side).
  *
@@ -46,6 +48,8 @@ export interface PetOverlayStatePayload {
   awaiting: boolean
   /** Drives the overlay's mail icon: a finish landed while you were away. */
   unread: boolean
+  /** Current agent work items (labels + progress) for the overlay to display. */
+  activeWork: ActiveWork[]
 }
 
 export type PetOverlayControl =
@@ -129,7 +133,8 @@ function currentPayload(): PetOverlayStatePayload {
     activity: $petActivity.get(),
     busy: $busy.get(),
     awaiting: $awaitingResponse.get(),
-    unread: $petUnread.get()
+    unread: $petUnread.get(),
+    activeWork: $activeWork.get()
   }
 }
 
@@ -170,7 +175,8 @@ function openOverlay(request: PetOverlayOpenRequest): void {
     $petActivity.subscribe(pushNow),
     $busy.subscribe(pushNow),
     $awaitingResponse.subscribe(pushNow),
-    $petUnread.subscribe(pushNow)
+    $petUnread.subscribe(pushNow),
+    $activeWork.subscribe(pushNow)
   ]
 }
 

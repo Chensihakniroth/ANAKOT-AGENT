@@ -8374,6 +8374,52 @@ app.whenReady().then(() => {
   configureSpellChecker()
   registerPowerResumeListeners()
   createWindow()
+  // --- anakot:// deep links ------------------------------------------------
+  // Register the OS protocol handler so anakot://mcp/install?... URIs
+  // launch/route into the app. Handles cold start (argv), running app
+  // (macOS open-url), and Win/Linux second-instance.
+  const ANAKOT_PROTOCOL = 'anakot';
+  let pendingDeepLink = null;
+
+  function extractDeepLink(argv) {
+    return argv.find(a => a.startsWith(ANAKOT_PROTOCOL + '://')) || null;
+  }
+
+  function handleDeepLink(url) {
+    if (!url) return;
+    const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
+    if (!win) { pendingDeepLink = url; return; }
+    if (win.isMinimized()) win.restore();
+    win.focus();
+    win.webContents.send('anakot:deep-link', url);
+  }
+
+  try {
+    if (process.defaultApp && process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(ANAKOT_PROTOCOL, process.execPath, [process.argv[1]]);
+    } else {
+      app.setAsDefaultProtocolClient(ANAKOT_PROTOCOL);
+    }
+  } catch (err) {
+    rememberLog('[deeplink] protocol registration failed: ' + err.message);
+  }
+
+  // macOS: app already running
+  app.on('open-url', (event, url) => handleDeepLink(url));
+  // Win/Linux: second instance
+  app.on('second-instance', (event, argv) => {
+    const url = extractDeepLink(argv);
+    if (url) handleDeepLink(url);
+  });
+  // Win/Linux: cold start
+  const coldStartUrl = extractDeepLink(process.argv);
+  if (coldStartUrl) pendingDeepLink = coldStartUrl;
+  // Renderer ready — flush pending
+  ipcMain.handle('anakot:deep-link-ready', () => {
+    if (pendingDeepLink) { const u = pendingDeepLink; pendingDeepLink = null; handleDeepLink(u); }
+    return { ok: true };
+  });
+
 
   // Init Discord RPC — safe to call before config is ready; it gracefully
   // returns { ok: false } if no clientId is configured yet.
