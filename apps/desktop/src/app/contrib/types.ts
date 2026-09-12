@@ -14,6 +14,14 @@ export interface ContribRoute {
   render: () => React.ReactNode
 }
 
+export interface ContribLatestAction {
+  id: string
+  label: string
+  icon?: string
+  timestamp: number
+  run: () => void | Promise<void>
+}
+
 export interface SidebarActions {
   panes: ContribPane[]
   routes: ContribRoute[]
