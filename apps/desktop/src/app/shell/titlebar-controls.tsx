@@ -9,7 +9,6 @@ import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { $hapticsMuted, toggleHapticsMuted } from '@/store/haptics'
 import { toggleKeybindPanel } from '@/store/keybinds'
-import { $timelineOpen } from '@/store/layout'
 import {
   $fileBrowserOpen,
   $panesFlipped,
@@ -53,7 +52,6 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const panesFlipped = useStore($panesFlipped)
   const filePreviewTarget = useStore($filePreviewTarget)
   const rightRailCollapsed = useStore($rightRailCollapsed)
-  const timelineOpen = useStore($timelineOpen)
 
   const toggleHaptics = () => {
     if (!hapticsMuted) {
@@ -93,16 +91,6 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
       id: 'haptics',
       label: hapticsMuted ? t.titlebar.unmuteHaptics : t.titlebar.muteHaptics,
       onSelect: toggleHaptics
-    },
-    {
-      active: timelineOpen,
-      icon: <Codicon name="list-tree" />,
-      id: 'timeline',
-      label: timelineOpen ? t.titlebar.hideTimeline : t.titlebar.showTimeline,
-      onSelect: () => {
-        triggerHaptic('tap')
-        $timelineOpen.set(!$timelineOpen.get())
-      }
     },
     {
       icon: <Codicon name="keyboard" />,

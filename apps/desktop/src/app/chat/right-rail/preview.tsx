@@ -37,7 +37,6 @@ import {
 } from '@/store/preview'
 
 import { PreviewPane } from './preview-pane'
-import { DiffPreview } from './diff-preview'
 import { CodeReviewPanel } from './code-review'
 import { GitCommitPanel } from './git-commit'
 
@@ -262,8 +261,6 @@ export function ChatPreviewRail({ onRestartServer, setTitlebarToolGroup }: ChatP
           <CodeReviewPanel />
         ) : activeTab.id === RIGHT_RAIL_GIT_COMMIT_TAB_ID ? (
           <GitCommitPanel />
-        ) : activeTab.target?.kind === 'diff' ? (
-          <DiffPreview target={activeTab.target} />
         ) : (
           <PreviewPane
             embedded

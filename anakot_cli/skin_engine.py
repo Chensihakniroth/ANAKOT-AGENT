@@ -17,19 +17,19 @@ All fields are optional. Missing values inherit from the ``default`` skin.
 
     # Colors: hex values for Rich markup (banner, UI, response box)
     colors:
-      banner_border: "#CD7F32"            # Panel border color
-      banner_title: "#FFD700"             # Panel title text color
-      banner_accent: "#FFBF00"            # Section headers (Available Tools, etc.)
-      banner_dim: "#B8860B"               # Dim/muted text (separators, labels)
-      banner_text: "#FFF8DC"              # Body text (tool names, skill names)
-      ui_accent: "#FFBF00"               # General UI accent
-      ui_label: "#DAA520"                # UI labels (warm gold; teal clashed w/ default banner gold)
-      ui_ok: "#4caf50"                   # Success indicators
+      banner_border: "#bc93ff"            # Panel border color
+      banner_title: "#ff70a6"             # Panel title text color
+      banner_accent: "#00c7fc"            # Section headers (Available Tools, etc.)
+      banner_dim: "#ffafd2"               # Dim/muted text (separators, labels)
+      banner_text: "#ffbebc"              # Body text (tool names, skill names)
+      ui_accent: "#ff70a6"               # General UI accent
+      ui_label: "#ee79d1"                # UI labels (magenta)
+      ui_ok: "#a9ffb4"                   # Success indicators
       ui_error: "#ef5350"                # Error indicators
-      ui_warn: "#ffa726"                 # Warning indicators
-      prompt: "#FFF8DC"                  # Prompt text color
-      input_rule: "#CD7F32"              # Input area horizontal rule
-      response_border: "#FFD700"         # Response box border (ANSI)
+      ui_warn: "#ee79d1"                 # Warning indicators
+      prompt: "#ffbebc"                  # Prompt text color
+      input_rule: "#bc93ff"              # Input area horizontal rule
+      response_border: "#ff70a6"         # Response box border (ANSI)
       status_bar_bg: "#1a1a2e"           # Status bar background
       status_bar_text: "#C0C0C0"         # Status bar default text
       status_bar_strong: "#FFD700"       # Status bar highlighted text
@@ -1090,8 +1090,8 @@ def get_prompt_toolkit_style_overrides() -> Dict[str, str]:
     # color schemes).  Skins can opt into a colored prompt by setting
     # `prompt` explicitly in their YAML.
     prompt = skin.get_color("prompt", "")
-    input_rule = skin.get_color("input_rule", "#CD7F32")
-    title = skin.get_color("banner_title", "#FFD700")
+    input_rule = skin.get_color("input_rule", "#bc93ff")
+    title = skin.get_color("banner_title", "#ff70a6")
     text = skin.get_color("banner_text", "#FFF8DC")
     dim = skin.get_color("banner_dim", "#555555")
     label = skin.get_color("ui_label", title)

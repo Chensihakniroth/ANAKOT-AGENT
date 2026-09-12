@@ -1,6 +1,8 @@
 import { atom } from 'nanostores'
 
-export type WakeIndicatorState = 'hidden' | 'listening' | 'detected'
+import type { WakeIndicatorState } from '@/lib/wake-indicator'
+
+export { type WakeIndicatorState }
 
 export const $wakeIndicatorState = atom<WakeIndicatorState>('hidden')
 export const $wakeIndicatorVisible = atom(false)

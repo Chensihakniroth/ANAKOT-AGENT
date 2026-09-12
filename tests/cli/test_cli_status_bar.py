@@ -78,7 +78,7 @@ class TestCLIStatusBar:
         assert "claude-sonnet-4-20250514" in text
         assert "12.4K/200K" in text
         assert "6%" in text
-        assert "$0.06" not in text  # cost hidden by default
+        assert "$" in text  # cost shown in status bar
         assert "15m" in text
 
     def test_post_compression_sentinel_does_not_render_negative(self):
@@ -202,7 +202,7 @@ class TestCLIStatusBar:
         )
 
         text = cli_obj._build_status_bar_text(width=120)
-        assert "$" not in text  # cost is never shown in status bar
+        assert "$" in text  # cost shown in status bar
 
     def test_build_status_bar_text_collapses_for_narrow_terminal(self):
         cli_obj = _attach_agent(
@@ -316,6 +316,7 @@ class TestCLIStatusBar:
             compressions=7,
         )
         cli_obj._status_bar_visible = True
+        cli_obj._get_tui_terminal_width = lambda: 200
 
         frags = cli_obj._get_status_bar_fragments()
         frag_texts = [text for _, text in frags]

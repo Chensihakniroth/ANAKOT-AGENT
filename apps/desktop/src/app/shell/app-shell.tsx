@@ -1,7 +1,10 @@
+import React from 'react'
 import { useStore } from '@nanostores/react'
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { ConfirmHost } from '@/components/confirm-host'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { FindBar } from '@/components/find-bar'
 import { NotificationStack } from '@/components/notifications'
 import { PaneShell } from '@/components/pane-shell'
@@ -257,6 +260,12 @@ export function AppShell({
 
       <NotificationStack />
       <FindBar />
+      <ConfirmHost />
+      <ErrorBoundary>
+        <React.Fragment key="shell-root">
+          {children}
+        </React.Fragment>
+      </ErrorBoundary>
       <WakeStatusPill />
       <FloatingPet />
       <SessionSwitcher />

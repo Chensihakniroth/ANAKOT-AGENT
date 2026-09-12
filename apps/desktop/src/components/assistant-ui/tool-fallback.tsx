@@ -8,7 +8,7 @@ import { AnsiText } from '@/components/assistant-ui/ansi-text'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { CompactMarkdown } from '@/components/chat/compact-markdown'
-import { DiffLines } from '@/components/chat/diff-lines'
+import { FileDiffPanel } from '@/components/chat/diff-lines'
 import { DisclosureRow } from '@/components/chat/disclosure-row'
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
@@ -412,7 +412,7 @@ function ToolEntry({ part }: ToolEntryProps) {
           )}
         </div>
       )}
-      {open && view.inlineDiff && <DiffLines text={view.inlineDiff} />}
+      {open && view.inlineDiff && <FileDiffPanel diff={view.inlineDiff} path={view.subtitle} />}
     </div>
   )
 }

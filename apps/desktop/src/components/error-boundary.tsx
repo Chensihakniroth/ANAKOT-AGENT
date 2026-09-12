@@ -1,8 +1,11 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+'use client'
+
+import React from 'react'
+import { Component, type ComponentProps, type ErrorInfo, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { ErrorState } from '@/components/ui/error-state'
-import { useI18n } from '@/i18n'
+import { ErrorState, type ErrorStateProps } from '@/components/ui/error-state'
+import { cn } from '@/lib/utils'
 
 export interface ErrorBoundaryFallbackProps {
   error: Error
@@ -20,58 +23,76 @@ interface ErrorBoundaryState {
   error: Error | null
 }
 
+const isTransientAssistantUiLookupError = (error: Error): boolean =>
+  /(useClientLookup|tapClient(Lookup|Resource)).*out of bounds/.test(error.message)
+
+const MAX_AUTO_RECOVERIES = 3
+const AUTO_RECOVERY_WINDOW_MS = 5_000
+
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null }
+  private autoRecoveryCount = 0
+  private autoRecoveryPending = false
+  private autoRecoveryTimer: ReturnType<typeof setTimeout> | null = null
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error }
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    const tag = this.props.label ? `[error-boundary:${this.props.label}]` : '[error-boundary]'
-    console.error(tag, error, info.componentStack)
+  componentDidCatch(error: Error, info: ErrorInfo): void {
     this.props.onError?.(error, info)
   }
 
-  reset = () => {
-    this.setState({ error: null })
+  private scheduleAutoRecovery = (): void => {
+    this.autoRecoveryPending = true
+    this.autoRecoveryTimer = setTimeout(() => {
+      if (this.autoRecoveryPending && this.state.error) {
+        const error = this.state.error
+        if (isTransientAssistantUiLookupError(error) && this.autoRecoveryCount < MAX_AUTO_RECOVERIES) {
+          this.autoRecoveryCount++
+          this.setState({ error: null })
+          this.autoRecoveryPending = false
+        }
+      } else {
+        this.autoRecoveryPending = false
+      }
+    }, AUTO_RECOVERY_WINDOW_MS)
   }
 
-  render() {
-    const { error } = this.state
+  private handleReset = (): void => {
+    this.setState({ error: null })
+    this.autoRecoveryCount = 0
+    this.autoRecoveryPending = false
+  }
 
-    if (!error) {
-      return this.props.children
+  render(): ReactNode {
+    if (this.state.error !== null) {
+      const error = this.state.error
+      return this.props.fallback
+        ? this.props.fallback({ error, reset: this.handleReset })
+        : (
+          <ErrorState
+            title={this.props.label ?? 'Something went wrong'}
+            description="An unexpected error occurred. You can try resetting this section."
+            className="flex-1 flex flex-col items-center justify-center px-8 py-16 gap-3"
+          >
+            <Button onClick={this.handleReset} variant="outline" className="mt-2">
+              Try Again
+            </Button>
+          </ErrorState>
+        )
     }
 
-    if (this.props.fallback) {
-      return this.props.fallback({ error, reset: this.reset })
-    }
-
-    return <RootErrorFallback error={error} reset={this.reset} />
+    return this.props.children
   }
 }
 
-function RootErrorFallback({ error, reset }: ErrorBoundaryFallbackProps) {
-  const { t } = useI18n()
-
-  return (
-    <div className="fixed inset-0 z-[1500] grid place-items-center bg-(--ui-chat-surface-background) p-6">
-      <ErrorState
-        className="w-full max-w-[28rem]"
-        description={error.message || t.errors.boundaryDesc}
-        title={t.errors.boundaryTitle}
-      >
-        <Button className="font-semibold" onClick={reset} size="lg">
-          {t.common.retry}
-        </Button>
-        <Button onClick={() => window.location.reload()} variant="text">
-          {t.errors.reloadWindow}
-        </Button>
-        <Button onClick={() => void window.anakotDesktop?.revealLogs()?.catch(() => undefined)} variant="text">
-          {t.errors.openLogs}
-        </Button>
-      </ErrorState>
-    </div>
-  )
+/** Wrap any component tree with error recovery. Catches render errors, auto-recovers
+ *  from transient assistant-ui lookup failures, and surfaces a reset UI otherwise. */
+export const withErrorBoundary = <P extends object>(
+  Wrapped: React.ComponentType<P>,
+  props: P,
+  options?: Pick<ErrorBoundaryProps, 'label' | 'onError'>,
+): React.ReactElement => {
+  return <ErrorBoundary {...options}>{React.createElement(Wrapped, props)}</ErrorBoundary>
 }

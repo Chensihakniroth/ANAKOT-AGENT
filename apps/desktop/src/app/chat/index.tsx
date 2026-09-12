@@ -22,7 +22,7 @@ import { requestModelOptions } from '@/lib/model-options'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
-import { $pinnedSessionIds, $timelineOpen } from '@/store/layout'
+import { $pinnedSessionIds } from '@/store/layout'
 import { $gatewaySwapTarget } from '@/store/profile'
 import {
   $activeSessionId,
@@ -58,7 +58,7 @@ import type { DroppedFile } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { lastVisibleMessageIsUser, threadLoadingState } from './thread-loading'
-import { TimelineRail } from './timeline-rail'
+
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   gateway: AnakotGateway | null
@@ -198,7 +198,6 @@ export function ChatView({
   const introSeed = useStore($introSeed)
   const messages = useStore($messages)
   const selectedSessionId = useStore($selectedStoredSessionId)
-  const timelineOpen = useStore($timelineOpen)
   const runtimeMessageCacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const isRoutedSessionView = Boolean(routeSessionId(location.pathname))
 
@@ -330,7 +329,6 @@ export function ChatView({
         className
       )}
     >
-      {timelineOpen && <TimelineRail />}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <Backdrop />
       <ChatHeader

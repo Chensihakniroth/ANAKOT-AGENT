@@ -57,7 +57,27 @@ interface AnakotSyntaxHighlighterProps extends SyntaxHighlighterProps {
   defer?: boolean
 }
 
-const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
+export const SHIKI_THEME = { dark: 'github-dark-default', light: 'github-light-default' } as const
+
+/** Skip Shiki highlighting for very large code blocks (perf budget). */
+export function exceedsHighlightBudget(code: string): boolean {
+  if (code.length > 100_000) {
+    return true
+  }
+
+  let lines = 1
+  let idx = code.indexOf('\n')
+
+  while (idx !== -1) {
+    if ((lines += 1) > 2_000) {
+      return true
+    }
+
+    idx = code.indexOf('\n', idx + 1)
+  }
+
+  return false
+}
 
 /**
  * `github-light-default` colors comments `#6e7781` (~4.2:1 against the code

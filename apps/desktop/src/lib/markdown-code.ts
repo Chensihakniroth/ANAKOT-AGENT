@@ -193,3 +193,95 @@ export function isLikelyProseCodeBlock(language: string | undefined, code: strin
 
   return !COMMON_CODE_LANGUAGES.has(cleanLanguage) && signals.proseLines >= 2 && signals.codeSignals <= 1
 }
+
+// ── Shiki language detection from filename ────────────────────────────────
+const SHIKI_LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  astro: 'astro',
+  bash: 'bash',
+  c: 'c',
+  cc: 'cpp',
+  cjs: 'javascript',
+  clj: 'clojure',
+  cpp: 'cpp',
+  cs: 'csharp',
+  css: 'css',
+  cxx: 'cpp',
+  dart: 'dart',
+  dockerfile: 'docker',
+  ex: 'elixir',
+  exs: 'elixir',
+  fish: 'fish',
+  go: 'go',
+  gql: 'graphql',
+  graphql: 'graphql',
+  h: 'c',
+  hpp: 'cpp',
+  hs: 'haskell',
+  htm: 'html',
+  html: 'html',
+  ini: 'ini',
+  java: 'java',
+  jl: 'julia',
+  js: 'javascript',
+  json: 'json',
+  json5: 'json5',
+  jsonc: 'jsonc',
+  jsx: 'jsx',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  less: 'less',
+  lua: 'lua',
+  makefile: 'make',
+  markdown: 'markdown',
+  md: 'markdown',
+  mdx: 'mdx',
+  mjs: 'javascript',
+  ml: 'ocaml',
+  mts: 'typescript',
+  nix: 'nix',
+  php: 'php',
+  pl: 'perl',
+  proto: 'proto',
+  ps1: 'powershell',
+  py: 'python',
+  pyi: 'python',
+  r: 'r',
+  rb: 'ruby',
+  rs: 'rust',
+  sass: 'sass',
+  scala: 'scala',
+  scss: 'scss',
+  sh: 'bash',
+  sql: 'sql',
+  svelte: 'svelte',
+  swift: 'swift',
+  tf: 'terraform',
+  toml: 'toml',
+  ts: 'typescript',
+  tsx: 'tsx',
+  vue: 'vue',
+  xml: 'xml',
+  yaml: 'yaml',
+  yml: 'yaml',
+  zig: 'zig',
+  zsh: 'bash'
+}
+
+function filenameExtToken(path: string | undefined): string {
+  if (!path) return ''
+  const base = path.split('/').pop()?.split('\\').pop() ?? ''
+  const lower = base.toLowerCase()
+
+  // Special filenames without an extension
+  if (lower === 'dockerfile' || lower === 'makefile' || lower === 'gemfile') {
+    return lower
+  }
+
+  const dot = lower.lastIndexOf('.')
+  return dot > 0 ? lower.slice(dot + 1) : ''
+}
+
+/** Map a file path to a Shiki language id for syntax highlighting. */
+export function shikiLanguageForFilename(path: string | undefined): string {
+  return SHIKI_LANGUAGE_BY_EXTENSION[filenameExtToken(path)] || ''
+}

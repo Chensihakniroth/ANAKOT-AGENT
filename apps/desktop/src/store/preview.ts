@@ -8,7 +8,7 @@ import { clearGitCommitData } from './git-commit'
 export interface PreviewTarget {
   binary?: boolean
   byteSize?: number
-  kind: 'file' | 'url' | 'diff'
+  kind: 'file' | 'url'
   label: string
   large?: boolean
   language?: string
@@ -18,10 +18,6 @@ export interface PreviewTarget {
   renderMode?: 'preview' | 'source'
   source: string
   url: string
-  /** Diff-specific: original file content */
-  originalContent?: string
-  /** Diff-specific: modified file content */
-  modifiedContent?: string
 }
 
 export interface PreviewServerRestart {

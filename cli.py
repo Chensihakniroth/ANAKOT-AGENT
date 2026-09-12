@@ -42,6 +42,7 @@ from urllib.parse import unquote, urlparse
 from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
+from decimal import Decimal
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style as PTStyle
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.application import Application
-from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl, ConditionalContainer
+from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl, ConditionalContainer
 from prompt_toolkit.layout.processors import Processor, Transformation, PasswordProcessor, ConditionalProcessor
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.layout.dimension import Dimension
@@ -3472,6 +3473,8 @@ class AnakotCLI:
         self._status_bar_suppressed_after_resize = False
         self._resize_recovery_lock = threading.Lock()
         self._resize_recovery_timer = None
+        # Sidebar visibility toggle
+        self._sidebar_suppressed = False
         self._resize_recovery_pending = False
 
         # Background task tracking: {task_id: threading.Thread}
@@ -4008,6 +4011,13 @@ class AnakotCLI:
             prompt_elapsed = snapshot.get("prompt_elapsed")
             if prompt_elapsed:
                 parts.append(prompt_elapsed)
+            # Cost display
+            try:
+                cost = self._get_session_cost()
+                if cost is not None:
+                    parts.append(self._format_cost(cost))
+            except Exception:
+                pass
             if yolo_active:
                 parts.append("⚠ YOLO")
             return self._trim_status_bar_text(" │ ".join(parts), width)
@@ -4112,6 +4122,14 @@ class AnakotCLI:
                     if yolo_active:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-yolo", "⚠ YOLO"))
+                    # Cost display
+                    try:
+                        cost = self._get_session_cost()
+                        if cost is not None:
+                            frags.append(("class:status-bar-dim", " │ "))
+                            frags.append(("class:status-bar-strong", self._format_cost(cost)))
+                    except Exception:
+                        pass
                     frags.append(("class:status-bar", " "))
 
             total_width = sum(self._status_bar_display_width(text) for _, text in frags)
@@ -4122,6 +4140,100 @@ class AnakotCLI:
             return frags
         except Exception:
             return [("class:status-bar", f" {self._build_status_bar_text()} ")]
+
+    def _get_session_cost(self) -> Optional[Decimal]:
+        """Return the total session cost in USD, or None if unavailable."""
+        try:
+            from agent.usage_pricing import estimate_usage_cost, CanonicalUsage
+            agent = getattr(self, "agent", None)
+            if agent and hasattr(agent, "session_input_tokens"):
+                usage = CanonicalUsage(
+                    input_tokens=getattr(agent, "session_input_tokens", 0) or 0,
+                    output_tokens=getattr(agent, "session_output_tokens", 0) or 0,
+                    cache_read_tokens=getattr(agent, "session_cache_read_tokens", 0) or 0,
+                    cache_write_tokens=getattr(agent, "session_cache_write_tokens", 0) or 0,
+                )
+                result = estimate_usage_cost(
+                    model_name=getattr(agent, "model", self.model or ""),
+                    usage=usage,
+                )
+                if result and hasattr(result, "amount_usd") and result.amount_usd is not None:
+                    return result.amount_usd
+        except Exception:
+            pass
+        return None
+
+    def _format_cost(self, cost: Decimal) -> str:
+        """Format a cost Decimal as a compact string like $0.06."""
+        return f"${float(cost):.2f}"
+
+    def _get_sidebar_fragments(self) -> list:
+        """Return fragments for the right sidebar showing session context and cost."""
+        try:
+            snapshot = self._get_status_bar_snapshot()
+            frags = []
+
+            # Model
+            model = snapshot["model_short"]
+            frags.append(("class:sidebar-title", f" {model} "))
+            frags.append(("class:sidebar-dim", "\n"))
+
+            # Context usage
+            if snapshot["context_length"]:
+                ctx_total = _format_context_length(snapshot["context_length"])
+                ctx_used = format_token_count_compact(snapshot["context_tokens"])
+                percent = snapshot["context_percent"] or 0
+                bar_len = 12
+                filled = int(bar_len * percent / 100)
+                bar = "█" * filled + "░" * (bar_len - filled)
+                ctx_color = self._status_bar_context_style(percent)
+                frags.append((ctx_color, f" {ctx_used}/{ctx_total} "))
+                frags.append(("class:sidebar-dim", f"[{bar}] "))
+                frags.append((ctx_color, f"{percent}%"))
+            else:
+                frags.append(("class:sidebar-dim", " ctx -- "))
+            frags.append(("class:sidebar-dim", "\n"))
+
+            # Session duration
+            frags.append(("class:sidebar-dim", f" {snapshot['duration']} "))
+            frags.append(("class:sidebar-dim", "\n"))
+
+            # Cost
+            cost = self._get_session_cost()
+            if cost is not None:
+                frags.append(("class:sidebar-strong", f" {self._format_cost(cost)} "))
+            else:
+                frags.append(("class:sidebar-dim", " $0.00 "))
+            frags.append(("class:sidebar-dim", "\n"))
+
+            # Compressions
+            compressions = snapshot.get("compressions", 0)
+            if compressions:
+                frags.append(("class:sidebar-dim", f" 🗜️ {compressions}"))
+                frags.append(("class:sidebar-dim", "\n"))
+
+            # Background tasks
+            bg_count = snapshot.get("active_background_tasks", 0)
+            if bg_count:
+                frags.append(("class:sidebar-dim", f" ▶ {bg_count}"))
+                frags.append(("class:sidebar-dim", "\n"))
+
+            bg_proc_count = snapshot.get("active_background_processes", 0)
+            if bg_proc_count:
+                frags.append(("class:sidebar-dim", f" ⚙ {bg_proc_count}"))
+                frags.append(("class:sidebar-dim", "\n"))
+
+            # Active tools count
+            agent = getattr(self, "agent", None)
+            if agent and hasattr(agent, "active_tools"):
+                tools = getattr(agent, "active_tools", [])
+                if tools:
+                    frags.append(("class:sidebar-dim", f" 🔧 {len(tools)} "))
+                    frags.append(("class:sidebar-dim", "\n"))
+
+            return frags
+        except Exception:
+            return []
 
     def _normalize_model_for_provider(self, resolved_provider: str) -> bool:
         """Normalize provider-specific model IDs and routing."""
@@ -15082,28 +15194,49 @@ class AnakotCLI:
         # the corresponding interactive prompt is active.
         completions_menu = CompletionsMenu(max_height=12, scroll_offset=1)
 
+        # --- Sidebar (right panel, OpenCode-style) ---
+        sidebar_window = Window(
+            content=FormattedTextControl(lambda: cli_ref._get_sidebar_fragments()),
+            width=Dimension(width=40),
+            wrap_lines=False,
+            right_margins=1,
+        )
+        sidebar_container = ConditionalContainer(
+            sidebar_window,
+            filter=Condition(
+                lambda: cli_ref._status_bar_visible
+                and not getattr(cli_ref, "_sidebar_suppressed", False)
+            ),
+        )
+
+        # Root layout: main content (left) + sidebar (right)
         layout = Layout(
-            HSplit(
-                self._build_tui_layout_children(
-                    sudo_widget=sudo_widget,
-                    secret_widget=secret_widget,
-                    approval_widget=approval_widget,
-                    slash_confirm_widget=slash_confirm_widget,
-                    clarify_widget=clarify_widget,
-                    model_picker_widget=model_picker_widget,
-                    spinner_widget=spinner_widget,
-                    spacer=spacer,
-                    status_bar=status_bar,
-                    input_rule_top=input_rule_top,
-                    image_bar=image_bar,
-                    input_area=input_area,
-                    input_rule_bot=input_rule_bot,
-                    voice_status_bar=voice_status_bar,
-                    completions_menu=completions_menu,
-                )
+            VSplit(
+                [
+                    HSplit(
+                        self._build_tui_layout_children(
+                            sudo_widget=sudo_widget,
+                            secret_widget=secret_widget,
+                            approval_widget=approval_widget,
+                            slash_confirm_widget=slash_confirm_widget,
+                            clarify_widget=clarify_widget,
+                            model_picker_widget=model_picker_widget,
+                            spinner_widget=spinner_widget,
+                            spacer=spacer,
+                            status_bar=status_bar,
+                            input_rule_top=input_rule_top,
+                            image_bar=image_bar,
+                            input_area=input_area,
+                            input_rule_bot=input_rule_bot,
+                            voice_status_bar=voice_status_bar,
+                            completions_menu=completions_menu,
+                        )
+                    ),
+                    sidebar_container,
+                ]
             )
         )
-        
+
         # Style for the application
         self._tui_style_base = {
             # Input area / prompt: empty style strings inherit the
@@ -15159,6 +15292,10 @@ class AnakotCLI:
             'voice-processing': '#FFA500 italic',
             'voice-status': 'bg:#1a1a2e #87CEEB',
             'voice-status-recording': 'bg:#1a1a2e #FF4444 bold',
+            # Sidebar (OpenCode-style right panel)
+            'sidebar-title': 'bg:#1a1a2e #ff70a6 bold',
+            'sidebar-strong': 'bg:#1a1a2e #ff70a6',
+            'sidebar-dim': 'bg:#1a1a2e #8B8682',
         }
         style = PTStyle.from_dict(self._build_tui_style_dict())
         
