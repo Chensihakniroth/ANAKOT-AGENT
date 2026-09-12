@@ -10,6 +10,7 @@ import { sessionTitle } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { $attentionSessionIds } from '@/store/session'
+import { $todoProgressBySession } from '@/store/todos'
 
 import { SessionActionsMenu, SessionContextMenu } from './session-actions-menu'
 
@@ -71,6 +72,9 @@ export function SidebarSessionRow({
   // the atom is tiny and rarely non-empty. True when a clarify prompt in this
   // session is waiting on the user.
   const needsInput = useStore($attentionSessionIds).includes(session.id)
+  // Live plan progress ("3/7"), from the composer todo store. Only rows whose
+  // own fraction changes repaint on todo events.
+  const todoProgress = useStore($todoProgressBySession)[session.id]
 
   return (
     <SessionContextMenu
@@ -182,6 +186,14 @@ export function SidebarSessionRow({
           <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-normal text-(--ui-text-secondary) group-hover:text-foreground group-data-[working=true]:text-foreground/90">
             {title}
           </span>
+          {todoProgress && (
+            <span
+              className="shrink-0 text-[0.625rem] leading-none tabular-nums text-(--ui-text-tertiary)"
+              title={r.todoProgress}
+            >
+              {todoProgress}
+            </span>
+          )}
         </button>
         <div className="relative z-2 grid w-[1.375rem] place-items-center">
           {!isWorking && (

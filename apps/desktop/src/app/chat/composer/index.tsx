@@ -78,6 +78,7 @@ import {
   insertInlineRefsIntoEditor
 } from './inline-refs'
 import { QueuePanel } from './queue-panel'
+import { TodoPanel } from './todo-panel'
 import { SubagentDock } from './subagent-dock'
 import {
   composerPlainText,
@@ -1513,6 +1514,7 @@ export function ChatBar({
           )}
           <SkinSlashPopover draft={draft} onSelect={selectSkinSlashCommand} />
           <SubagentDock sessionId={sessionId ?? null} />
+          <TodoPanel sessionId={sessionId ?? null} />
           {activeQueueSessionKey && queuedPrompts.length > 0 && (
             // Out of flow so the queue never inflates the composer's measured
             // height (that drives thread bottom padding → chat resizes on

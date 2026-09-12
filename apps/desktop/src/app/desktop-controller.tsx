@@ -126,6 +126,7 @@ const ProfilesView = lazy(async () => ({ default: (await import('./profiles')).P
 const SettingsView = lazy(async () => ({ default: (await import('./settings')).SettingsView }))
 const SkillsView = lazy(async () => ({ default: (await import('./skills')).SkillsView }))
 const PluginsView = lazy(async () => ({ default: (await import('./plugins/PluginsView')).PluginsView }))
+const WebhooksView = lazy(async () => ({ default: (await import('./webhooks/WebhooksView')).WebhooksView }))
 const PluginPageView = lazy(async () => ({ default: (await import('./plugins/PluginPageView')).PluginPageView }))
 const NotebookView = lazy(async () => ({ default: (await import('./notebookllm/notebook-view')).NotebookView }))
 
@@ -206,6 +207,7 @@ export function DesktopController() {
     settingsOpen,
     skillsOpen,
     pluginsOpen,
+    webhooksOpen,
     pluginPageOpen,
     toggleCommandCenter
   } = useOverlayRouting()
@@ -768,6 +770,14 @@ export function DesktopController() {
         <Suspense fallback={null}>
           <OverlayModal onClose={closeOverlayToPreviousRoute} title="Plugins">
             <PluginsView onClose={closeOverlayToPreviousRoute} />
+          </OverlayModal>
+        </Suspense>
+      )}
+
+      {webhooksOpen && (
+        <Suspense fallback={null}>
+          <OverlayModal onClose={closeOverlayToPreviousRoute} title="Webhooks">
+            <WebhooksView onClose={closeOverlayToPreviousRoute} />
           </OverlayModal>
         </Suspense>
       )}

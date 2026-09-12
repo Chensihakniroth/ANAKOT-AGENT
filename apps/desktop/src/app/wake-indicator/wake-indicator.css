@@ -1,0 +1,18 @@
+/* Wake indicator window styles */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+.wake-indicator-surface {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+}
+
+.wake-indicator-light {
+  transition: all 0.3s ease;
+}

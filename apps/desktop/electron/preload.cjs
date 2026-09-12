@@ -269,10 +269,10 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   // Connections — manage named connections (local, remote, ssh)
   connections: {
     list: () => ipcRenderer.invoke('anakot:connections:list'),
-    save: (input: Record<string, unknown>) => ipcRenderer.invoke('anakot:connections:save', input),
-    remove: (id: string) => ipcRenderer.invoke('anakot:connections:remove', id),
-    setPrimary: (id: string) => ipcRenderer.invoke('anakot:connections:set-primary', id),
-    probe: (payload: { url: string }) => ipcRenderer.invoke('anakot:connections:probe', payload)
+    save: input => ipcRenderer.invoke('anakot:connections:save', input),
+    remove: id => ipcRenderer.invoke('anakot:connections:remove', id),
+    setPrimary: id => ipcRenderer.invoke('anakot:connections:set-primary', id),
+    probe: payload => ipcRenderer.invoke('anakot:connections:probe', payload)
   },
 
   // Computer Use — check availability (macOS + cua-driver)
@@ -283,22 +283,22 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   // Local Models — manage local model runtimes and downloads
   localModels: {
     list: () => ipcRenderer.invoke('anakot:local-models:list'),
-    download: (payload: { model: string }) => ipcRenderer.invoke('anakot:local-models:download', payload),
-    remove: (payload: { id: string }) => ipcRenderer.invoke('anakot:local-models:remove', payload),
-    startRuntime: (payload: { type: string }) => ipcRenderer.invoke('anakot:local-models:start-runtime', payload),
-    stopRuntime: (payload: { type: string }) => ipcRenderer.invoke('anakot:local-models:stop-runtime', payload)
+    download: payload => ipcRenderer.invoke('anakot:local-models:download', payload),
+    remove: payload => ipcRenderer.invoke('anakot:local-models:remove', payload),
+    startRuntime: payload => ipcRenderer.invoke('anakot:local-models:start-runtime', payload),
+    stopRuntime: payload => ipcRenderer.invoke('anakot:local-models:stop-runtime', payload)
   },
 
   // Terminal backends — probe available execution backends
   terminalBackends: {
     get: () => ipcRenderer.invoke('anakot:terminal:backends'),
-    set: (backend: string) => ipcRenderer.invoke('anakot:terminal:backends:set', backend)
+    set: backend => ipcRenderer.invoke('anakot:terminal:backends:set', backend)
   },
 
   // Pool limits — device-local backend pool sizing preference
   poolLimits: {
     get: () => ipcRenderer.invoke('anakot:pool-limits:get'),
-    set: (limits: { maxBackends?: number; idleMs?: number }) => ipcRenderer.invoke('anakot:pool-limits:set', limits)
+    set: limits => ipcRenderer.invoke('anakot:pool-limits:set', limits)
   },
 
   // Quick Entry — global-hotkey mini composer. The quick window itself is a

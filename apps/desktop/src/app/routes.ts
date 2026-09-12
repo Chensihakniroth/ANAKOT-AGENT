@@ -10,6 +10,7 @@ export const PROFILES_ROUTE = '/profiles'
 export const AGENTS_ROUTE = '/agents'
 export const PLUGINS_ROUTE = '/plugins'
 export const NOTEBOOK_ROUTE = '/notebook'
+export const WEBHOOKS_ROUTE = '/webhooks'
 
 export type AppView =
   | 'agents'
@@ -23,6 +24,7 @@ export type AppView =
   | 'settings'
   | 'skills'
   | 'plugins'
+  | 'webhooks'
 
 export type AppRouteId =
   | 'agents'
@@ -36,6 +38,7 @@ export type AppRouteId =
   | 'settings'
   | 'skills'
   | 'plugins'
+  | 'webhooks'
 
 export interface AppRoute {
   id: AppRouteId
@@ -54,12 +57,14 @@ export const APP_ROUTES = [
   { id: 'cron', path: CRON_ROUTE, view: 'cron' },
   { id: 'profiles', path: PROFILES_ROUTE, view: 'profiles' },
   { id: 'agents', path: AGENTS_ROUTE, view: 'agents' },
-  { id: 'plugins', path: PLUGINS_ROUTE, view: 'plugins' }
+  { id: 'plugins', path: PLUGINS_ROUTE, view: 'plugins' },
+  { id: 'webhooks', path: WEBHOOKS_ROUTE, view: 'webhooks' },
 ] as const satisfies readonly AppRoute[]
 
 const APP_VIEW_BY_PATH = new Map<string, AppView>(APP_ROUTES.map(route => [route.path, route.view]))
 const RESERVED_PATHS = new Set<string>(APP_ROUTES.map(route => route.path))
 const PLUGIN_PATHS = new Set<string>()
+const CONTRIB_PATHS = new Set<string>()
 
 export function registerPluginPaths(paths: string[]) {
   PLUGIN_PATHS.clear()
@@ -67,6 +72,31 @@ export function registerPluginPaths(paths: string[]) {
     PLUGIN_PATHS.add(p)
   }
 }
+
+// ── Contributed routes — the `routes` registry area ─────────────────────────
+export const ROUTES_AREA = 'routes'
+
+export interface RouteContribution {
+  path: string
+  title?: string
+  render: () => React.ReactNode
+}
+
+/** Register contributed routes from plugins. */
+export function registerContributedRoutes(routes: RouteContribution[]) {
+  CONTRIB_PATHS.clear()
+  for (const r of routes) {
+    if (r.path.startsWith('/')) {
+      CONTRIB_PATHS.add(r.path)
+    }
+  }
+}
+
+/** Get all registered contributed route paths. */
+export function getContributedRoutePaths(): string[] {
+  return Array.from(CONTRIB_PATHS)
+}
+
 // While one is open the app's titlebar control clusters must hide so they don't
 // bleed over the overlay (they sit at a higher z-index than the overlay card).
 export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set(['agents', 'command-center', 'cron', 'notebook', 'profiles', 'settings'])
@@ -80,7 +110,7 @@ export function isNewChatRoute(pathname: string): boolean {
 }
 
 export function routeSessionId(pathname: string): string | null {
-  if (!pathname.startsWith(SESSION_ROUTE_PREFIX) || RESERVED_PATHS.has(pathname) || PLUGIN_PATHS.has(pathname)) {
+  if (!pathname.startsWith(SESSION_ROUTE_PREFIX) || RESERVED_PATHS.has(pathname) || PLUGIN_PATHS.has(pathname) || CONTRIB_PATHS.has(pathname)) {
     return null
   }
 
@@ -93,9 +123,18 @@ export function sessionRoute(sessionId: string): string {
   return `${SESSION_ROUTE_PREFIX}${encodeURIComponent(sessionId)}`
 }
 
+/** Check if a pathname is a contributed (plugin) route. */
+export function isContributedRoute(pathname: string): boolean {
+  return CONTRIB_PATHS.has(pathname)
+}
+
 export function appViewForPath(pathname: string): AppView | 'plugin-page' {
   if (PLUGIN_PATHS.has(pathname)) {
     return 'plugin-page'
+  }
+
+  if (CONTRIB_PATHS.has(pathname)) {
+    return 'chat' // Contributed routes render as chat surfaces
   }
 
   if (isNewChatRoute(pathname) || routeSessionId(pathname)) {

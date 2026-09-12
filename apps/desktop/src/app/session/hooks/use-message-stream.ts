@@ -16,12 +16,14 @@ import {
 import { coerceGatewayText, coerceThinkingText, normalizePersonalityValue } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
 import { playCompletionSound } from '@/lib/completion-sound'
+import { nextTodosFromToolEvent } from '@/lib/todos'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { setClarifyRequest } from '@/store/clarify'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { notify } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { clearAllPrompts, setApprovalRequest, setSecretRequest, setSudoRequest } from '@/store/prompts'
+import { setSessionTodos, clearActiveSessionTodos, $todosBySession } from '@/store/todos'
 import {
   $currentCwd,
   setCurrentBranch,
@@ -110,6 +112,21 @@ function toTodoPayload(payload: GatewayEventPayload | undefined): GatewayEventPa
   const isTodo = payload.name === 'todo' || (!payload.name && Object.hasOwn(payload, 'todos'))
 
   return isTodo ? { ...payload, name: 'todo', tool_id: payload.tool_id || 'todo-live' } : undefined
+}
+
+// Feed the live composer todo panel from a todo tool event. The event carries
+// either the full list (result/todos) or a merge patch (args.merge) — the
+// parser resolves both against the current live list.
+function feedLiveTodos(sessionId: string, payload: GatewayEventPayload | undefined) {
+  if (!payload) {
+    return
+  }
+
+  const next = nextTodosFromToolEvent($todosBySession.get()[sessionId] ?? [], payload)
+
+  if (next !== null) {
+    setSessionTodos(sessionId, next)
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -802,6 +819,12 @@ export function useMessageStream({
         // prompt, and vice versa.
         clearAllPrompts(sessionId)
 
+        // Turn ended — drop any still-active todo list. An unfinished list means
+        // the turn stopped without a final `todo` update, so it would otherwise
+        // stay pinned above the composer forever. A finished list is left to its
+        // normal short linger so the last checkmark is still visible.
+        clearActiveSessionTodos(sessionId)
+
         flushQueuedDeltas(sessionId)
 
         if (isActiveEvent) {
@@ -825,11 +848,15 @@ export function useMessageStream({
         }
 
         flushQueuedDeltas(sessionId)
-        upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'running', event.type)
+        const todoPayload = toTodoPayload(payload)
+        upsertToolCall(sessionId, todoPayload ?? payload, 'running', event.type)
+        feedLiveTodos(sessionId, todoPayload)
       } else if (event.type === 'tool.complete') {
         if (sessionId) {
           flushQueuedDeltas(sessionId)
-          upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'complete', event.type)
+          const todoPayload = toTodoPayload(payload)
+          upsertToolCall(sessionId, todoPayload ?? payload, 'complete', event.type)
+          feedLiveTodos(sessionId, todoPayload)
           // A pending clarify blocks the turn, so the first tool.complete after
           // one is the clarify resolving — drop the "needs input" flag here so
           // the sidebar indicator clears as soon as it's answered, not only at
@@ -1028,6 +1055,7 @@ export function useMessageStream({
         // the failed turn (same intent as the message.complete clear).
         if (sessionId) {
           clearAllPrompts(sessionId)
+          clearActiveSessionTodos(sessionId)
         }
 
         if (looksLikeProviderSetup) {

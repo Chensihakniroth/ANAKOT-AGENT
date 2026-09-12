@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { type CommandCenterSection } from '@/app/command-center'
-import { AGENTS_ROUTE, appViewForPath, COMMAND_CENTER_ROUTE, isOverlayView, NEW_CHAT_ROUTE } from '@/app/routes'
+import { AGENTS_ROUTE, appViewForPath, COMMAND_CENTER_ROUTE, isOverlayView, NEW_CHAT_ROUTE, WEBHOOKS_ROUTE } from '@/app/routes'
 
 const SECTIONS = ['sessions', 'system', 'usage'] as const
 
@@ -21,9 +21,10 @@ export function useOverlayRouting() {
   const artifactsOpen = currentView === 'artifacts'
   const notebookOpen = currentView === 'notebook'
   const pluginsOpen = currentView === 'plugins'
+  const webhooksOpen = currentView === 'webhooks'
   const pluginPageOpen = currentView === 'plugin-page'
   const chatOpen = currentView === 'chat'
-  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen || notebookOpen || pluginsOpen || pluginPageOpen
+  const overlayOpen = isOverlayView(currentView) || skillsOpen || messagingOpen || artifactsOpen || notebookOpen || pluginsOpen || webhooksOpen || pluginPageOpen
 
   // Overlay routes (settings/command-center/agents) stash the underlying path
   // so closing them returns there instead of bouncing to /.
@@ -80,6 +81,7 @@ export function useOverlayRouting() {
     settingsOpen,
     skillsOpen,
     pluginsOpen,
+    webhooksOpen,
     pluginPageOpen,
     toggleCommandCenter
   }
