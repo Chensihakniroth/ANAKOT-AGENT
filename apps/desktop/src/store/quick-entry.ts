@@ -19,13 +19,12 @@ export function getQuickEntryActions(): QuickEntryAction[] {
 
 // Quick composer state for quick-entry-app.tsx
 export interface QuickComposerState {
-  query: string
+  connected: boolean
   draft: string
+  sessions: Array<{ id: string; title: string }>
+  submitting: boolean
   target: string
   visible: boolean
-  connected: boolean
-  submitting?: boolean
-  sessions: Array<{ id: string; title: string }>
 }
 
 export interface QuickEntrySubmitPayload { text: string; target: string }
@@ -45,43 +44,71 @@ export const QUICK_TARGET_CURRENT = 'current'
 export const QUICK_TARGET_NEW = 'new'
 
 export const initialQuickComposerState: QuickComposerState = {
-  query: '',
+  connected: false,
   draft: '',
+  sessions: [],
+  submitting: false,
   target: QUICK_TARGET_CURRENT,
   visible: true,
-  connected: true,
-  sessions: [],
 }
 
 export function quickComposerReducer(
   current: QuickComposerState,
   event: QuickComposerEvent
-): { send: { text: string; target: string } | null; state: QuickComposerState } {
+): { send: QuickEntrySubmitPayload | null; state: QuickComposerState } {
   switch (event.type) {
     case 'SET_QUERY':
-      return { send: null, state: { ...current, query: event.query } }
+      return { send: null, state: { ...current, draft: event.query } }
     case 'SET_TARGET':
       return { send: null, state: { ...current, target: event.target } }
     case 'shown':
-      return { send: null, state: { ...current, visible: true, query: '', draft: '' } }
-    case 'state':
-      return { send: null, state: { ...current, connected: event.connected, sessions: event.sessions } }
+      // Re-summoned: reset draft and target, keep gateway truth
+      return {
+        send: null,
+        state: {
+          ...current,
+          visible: true,
+          draft: '',
+          target: QUICK_TARGET_CURRENT,
+          submitting: false,
+        },
+      }
+    case 'state': {
+      // Update sessions and connection; validate target still exists
+      const sessions = event.sessions
+      const targetValid =
+        current.target === QUICK_TARGET_CURRENT ||
+        current.target === QUICK_TARGET_NEW ||
+        sessions.some(s => s.id === current.target)
+      return {
+        send: null,
+        state: {
+          ...current,
+          connected: event.connected,
+          sessions,
+          target: targetValid ? current.target : QUICK_TARGET_CURRENT,
+        },
+      }
+    }
     case 'blur':
-      return { send: null, state: { ...current, visible: false } }
+      return { send: null, state: { ...current, visible: false, draft: '', submitting: false } }
     case 'edit':
       return { send: null, state: { ...current, draft: event.draft } }
     case 'submit':
-      if (!current.draft.trim()) {
+      if (!current.draft.trim() || !current.connected || current.submitting) {
         return { send: null, state: current }
       }
       return {
         send: { text: current.draft.trim(), target: current.target },
-        state: { ...current, visible: false },
+        state: { ...current, submitting: true, draft: '', visible: false },
       }
     case 'dismiss':
-      return { send: null, state: { ...current, visible: false } }
+      return {
+        send: null,
+        state: { ...current, visible: false, draft: '', target: QUICK_TARGET_CURRENT },
+      }
     case 'target':
-      return { send: null, state: { ...current, target: event.value === QUICK_TARGET_CURRENT ? QUICK_TARGET_NEW : QUICK_TARGET_CURRENT } }
+      return { send: null, state: { ...current, target: event.value } }
     default:
       return { send: null, state: current }
   }

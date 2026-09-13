@@ -1,13 +1,11 @@
 import { atom } from 'nanostores'
 
-import { persistStringRecord, storedStringRecord } from '@/lib/storage'
-
 import type { ComposerAttachment } from './composer'
 
 // Composer message queue — ported from Hermes
 // Manages queued prompts per session with persistence
 
-const STORAGE_KEY = 'anakot.desktop.composer-queue.v1'
+const STORAGE_KEY = 'anakot.desktop.composerQueue.v1'
 
 export interface QueuedPromptEntry {
   id: string
@@ -22,11 +20,25 @@ interface QueueState {
 }
 
 function load(): QueueState {
-  return storedStringRecord(STORAGE_KEY) as unknown as QueueState
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as QueueState
+  } catch {
+    return {}
+  }
 }
 
 function save(state: QueueState): void {
-  persistStringRecord(STORAGE_KEY, state as unknown as Record<string, string>)
+  try {
+    if (Object.keys(state).length === 0) {
+      localStorage.removeItem(STORAGE_KEY)
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    }
+  } catch {
+    // Storage full or unavailable — best effort
+  }
 }
 
 export const $queuedPromptsBySession = atom<QueueState>(load())
@@ -49,12 +61,17 @@ export const enqueueQueuedPrompt = (
 ): QueuedPromptEntry | null => {
   if (!key) return null
   const id = entry.id ?? crypto.randomUUID()
-  const full: QueuedPromptEntry = { ...entry, id, createdAt: Date.now(), sessionId: key }
+  // Deep clone attachments to prevent external mutation
+  const attachments = entry.attachments ? entry.attachments.map(a => ({ ...a })) : []
+  const full: QueuedPromptEntry = { ...entry, id, attachments, createdAt: Date.now(), sessionId: key }
   const current = $queuedPromptsBySession.get()
-  $queuedPromptsBySession.set({
+  const next = {
     ...current,
     [key]: [...(current[key] ?? []), full],
-  })
+  }
+  $queuedPromptsBySession.set(next)
+  // Persist immediately for synchronous access
+  save(next)
   return full
 }
 
@@ -100,7 +117,12 @@ export const updateQueuedPrompt = (
   const queue = current[key] ?? []
   const index = queue.findIndex(e => e.id === id)
   if (index < 0) return false
-  queue[index] = { ...queue[index], ...patch }
+  // Clone attachments if provided
+  const updated = { ...queue[index], ...patch }
+  if (patch.attachments) {
+    updated.attachments = patch.attachments.map(a => ({ ...a }))
+  }
+  queue[index] = updated
   $queuedPromptsBySession.set({ ...current, [key]: [...queue] })
   return true
 }
@@ -111,7 +133,9 @@ export const updateQueuedPromptText = (key: string | null | undefined, id: strin
 export const clearQueuedPrompts = (key: string | null | undefined) => {
   if (!key) return
   const current = $queuedPromptsBySession.get()
-  $queuedPromptsBySession.set({ ...current, [key]: [] })
+  const next = { ...current }
+  delete next[key]
+  $queuedPromptsBySession.set(next)
 }
 
 export const migrateQueuedPrompts = (fromKey: string | null | undefined, toKey: string | null | undefined): boolean => {
@@ -158,6 +182,8 @@ export const shouldAutoDrain = ({ isBusy, parked, queueLength }: AutoDrainInput)
 }
 
 export const shouldAutoDrainOnSettle = (input?: { isBusy?: boolean; queueLength?: number; wasBusy?: boolean }): boolean => {
+  // Only drain on a true settle edge: was busy, now not busy, queue non-empty
+  if (!input?.wasBusy) return false
   return shouldAutoDrain({
     isBusy: input?.isBusy ?? false,
     parked: false,
