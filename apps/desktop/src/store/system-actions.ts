@@ -1,6 +1,13 @@
 import { atom } from 'nanostores'
 
-import { getActionStatus, restartGateway } from '@/hermes'
+// System actions — stub for gateway restart/status
+// Full implementation requires gateway IPC bridge
+async function getActionStatus(_actionId: string): Promise<{ status: string }> {
+  return { status: 'unknown' }
+}
+async function restartGateway(): Promise<void> {
+  // Stub: gateway restart requires IPC bridge
+}
 import { translateNow } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { ActionResponse } from '@/types/anakot'

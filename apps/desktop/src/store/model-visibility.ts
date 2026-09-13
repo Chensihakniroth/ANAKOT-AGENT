@@ -67,6 +67,6 @@ export function effectiveVisibleKeys(): string[] {
   return Array.from($visibleModels.get())
 }
 
-export function setVisibleModels(models: string[]): void {
-  $visibleModels.set(new Set(models))
+export function setVisibleModels(models: string[] | Set<string>): void {
+  $visibleModels.set(new Set(Array.isArray(models) ? models : [...models]))
 }

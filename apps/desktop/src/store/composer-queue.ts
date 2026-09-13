@@ -59,7 +59,7 @@ export const enqueueQueuedPrompt = (
 }
 
 export const dequeueQueuedPrompt = (key: string | null | undefined): null | QueuedPromptEntry => {
-  if (!key) return []
+  if (!key) return null
   const current = $queuedPromptsBySession.get()
   const queue = current[key] ?? []
   if (queue.length === 0) return null
