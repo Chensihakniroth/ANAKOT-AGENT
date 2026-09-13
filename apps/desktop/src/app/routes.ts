@@ -3,6 +3,8 @@ export const NEW_CHAT_ROUTE = '/'
 export const SETTINGS_ROUTE = '/settings'
 export const COMMAND_CENTER_ROUTE = '/command-center'
 export const SKILLS_ROUTE = '/skills'
+export const LEARNING_ROUTE = '/learning'
+export const PET_GENERATE_ROUTE = '/pet-generate'
 export const MESSAGING_ROUTE = '/messaging'
 export const ARTIFACTS_ROUTE = '/artifacts'
 export const CRON_ROUTE = '/cron'
@@ -18,8 +20,10 @@ export type AppView =
   | 'chat'
   | 'command-center'
   | 'cron'
+  | 'learning'
   | 'messaging'
   | 'notebook'
+  | 'pet-generate'
   | 'profiles'
   | 'settings'
   | 'skills'
@@ -31,9 +35,11 @@ export type AppRouteId =
   | 'artifacts'
   | 'command-center'
   | 'cron'
+  | 'learning'
   | 'messaging'
   | 'new'
   | 'notebook'
+  | 'pet-generate'
   | 'profiles'
   | 'settings'
   | 'skills'
@@ -51,6 +57,8 @@ export const APP_ROUTES = [
   { id: 'settings', path: SETTINGS_ROUTE, view: 'settings' },
   { id: 'command-center', path: COMMAND_CENTER_ROUTE, view: 'command-center' },
   { id: 'skills', path: SKILLS_ROUTE, view: 'skills' },
+  { id: 'learning', path: LEARNING_ROUTE, view: 'learning' },
+  { id: 'pet-generate', path: PET_GENERATE_ROUTE, view: 'pet-generate' },
   { id: 'messaging', path: MESSAGING_ROUTE, view: 'messaging' },
   { id: 'notebook', path: NOTEBOOK_ROUTE, view: 'notebook' },
   { id: 'artifacts', path: ARTIFACTS_ROUTE, view: 'artifacts' },
