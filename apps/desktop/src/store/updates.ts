@@ -42,7 +42,9 @@ export async function installUpdate(): Promise<void> {
 export function openUpdatesWindow(): void {}
 export function startUpdatePoller(): void {}
 export function stopUpdatePoller(): void {}
-export function reportBackendContract(): void {}
+export function reportBackendContract(_contract?: unknown): void {
+  // Stub: report backend contract
+}
 export function checkUpdates(): void {}
 export function refreshDesktopVersion(): void {}
 export function setUpdateOverlayOpen(_open: boolean): void {}

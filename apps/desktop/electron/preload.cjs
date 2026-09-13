@@ -335,4 +335,62 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
       return () => ipcRenderer.removeListener('anakot:quick-entry:shown', listener)
     }
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW FEATURES — Preload API for ported Hermes functionality
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Updates
+  updates: {
+    check: () => ipcRenderer.invoke('anakot:updates:check'),
+    install: () => ipcRenderer.invoke('anakot:updates:install')
+  },
+
+  // Git review operations
+  gitReview: {
+    list: (repoPath, scope, baseRef) => ipcRenderer.invoke('anakot:git:review:list', repoPath, scope, baseRef),
+    diff: (repoPath, filePath, scope, baseRef, staged) => ipcRenderer.invoke('anakot:git:review:diff', repoPath, filePath, scope, baseRef, staged),
+    stage: (repoPath, filePath) => ipcRenderer.invoke('anakot:git:review:stage', repoPath, filePath),
+    unstage: (repoPath, filePath) => ipcRenderer.invoke('anakot:git:review:unstage', repoPath, filePath),
+    revert: (repoPath, filePath) => ipcRenderer.invoke('anakot:git:review:revert', repoPath, filePath),
+    revParse: (repoPath, ref) => ipcRenderer.invoke('anakot:git:review:revParse', repoPath, ref),
+    commit: (repoPath, message, push) => ipcRenderer.invoke('anakot:git:review:commit', repoPath, message, push),
+    push: (repoPath) => ipcRenderer.invoke('anakot:git:review:push', repoPath),
+    prList: (repoPath, branches, numbers) => ipcRenderer.invoke('anakot:git:review:prList', repoPath, branches, numbers),
+    createPr: (repoPath, options) => ipcRenderer.invoke('anakot:git:review:createPr', repoPath, options),
+    shipInfo: (repoPath) => ipcRenderer.invoke('anakot:git:review:shipInfo', repoPath),
+    scanRepos: (paths) => ipcRenderer.invoke('anakot:git:scanRepos', paths)
+  },
+
+  // Window state
+  windowState: {
+    save: () => ipcRenderer.invoke('anakot:window:saveState'),
+    restore: () => ipcRenderer.invoke('anakot:window:restoreState')
+  },
+
+  // Backend health
+  backend: {
+    checkHealth: () => ipcRenderer.invoke('anakot:backend:checkHealth')
+  },
+
+  // Power management
+  power: {
+    getBatteryState: () => ipcRenderer.invoke('anakot:power:getBatteryState')
+  },
+
+  // System actions
+  system: {
+    restartGateway: () => ipcRenderer.invoke('anakot:system:restartGateway'),
+    getActionStatus: (actionId) => ipcRenderer.invoke('anakot:system:getActionStatus', actionId)
+  },
+
+  // Crash forensics
+  crash: {
+    report: (report) => ipcRenderer.invoke('anakot:crash:report', report)
+  },
+
+  // Event dedupe
+  event: {
+    dedupe: (eventId, ttlMs) => ipcRenderer.invoke('anakot:event:dedupe', eventId, ttlMs)
+  }
 })
