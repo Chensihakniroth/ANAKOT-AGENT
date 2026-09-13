@@ -13,8 +13,18 @@
 
 import { atom } from 'nanostores'
 
-export const $displayTimestamps = atom<boolean>(false)
+import { persistBoolean, storedBoolean } from '@/lib/storage'
+
+const DISPLAY_TIMESTAMPS_KEY = 'anakot.desktop.displayTimestamps'
+
+export const $displayTimestamps = atom<boolean>(storedBoolean(DISPLAY_TIMESTAMPS_KEY, false))
+
+export function setDisplayTimestamps(show: boolean): void {
+  persistBoolean(DISPLAY_TIMESTAMPS_KEY, show)
+  $displayTimestamps.set(show)
+}
 
 export function setDisplayTimestampsFromConfig(value: unknown): void {
-  $displayTimestamps.set(value === true || value === 'true' || value === 1)
+  const enabled = value === true || value === 'true' || value === 1
+  $displayTimestamps.set(enabled)
 }

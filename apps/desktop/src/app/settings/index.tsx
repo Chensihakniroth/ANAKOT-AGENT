@@ -22,6 +22,7 @@ import { BrowserRealProfilePanel } from './browser-real-profile-panel'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
 import { DiscordRpcSettings } from './discord-rpc-settings'
+import { DisplaySettings } from './display-settings'
 import { FreeModelSuiteSettings } from './free-model-suite-settings'
 import { GatewaySettings } from './gateway-settings'
 import { ConnectionsRegistryPanel } from './connections-registry'
@@ -36,6 +37,8 @@ import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './provider
 import { SessionsSettings } from './sessions-settings'
 import { TerminalSettings } from './terminal-settings'
 import { ToolsetsSettings } from './toolsets-settings'
+import { UpdatesSettings } from './updates-settings'
+import { VoicePrefsSettings } from './voice-prefs-settings'
 import { WebhooksSettings } from './webhooks-settings'
 import type { SettingsPageProps, SettingsView as SettingsViewId } from './types'
 import { SettingsSearchBar } from './settings-search-bar'
@@ -56,6 +59,9 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'customEndpoints',
   'connections',
   'freeModels',
+  'voicePrefs',
+  'display',
+  'updates',
   'sessions',
   'webhooks',
   'about'
@@ -342,6 +348,27 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             onClick={() => setActiveView('freeModels')}
           />
           <OverlayNavItem
+            active={activeView === 'voicePrefs'}
+            icon={Mic}
+            label="Voice"
+            nested
+            onClick={() => setActiveView('voicePrefs')}
+          />
+          <OverlayNavItem
+            active={activeView === 'display'}
+            icon={Monitor}
+            label="Display"
+            nested
+            onClick={() => setActiveView('display')}
+          />
+          <OverlayNavItem
+            active={activeView === 'updates'}
+            icon={IconDownload}
+            label="Updates"
+            nested
+            onClick={() => setActiveView('updates')}
+          />
+          <OverlayNavItem
             active={activeView === 'sessions'}
             icon={Archive}
             label={t.settings.nav.archivedChats ?? 'Sessions'}
@@ -425,6 +452,12 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <ConnectionsRegistryPanel />
           ) : activeView === 'freeModels' ? (
             <FreeModelSuiteSettings gateway={gateway} onMainModelChanged={onMainModelChanged} />
+          ) : activeView === 'voicePrefs' ? (
+            <VoicePrefsSettings />
+          ) : activeView === 'display' ? (
+            <DisplaySettings />
+          ) : activeView === 'updates' ? (
+            <UpdatesSettings />
           ) : activeView === 'webhooks' ? (
             <WebhooksSettings />
           ) : (
