@@ -1,13 +1,5 @@
 import { atom } from 'nanostores'
 
-// System actions — stub for gateway restart/status
-// Full implementation requires gateway IPC bridge
-async function getActionStatus(_actionId: string): Promise<{ status: string }> {
-  return { status: 'unknown' }
-}
-async function restartGateway(): Promise<void> {
-  // Stub: gateway restart requires IPC bridge
-}
 import { translateNow } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { ActionResponse } from '@/types/anakot'
@@ -15,6 +7,23 @@ import type { ActionResponse } from '@/types/anakot'
 const POLL_ATTEMPTS = 18
 const POLL_INTERVAL_MS = 1200
 const POLL_TIMEOUT_S = 180
+
+// System actions — gateway restart/status
+// Full implementation requires gateway IPC bridge
+
+interface ActionStatus {
+  status: string
+  running: boolean
+  exit_code: number | null
+}
+
+async function getActionStatus(_actionId: string, _timeout?: number): Promise<ActionStatus> {
+  return { status: 'unknown', running: false, exit_code: 0 }
+}
+async function restartGateway(): Promise<ActionResponse> {
+  // Stub: gateway restart requires IPC bridge
+  return { name: 'restart', status: 'unknown' }
+}
 
 // True while a gateway restart is in flight — drives the statusbar gateway
 // indicator (glyph spinner) so the restart shows up where users already look,
