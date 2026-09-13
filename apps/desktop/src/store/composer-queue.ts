@@ -1,198 +1,107 @@
 import { atom } from 'nanostores'
 
+import { persistStringRecord, storedStringRecord } from '@/lib/storage'
+
 import type { ComposerAttachment } from './composer'
+
+// Composer message queue — ported from Hermes
+// Manages queued prompts per session with persistence
+
+const STORAGE_KEY = 'anakot.desktop.composer-queue.v1'
 
 export interface QueuedPromptEntry {
   id: string
   text: string
   attachments: ComposerAttachment[]
-  queuedAt: number
+  createdAt: number
+  sessionId?: string | null
 }
 
-type QueueState = Record<string, QueuedPromptEntry[]>
-
-const STORAGE_KEY = 'anakot.desktop.composerQueue.v1'
-
-const load = (): QueueState => {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as QueueState) : {}
-  } catch {
-    return {}
-  }
+interface QueueState {
+  [sessionId: string]: QueuedPromptEntry[]
 }
 
-const save = (state: QueueState) => {
-  if (typeof window === 'undefined') {
-    return
-  }
+function load(): QueueState {
+  return storedStringRecord(STORAGE_KEY) as unknown as QueueState
+}
 
-  try {
-    if (Object.keys(state).length === 0) {
-      window.localStorage.removeItem(STORAGE_KEY)
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    }
-  } catch {
-    // best-effort: storage may be unavailable, queue still works in-memory
-  }
+function save(state: QueueState): void {
+  persistStringRecord(STORAGE_KEY, state as unknown as Record<string, string>)
 }
 
 export const $queuedPromptsBySession = atom<QueueState>(load())
+export const $parkedQueueSessions = atom<Record<string, true>>({})
 
-const writeSession = (sid: string, queue: QueuedPromptEntry[]) => {
-  const current = $queuedPromptsBySession.get()
-  const next = { ...current }
+$queuedPromptsBySession.subscribe(save)
 
-  if (queue.length === 0) {
-    delete next[sid]
-  } else {
-    next[sid] = queue
-  }
-
-  $queuedPromptsBySession.set(next)
-  save(next)
+export const isSteerableEntry = (entry: Pick<QueuedPromptEntry, 'attachments' | 'text'>): boolean => {
+  return Boolean(entry.text?.trim() || entry.attachments?.length)
 }
-
-const sidOf = (key: string | null | undefined): null | string => {
-  const trimmed = key?.trim()
-
-  return trimmed ? trimmed : null
-}
-
-const queueFor = (sid: string) => $queuedPromptsBySession.get()[sid] ?? []
-
-const nextId = () => `queued-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-const cloneAttachments = (attachments: ComposerAttachment[]) => attachments.map(a => ({ ...a }))
 
 export const getQueuedPrompts = (key: string | null | undefined): QueuedPromptEntry[] => {
-  const sid = sidOf(key)
-
-  return sid ? queueFor(sid) : []
+  if (!key) return []
+  return $queuedPromptsBySession.get()[key] ?? []
 }
 
 export const enqueueQueuedPrompt = (
   key: string | null | undefined,
-  payload: { text: string; attachments: ComposerAttachment[] }
-): null | QueuedPromptEntry => {
-  const sid = sidOf(key)
-
-  if (!sid) {
-    return null
-  }
-
-  const entry: QueuedPromptEntry = {
-    id: nextId(),
-    text: payload.text,
-    attachments: cloneAttachments(payload.attachments),
-    queuedAt: Date.now()
-  }
-
-  writeSession(sid, [...queueFor(sid), entry])
-
-  return entry
+  entry: Omit<QueuedPromptEntry, 'id' | 'createdAt'> & { id?: string }
+): QueuedPromptEntry | null => {
+  if (!key) return null
+  const id = entry.id ?? crypto.randomUUID()
+  const full: QueuedPromptEntry = { ...entry, id, createdAt: Date.now(), sessionId: key }
+  const current = $queuedPromptsBySession.get()
+  $queuedPromptsBySession.set({
+    ...current,
+    [key]: [...(current[key] ?? []), full],
+  })
+  return full
 }
 
 export const dequeueQueuedPrompt = (key: string | null | undefined): null | QueuedPromptEntry => {
-  const sid = sidOf(key)
-
-  if (!sid) {
-    return null
-  }
-
-  const [head, ...rest] = queueFor(sid)
-
-  if (!head) {
-    return null
-  }
-
-  writeSession(sid, rest)
-
-  return head
+  if (!key) return []
+  const current = $queuedPromptsBySession.get()
+  const queue = current[key] ?? []
+  if (queue.length === 0) return null
+  const [next, ...rest] = queue
+  $queuedPromptsBySession.set({ ...current, [key]: rest })
+  return next
 }
 
 export const removeQueuedPrompt = (key: string | null | undefined, id: string): boolean => {
-  const sid = sidOf(key)
-
-  if (!sid) {
-    return false
-  }
-
-  const queue = queueFor(sid)
+  if (!key) return false
+  const current = $queuedPromptsBySession.get()
+  const queue = current[key] ?? []
   const next = queue.filter(e => e.id !== id)
-
-  if (next.length === queue.length) {
-    return false
-  }
-
-  writeSession(sid, next)
-
+  if (next.length === queue.length) return false
+  $queuedPromptsBySession.set({ ...current, [key]: next })
   return true
 }
 
 export const promoteQueuedPrompt = (key: string | null | undefined, id: string): boolean => {
-  const sid = sidOf(key)
-
-  if (!sid) {
-    return false
-  }
-
-  const queue = queueFor(sid)
+  if (!key) return false
+  const current = $queuedPromptsBySession.get()
+  const queue = current[key] ?? []
   const index = queue.findIndex(e => e.id === id)
-
-  if (index <= 0) {
-    return false
-  }
-
-  const entry = queue[index]!
-  writeSession(sid, [entry, ...queue.slice(0, index), ...queue.slice(index + 1)])
-
+  if (index <= 0) return false
+  const [entry] = queue.splice(index, 1)
+  queue.unshift(entry)
+  $queuedPromptsBySession.set({ ...current, [key]: [...queue] })
   return true
 }
 
 export const updateQueuedPrompt = (
   key: string | null | undefined,
   id: string,
-  update: { text: string; attachments?: ComposerAttachment[] }
+  patch: Partial<QueuedPromptEntry>
 ): boolean => {
-  const sid = sidOf(key)
-
-  if (!sid) {
-    return false
-  }
-
-  const queue = queueFor(sid)
-  let changed = false
-
-  const next = queue.map(entry => {
-    if (entry.id !== id) {
-      return entry
-    }
-
-    const attachments = update.attachments ? cloneAttachments(update.attachments) : entry.attachments
-
-    if (entry.text === update.text && !update.attachments) {
-      return entry
-    }
-
-    changed = true
-
-    return { ...entry, text: update.text, attachments }
-  })
-
-  if (!changed) {
-    return false
-  }
-
-  writeSession(sid, next)
-
+  if (!key) return false
+  const current = $queuedPromptsBySession.get()
+  const queue = current[key] ?? []
+  const index = queue.findIndex(e => e.id === id)
+  if (index < 0) return false
+  queue[index] = { ...queue[index], ...patch }
+  $queuedPromptsBySession.set({ ...current, [key]: [...queue] })
   return true
 }
 
@@ -200,40 +109,60 @@ export const updateQueuedPromptText = (key: string | null | undefined, id: strin
   updateQueuedPrompt(key, id, { text })
 
 export const clearQueuedPrompts = (key: string | null | undefined) => {
-  const sid = sidOf(key)
-
-  if (!sid || !(sid in $queuedPromptsBySession.get())) {
-    return
-  }
-
-  writeSession(sid, [])
+  if (!key) return
+  const current = $queuedPromptsBySession.get()
+  $queuedPromptsBySession.set({ ...current, [key]: [] })
 }
 
-/** Inputs to {@link shouldAutoDrainOnSettle}, captured at a `busy` transition. */
-export interface AutoDrainSettleInput {
-  wasBusy: boolean
+export const migrateQueuedPrompts = (fromKey: string | null | undefined, toKey: string | null | undefined): boolean => {
+  if (!fromKey || !toKey || fromKey === toKey) return false
+  const current = $queuedPromptsBySession.get()
+  const from = current[fromKey] ?? []
+  if (from.length === 0) return false
+  $queuedPromptsBySession.set({
+    ...current,
+    [fromKey]: [],
+    [toKey]: [...(current[toKey] ?? []), ...from],
+  })
+  return true
+}
+
+export const parkQueuedPrompts = (key: string | null | undefined): boolean => {
+  if (!key) return false
+  const current = $queuedPromptsBySession.get()
+  if ((current[key] ?? []).length === 0) return false
+  $parkedQueueSessions.set({ ...$parkedQueueSessions.get(), [key]: true })
+  return true
+}
+
+export const unparkQueuedPrompts = (key: string | null | undefined): void => {
+  if (!key) return
+  const current = { ...$parkedQueueSessions.get() }
+  delete current[key]
+  $parkedQueueSessions.set(current)
+}
+
+export const isQueueParked = (key: string | null | undefined): boolean => {
+  if (!key) return false
+  return $parkedQueueSessions.get()[key] === true
+}
+
+export interface AutoDrainInput {
   isBusy: boolean
+  parked: boolean
   queueLength: number
 }
 
-/**
- * Decide whether the composer should auto-drain the next queued prompt when a
- * turn settles (busy transitions true → false).
- *
- * Queued turns always advance once the session is idle again, whether the turn
- * finished naturally or the user interrupted it. Interrupting to reach a queued
- * message is the whole point of the queue, so we never suppress the drain. The
- * gateway guarantees a settle (message.complete + session.info running:false)
- * even after an interrupt, so this single edge reliably advances the queue. To
- * cancel queued turns the user deletes them from the panel.
- */
-export const shouldAutoDrainOnSettle = (params: AutoDrainSettleInput): boolean => {
-  const { isBusy, queueLength, wasBusy } = params
-
-  // Only react to a true → false transition; ignore steady state and entry.
-  if (isBusy || !wasBusy) {
-    return false
-  }
-
-  return queueLength > 0
+export const shouldAutoDrain = ({ isBusy, parked, queueLength }: AutoDrainInput): boolean => {
+  return !isBusy && !parked && queueLength > 0
 }
+
+export const shouldAutoDrainOnSettle = (): boolean => {
+  return shouldAutoDrain({
+    isBusy: false,
+    parked: false,
+    queueLength: Object.values($queuedPromptsBySession.get()).reduce((sum, q) => sum + q.length, 0),
+  })
+}
+
+export const MAX_AUTO_DRAIN_ATTEMPTS = 4
