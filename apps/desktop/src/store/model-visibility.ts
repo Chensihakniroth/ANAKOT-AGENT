@@ -63,7 +63,7 @@ export function modelVisibilityKey(provider: string, model: string): string {
   return `${provider}/${model}`
 }
 
-export function effectiveVisibleKeys(): string[] {
+export function effectiveVisibleKeys(stored?: unknown, providers?: unknown): string[] {
   return Array.from($visibleModels.get())
 }
 
