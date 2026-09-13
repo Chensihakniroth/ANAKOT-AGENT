@@ -168,7 +168,7 @@ export function QuickEntryApp() {
             aria-label="Target session"
             disabled={!state.connected}
             id="quick-entry-target"
-            onChange={event => dispatch({ target: event.target.value, type: 'target' })}
+            onChange={event => dispatch({ type: 'target', value: event.target.value })}
             onKeyDown={event => {
               if (event.key === 'Escape') {
                 event.preventDefault()

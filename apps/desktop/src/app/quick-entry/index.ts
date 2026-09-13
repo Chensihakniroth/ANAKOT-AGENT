@@ -1,3 +1,3 @@
 // Quick entry — ported from Hermes
-export interface QuickEntryAction { id: string; label: string; run: () => void }
-export function getQuickEntryActions(): QuickEntryAction[] { return [] }
+export { $quickEntryActions, registerQuickEntryAction, getQuickEntryActions } from '@/store/quick-entry'
+export { QuickEntry } from './QuickEntryView'

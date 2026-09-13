@@ -106,7 +106,7 @@ describe('quickComposerReducer', () => {
   it('a picked session target rides the submit payload', () => {
     const { sent } = run([
       connect,
-      { target: 's2', type: 'target' },
+      { type: 'target', value: 's2' },
       { draft: 'send this there', type: 'edit' },
       { type: 'submit' }
     ])
@@ -117,7 +117,7 @@ describe('quickComposerReducer', () => {
   it('the new-session target rides the submit payload', () => {
     const { sent } = run([
       connect,
-      { target: QUICK_TARGET_NEW, type: 'target' },
+      { type: 'target', value: QUICK_TARGET_NEW },
       { draft: 'fresh start', type: 'edit' },
       { type: 'submit' }
     ])
@@ -128,7 +128,7 @@ describe('quickComposerReducer', () => {
   it('a picked session that vanishes from the pushed list falls back to current', () => {
     const { state } = run([
       connect,
-      { target: 's2', type: 'target' },
+      { type: 'target', value: 's2' },
       { connected: true, sessions: [{ id: 's1', title: 'Fix the build' }], type: 'state' }
     ])
 
@@ -136,7 +136,7 @@ describe('quickComposerReducer', () => {
   })
 
   it('a state push that still contains the picked session keeps it', () => {
-    const { state } = run([connect, { target: 's1', type: 'target' }, connect])
+    const { state } = run([connect, { type: 'target', value: 's1' }, connect])
 
     expect(state.target).toBe('s1')
   })
@@ -144,7 +144,7 @@ describe('quickComposerReducer', () => {
   it('Escape dismisses without sending, discards the draft, and resets the target', () => {
     const { sent, state } = run([
       connect,
-      { target: 's1', type: 'target' },
+      { type: 'target', value: 's1' },
       { draft: 'never mind', type: 'edit' },
       { type: 'dismiss' }
     ])

@@ -1,2 +1,2 @@
 // Pet generator — ported from Hermes
-export function PetGeneratePage() { return null }
+export { PetGenerateView } from './PetGenerateView'
