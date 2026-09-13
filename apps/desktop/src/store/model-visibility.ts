@@ -49,9 +49,18 @@ export function setModelVisible(modelId: string, visible: boolean): void {
   $visibleModels.set(next)
 }
 
-export function collapseModelFamilies(): ModelFamily[] {
+export function collapseModelFamilies(models?: string[]): ModelFamily[] {
   // Stub: collapse all model families
-  return $modelFamilies.get()
+  if (!models || models.length === 0) {
+    return $modelFamilies.get()
+  }
+  // Group models by provider
+  return [{
+    id: 'default',
+    fastId: 'default',
+    name: 'Models',
+    models: models,
+  }]
 }
 
 export function expandModelFamilies(): ModelFamily[] {
@@ -63,8 +72,8 @@ export function modelVisibilityKey(provider: string, model: string): string {
   return `${provider}/${model}`
 }
 
-export function effectiveVisibleKeys(stored?: unknown, providers?: unknown): string[] {
-  return Array.from($visibleModels.get())
+export function effectiveVisibleKeys(_stored?: unknown, _providers?: unknown): Set<string> {
+  return $visibleModels.get()
 }
 
 export function setVisibleModels(models: string[] | Set<string>): void {

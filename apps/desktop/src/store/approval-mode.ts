@@ -97,4 +97,7 @@ export async function setApprovalModeForProfile(
 }
 
 /** Convenience alias for setApprovalModeForProfile (Hermes parity) */
-export const setApprovalMode = setApprovalModeForProfile
+export function setApprovalMode(profile: string, mode: ApprovalMode): void {
+  const key = profileKey(profile)
+  $approvalModes.set({ ...$approvalModes.get(), [key]: mode })
+}

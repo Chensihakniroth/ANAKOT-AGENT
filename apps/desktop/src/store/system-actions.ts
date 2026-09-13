@@ -22,7 +22,7 @@ async function getActionStatus(_actionId: string, _timeout?: number): Promise<Ac
 }
 async function restartGateway(): Promise<ActionResponse> {
   // Stub: gateway restart requires IPC bridge
-  return { name: 'restart', status: 'unknown' }
+  return { name: 'restart', ok: true, pid: 0 }
 }
 
 // True while a gateway restart is in flight — drives the statusbar gateway

@@ -157,11 +157,11 @@ export const shouldAutoDrain = ({ isBusy, parked, queueLength }: AutoDrainInput)
   return !isBusy && !parked && queueLength > 0
 }
 
-export const shouldAutoDrainOnSettle = (): boolean => {
+export const shouldAutoDrainOnSettle = (input?: { isBusy?: boolean; queueLength?: number; wasBusy?: boolean }): boolean => {
   return shouldAutoDrain({
-    isBusy: false,
+    isBusy: input?.isBusy ?? false,
     parked: false,
-    queueLength: Object.values($queuedPromptsBySession.get()).reduce((sum, q) => sum + q.length, 0),
+    queueLength: input?.queueLength ?? Object.values($queuedPromptsBySession.get()).reduce((sum, q) => sum + q.length, 0),
   })
 }
 
