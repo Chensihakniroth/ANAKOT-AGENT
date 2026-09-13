@@ -40,7 +40,8 @@ export const $transcriptTailBySessionId = atom<Record<string, TranscriptTailStat
 const TRANSCRIPT_TAIL_LIMIT = 256
 let transcriptTailOrder: string[] = []
 
-type TailPage = Pick<SessionMessagesResponse, 'messages' | 'pagination'>
+// Anakot's SessionMessagesResponse has no pagination field yet — cast for compat
+type TailPage = Pick<SessionMessagesResponse, 'messages'> & { pagination?: { limit: number; offset: number } }
 
 function normalizedScope(profile?: TranscriptProfileScope): { connectionId: string; profile: string } | null {
   if (typeof profile === 'string') {
