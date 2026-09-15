@@ -1,6 +1,13 @@
 import { atom } from 'nanostores'
 // Quick entry — ported from Hermes
-export interface QuickEntryAction { id: string; label: string; run: () => void }
+export interface QuickEntryAction {
+  id: string
+  label: string
+  run: () => void
+  category?: string
+  icon?: string
+  shortcut?: string
+}
 
 export const $quickEntryActions = atom<QuickEntryAction[]>([
   { id: 'new-session', label: 'New Session', run: () => {} },
