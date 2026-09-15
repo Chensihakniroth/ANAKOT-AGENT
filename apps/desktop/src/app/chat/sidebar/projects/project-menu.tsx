@@ -316,7 +316,7 @@ export function ProjectContextMenu({
             <Codicon name="symbol-color" size="0.875rem" />
             <span>{p.menuAppearance}</span>
           </kit.SubTrigger>
-          <kit.SubContent className="w-auto p-2">
+          <kit.SubContent className="w-56 overflow-visible p-2">
             <ProjectAppearancePicker
               color={project.color ?? null}
               icon={project.icon ?? null}
