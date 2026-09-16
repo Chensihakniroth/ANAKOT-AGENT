@@ -27,6 +27,19 @@ export interface GitBridge {
   branchList: (repoPath: string) => Promise<AnakotGitBranch[]>
   baseBranchList: (repoPath: string) => Promise<AnakotGitBaseBranch[]>
   scanRepos: (roots: string[], options?: { enabled?: boolean; maxDepth?: number; excludePaths?: string[] }) => Promise<AnakotDiscoveredRepo[]>
+  review: {
+    prList: (repoPath: string, branches?: string[], numbers?: number[]) => Promise<AnakotPullRequest[]>
+  }
+}
+
+export interface AnakotPullRequest {
+  number: number
+  title: string
+  state: 'open' | 'closed' | 'merged'
+  branch: string
+  draft: boolean
+  url: string
+  baseRef: string
 }
 
 function bridgeError(res: { error?: string } | undefined | null, fallback: string): Error {
@@ -118,12 +131,29 @@ export function desktopGit(): GitBridge | undefined {
 
     scanRepos: async (roots, options) => {
       const res = await bridge.gitScanRepos?.(roots, options)
-
       if (!res?.ok || !Array.isArray(res.repos)) {
         return []
       }
 
       return res.repos
+    },
+
+    review: {
+      prList: async (repoPath, branches, numbers) => {
+        const res = await bridge.gitPrList?.(repoPath, branches, numbers)
+        if (!res?.ok || !Array.isArray(res.prs)) {
+          return []
+        }
+        return res.prs.map(pr => ({
+          number: pr.number,
+          title: pr.title,
+          state: pr.state.toLowerCase() as 'open' | 'closed' | 'merged',
+          branch: pr.branch,
+          draft: Boolean(pr.draft),
+          url: pr.url,
+          baseRef: pr.baseRef
+        }))
+      }
     }
   }
 }

@@ -30,6 +30,14 @@ export function moveSessionPickerIndex(delta: number, max: number) {
   }
 }
 
+export function toggleSessionPicker() {
+  if ($sessionPickerOpen.get()) {
+    closeSessionPicker()
+  } else {
+    openSessionPicker()
+  }
+}
+
 export function getSessionPickerState() {
   return {
     open: $sessionPickerOpen.get(),

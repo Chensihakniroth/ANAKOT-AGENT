@@ -84,6 +84,7 @@ export const KEYBIND_ACTIONS: readonly KeybindActionMeta[] = [
   // ⌘\ — the backslash reads like a mirror line flipping the layout.
   { id: 'view.flipPanes', category: 'view', defaults: ['mod+\\\\'] },
   { id: 'appearance.toggleMode', category: 'view', defaults: ['shift+x'] },
+  { id: 'view.toggleFloatingHud', category: 'view', defaults: ['mod+shift+h'] },
   { id: 'keybinds.openPanel', category: 'view', defaults: ['mod+/'] },
 
   // ── Editor ────────────────────────────────────────────────────────────────

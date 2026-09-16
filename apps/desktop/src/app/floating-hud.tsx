@@ -6,14 +6,12 @@ import { displayModelName } from '@/lib/model-status-label'
 import { useNavigate } from 'react-router-dom'
 import {
   $floatingHudState,
-  $floatingHudVisible,
   hideFloatingHud,
   pinFloatingHud,
 } from '@/store/floating-hud'
 
 export function FloatingHud() {
-  const visible = useStore($floatingHudVisible)
-  const { pinned } = useStore($floatingHudState)
+  const { visible: visible, pinned } = useStore($floatingHudState)
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
   const navigate = useNavigate()
@@ -22,7 +20,7 @@ export function FloatingHud() {
 
   return (
     <div
-      className="fixed bottom-10 right-4 z-50 flex w-52 flex-col gap-1 rounded-lg border border-border bg-(--chrome-panel-bg) p-2 shadow-xl [--hud-row-h:1.75rem]"
+      className="fixed bottom-10 right-4 z-50 flex w-52 flex-col gap-1 rounded-lg border border-border bg-(--dt-background) p-2 shadow-xl [--hud-row-h:1.75rem]"
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
       {/* Header */}
@@ -55,14 +53,15 @@ export function FloatingHud() {
       {/* Model */}
       <button
         onClick={() => navigate('/settings?tab=models')}
-        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover)"
+        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] transition-colors hover:bg-(--chrome-action-hover)"
+        style={{ color: 'var(--ui-base)' }}
       >
-        <Codicon name="symbol-method" size="0.75rem" className="shrink-0 text-(--ui-text-tertiary)" />
+        <Codicon name="symbol-method" size="0.75rem" className="shrink-0 text-(--ui-text-secondary)" />
         <span className="truncate">
           {currentModel ? displayModelName(currentModel) : 'No model'}
         </span>
         {currentProvider && (
-          <span className="ml-auto shrink-0 text-[0.6rem] text-(--ui-text-tertiary)">
+          <span className="ml-auto shrink-0 text-[0.6rem] font-medium text-(--ui-text-secondary)">
             {currentProvider}
           </span>
         )}
@@ -74,9 +73,10 @@ export function FloatingHud() {
           navigate('/chat')
           if (!pinned) hideFloatingHud()
         }}
-        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover)"
+        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] transition-colors hover:bg-(--chrome-action-hover)"
+        style={{ color: 'var(--ui-base)' }}
       >
-        <Codicon name="add" size="0.75rem" className="shrink-0 text-(--ui-text-tertiary)" />
+        <Codicon name="add" size="0.75rem" className="shrink-0 text-(--ui-text-secondary)" />
         New Session
       </button>
 
@@ -86,9 +86,10 @@ export function FloatingHud() {
           navigate('/settings')
           if (!pinned) hideFloatingHud()
         }}
-        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover)"
+        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] transition-colors hover:bg-(--chrome-action-hover)"
+        style={{ color: 'var(--ui-base)' }}
       >
-        <Codicon name="gear" size="0.75rem" className="shrink-0 text-(--ui-text-tertiary)" />
+        <Codicon name="gear" size="0.75rem" className="shrink-0 text-(--ui-text-secondary)" />
         Settings
       </button>
 
@@ -98,9 +99,10 @@ export function FloatingHud() {
           navigate('/command-center')
           if (!pinned) hideFloatingHud()
         }}
-        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover)"
+        className="flex h-(--hud-row-h) items-center gap-2 rounded px-2 text-[0.6875rem] transition-colors hover:bg-(--chrome-action-hover)"
+        style={{ color: 'var(--ui-base)' }}
       >
-        <Codicon name="output" size="0.75rem" className="shrink-0 text-(--ui-text-tertiary)" />
+        <Codicon name="output" size="0.75rem" className="shrink-0 text-(--ui-text-secondary)" />
         Command Center
       </button>
     </div>

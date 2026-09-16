@@ -99,7 +99,7 @@ export function SessionPickerOverlay() {
       onClick={closeSessionPicker}
     >
       <div
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-(--chrome-panel-bg) shadow-2xl"
+        className="flex w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-(--dt-background) shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Search input */}

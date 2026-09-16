@@ -105,10 +105,11 @@ contextBridge.exposeInMainWorld('anakotDesktop', {
   gitBranchList: repoPath => ipcRenderer.invoke('anakot:git:branchList', repoPath),
   gitBaseBranchList: repoPath => ipcRenderer.invoke('anakot:git:baseBranchList', repoPath),
   gitScanRepos: (roots, options) => ipcRenderer.invoke('anakot:git:scanRepos', roots, options),
-  onGitChanged: callback => {
-    const listener = (_event, data) => callback(data)
-    ipcRenderer.on('anakot:git:changed', listener)
-    return () => ipcRenderer.removeListener('anakot:git:changed', listener)
+  gitPrList: (repoPath, branches, numbers) => ipcRenderer.invoke('anakot:git:pr-list', repoPath, branches, numbers),
+  onGitChanged: (listener) => {
+    const fn = (_event, data) => listener(data)
+    ipcRenderer.on('anakot:git:changed', fn)
+    return () => ipcRenderer.removeListener('anakot:git:changed', fn)
   },
   onFileChanged: callback => {
     const listener = (_event, data) => callback(data)

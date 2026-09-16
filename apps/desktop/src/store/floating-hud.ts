@@ -12,21 +12,18 @@ export const $floatingHudState = atom<FloatingHudState>({
   sessionId: null,
   pinned: false,
 })
-export const $floatingHudVisible = atom(false)
 
 export function toggleFloatingHud() {
-  $floatingHudVisible.set(!$floatingHudVisible.get())
+  const state = $floatingHudState.get()
+  $floatingHudState.set({ ...state, visible: !state.visible })
 }
 
 export function showFloatingHud(sessionId?: string) {
-  $floatingHudVisible.set(true)
-  if (sessionId) {
-    $floatingHudState.set({ visible: true, sessionId, pinned: false })
-  }
+  $floatingHudState.set({ visible: true, sessionId: sessionId ?? null, pinned: false })
 }
 
 export function hideFloatingHud() {
-  $floatingHudVisible.set(false)
+  $floatingHudState.set({ ...$floatingHudState.get(), visible: false })
 }
 
 export function pinFloatingHud() {

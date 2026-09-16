@@ -7,12 +7,14 @@ import {
   $managedUpdates,
   $desktopVersion,
   $updateChecking,
+  $updateOverlayOpen,
   checkForUpdates,
   installUpdate,
   setUpdateOverlayOpen,
 } from '@/store/updates'
 
 export function UpdatesOverlay() {
+  const open = useStore($updateOverlayOpen)
   const updates = useStore($managedUpdates)
   const version = useStore($desktopVersion)
   const checking = useStore($updateChecking)
@@ -36,6 +38,9 @@ export function UpdatesOverlay() {
     return () => window.removeEventListener('keydown', handler)
   }, [close])
 
+  // All hooks above — safe to early-return now
+  if (!open) return null
+
   const handleCheck = async () => {
     setLastAction('Checking...')
     await checkForUpdates()
@@ -51,7 +56,7 @@ export function UpdatesOverlay() {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" onClick={close}>
       <div
-        className="flex max-h-[80vh] w-full max-w-lg flex-col gap-4 overflow-hidden rounded-xl border border-border bg-(--chrome-panel-bg) p-5 shadow-2xl"
+        className="flex max-h-[80vh] w-full max-w-lg flex-col gap-4 overflow-hidden rounded-xl border border-border bg-(--dt-background) p-5 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

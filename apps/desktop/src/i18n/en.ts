@@ -198,6 +198,7 @@ export const en: Translations = {
       'view.flipPanes': 'Swap sidebar sides',
       'editor.closeTab': 'Close active editor tab',
       'appearance.toggleMode': 'Toggle light / dark',
+      'view.toggleFloatingHud': 'Toggle floating quick actions',
       'profile.default': 'Switch to default profile',
       'profile.switch.1': 'Switch to profile 1',
       'profile.switch.2': 'Switch to profile 2',

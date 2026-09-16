@@ -172,6 +172,23 @@ declare global {
         repos: Array<{ root: string; label: string }>
         error?: string
       }>
+      gitPrList?: (
+        repoPath: string,
+        branches?: string[],
+        numbers?: number[]
+      ) => Promise<{
+        ok: boolean
+        prs: Array<{
+          number: number
+          title: string
+          state: string
+          branch: string
+          draft: boolean
+          url: string
+          baseRef: string
+        }>
+        error?: string
+      }>
       onGitChanged?: (callback: (data: { root: string }) => void) => () => void
       onFileChanged?: (callback: (data: { path: string; root: string }) => void) => () => void
       terminal: {

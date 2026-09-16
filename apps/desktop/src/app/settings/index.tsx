@@ -47,7 +47,6 @@ import { searchStore, setSearchQuery, setActiveSection } from './search-store'
 const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
   'providers',
-  'gateway',
   'keybinds',
   'keys',
   'mcp',
@@ -247,12 +246,6 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             </div>
           )}
           <OverlayNavItem
-            active={activeView === 'gateway'}
-            icon={Globe}
-            label={t.settings.nav.gateway}
-            onClick={() => setActiveView('gateway')}
-          />
-          <OverlayNavItem
             active={activeView === 'keybinds'}
             icon={KeyRound}
             label={t.settings.nav.keybinds ?? 'Keyboard shortcuts'}
@@ -418,8 +411,6 @@ export function SettingsView({ gateway, onClose, onConfigSaved, onMainModelChang
             <TerminalSettings />
           ) : activeView === 'about' ? (
             <AboutSettings />
-          ) : activeView === 'gateway' ? (
-            <GatewaySettings />
           ) : activeView.startsWith('config:') ? (
             <ConfigSettings
               activeSectionId={activeView.slice('config:'.length)}

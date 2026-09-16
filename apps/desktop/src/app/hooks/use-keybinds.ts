@@ -5,8 +5,9 @@ import { setRightSidebarTab } from '@/app/right-sidebar/store'
 import { PROFILE_SLOT_COUNT } from '@/lib/keybinds/actions'
 import { comboAllowedInInput, comboFromEvent, isEditableTarget } from '@/lib/keybinds/combo'
 import { toggleCommandPalette } from '@/store/command-palette'
-import { toggleSessionPicker } from '@/app/session-picker/store'
+import { toggleSessionPicker } from '@/store/session-picker'
 import { $capture, $comboIndex, endCapture, setBinding, toggleKeybindPanel } from '@/store/keybinds'
+import { toggleFloatingHud } from '@/store/floating-hud'
 import {
   requestSessionSearchFocus,
   setFileBrowserOpen,
@@ -126,6 +127,7 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     },
 
     'appearance.toggleMode': () => setMode(resolvedMode === 'dark' ? 'light' : 'dark'),
+    'view.toggleFloatingHud': toggleFloatingHud,
 
     'profile.default': switchToDefaultProfile,
     ...profileSwitchHandlers,

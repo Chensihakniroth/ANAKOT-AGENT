@@ -113,6 +113,9 @@ import type { StatusbarItem } from './shell/statusbar-controls'
 import type { TitlebarTool } from './shell/titlebar-controls'
 import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
+import { FloatingHud } from './floating-hud'
+import { SessionPickerOverlay } from './session-picker-overlay'
+import { SendDiagnosticsHost } from '@/components/send-diagnostics-dialog'
 import { OverlayModal } from './overlays/overlay-modal'
 import { SessionImportDialog } from './session-import'
 
@@ -691,6 +694,9 @@ export function DesktopController() {
       <ModelPickerOverlay gateway={gatewayRef.current || undefined} onSelect={selectModel} />
       <ModelVisibilityOverlay gateway={gatewayRef.current || undefined} onOpenProviders={openProviderSettings} />
       <UpdatesOverlay />
+      <FloatingHud />
+      <SessionPickerOverlay />
+      <SendDiagnosticsHost />
       <GatewayConnectingOverlay />
       <BootFailureOverlay />
       <CommandPalette />

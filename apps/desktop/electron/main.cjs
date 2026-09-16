@@ -1510,6 +1510,52 @@ function runGit(args, options = {}) {
   })
 }
 
+// ── GitHub CLI (gh) helper ──────────────────────────────────────────────────
+// Finds the `gh` binary on the system. Caches the result.
+let _ghBinaryCache = null
+
+function resolveGhBinary() {
+  if (_ghBinaryCache) return _ghBinaryCache
+
+  const candidates = []
+  if (process.env['PATH']) {
+    // gh is usually on PATH if installed
+    _ghBinaryCache = findOnPath('gh') || 'gh'
+    return _ghBinaryCache
+  }
+  _ghBinaryCache = 'gh'
+  return _ghBinaryCache
+}
+
+// Runs a `gh` CLI command. Returns { ok, code, stdout, stderr }.
+// Never rejects — failures return { ok: false, ... }.
+function runGh(args, options = {}) {
+  return new Promise(resolve => {
+    let child
+    try {
+      child = spawn(resolveGhBinary(), args, {
+        cwd: options.cwd,
+        env: { ...process.env, ...(options.env || {}), GIT_TERMINAL_PROMPT: '0' },
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+    } catch {
+      resolve({ ok: false, code: -1, stdout: '', stderr: 'gh not found' })
+      return
+    }
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', chunk => {
+      stdout += chunk.toString()
+    })
+    child.stderr?.on('data', chunk => {
+      stderr += chunk.toString()
+    })
+    child.once('error', () => resolve({ ok: false, code: -1, stdout, stderr }))
+    child.once('exit', code => resolve({ ok: code === 0, code, stdout, stderr }))
+  })
+}
+
 const firstLine = text => (text || '').split('\n').find(Boolean) || ''
 
 function emitUpdateProgress(payload) {
@@ -7310,6 +7356,56 @@ ipcMain.handle('anakot:git:scanRepos', async (_event, roots, options) => {
   }
 })
 
+// ── Pull Request listing (via gh CLI) ──────────────────────────────────────
+// Lists PRs for given branches or PR numbers in a repo. Uses `gh pr list --json`
+// which requires `gh` CLI to be installed and authenticated.
+ipcMain.handle('anakot:git:pr-list', async (_event, repoPath, branches, numbers) => {
+  try {
+    const validated = await validateGitCwd(repoPath)
+    if ('error' in validated) return { ok: false, error: validated.error, prs: [] }
+
+    const args = ['pr', 'list', '--json', 'number,title,state,headRefName,isDraft,url,baseRefName']
+
+    // If specific branches provided, filter by head ref
+    if (branches && branches.length > 0) {
+      for (const branch of branches) {
+        args.push('--head', branch)
+      }
+    }
+
+    // If specific PR numbers provided
+    if (numbers && numbers.length > 0) {
+      for (const num of numbers) {
+        args.push('--search', `number:${num}`)
+      }
+    }
+
+    const result = await runGh(args, { cwd: validated.root })
+    if (!result.ok) {
+      // gh not installed or not authenticated — return empty rather than throwing
+      return { ok: true, prs: [] }
+    }
+
+    const stdout = result.stdout || '[]'
+    const prs = JSON.parse(stdout || '[]')
+
+    return {
+      ok: true,
+      prs: prs.map(pr => ({
+        number: pr.number,
+        title: pr.title,
+        state: pr.state.toLowerCase(),
+        branch: pr.headRefName,
+        draft: pr.isDraft,
+        url: pr.url,
+        baseRef: pr.baseRefName
+      }))
+    }
+  } catch {
+    return { ok: true, prs: [] }
+  }
+})
+
 // ── Git diff stats (churn data) ────────────────────────────────────────────
 
 ipcMain.handle('anakot:git:diff-stats', async (_event, { cwd }) => {
@@ -8578,7 +8674,7 @@ app.whenReady().then(() => {
   })
 
   // ── Event dedupe ──────────────────────────────────────────────────────
-  const eventDedupeCache = new Map<string, number>()
+  const eventDedupeCache = new Map()
   ipcMain.handle('anakot:event:dedupe', async (_event, eventId, ttlMs = 1000) => {
     const now = Date.now()
     const last = eventDedupeCache.get(eventId) || 0

@@ -23,6 +23,8 @@ import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $toolInlineDiffs } from '@/store/tool-diffs'
 import { $toolDisclosureOpen, $toolViewMode, setToolDisclosureOpen } from '@/store/tool-view'
+import { $displayTimestamps } from '@/store/display-timestamps'
+import { $timestampFormat, formatTimestamp } from '@/store/timestamp-format'
 
 import { PendingToolApproval } from './tool-approval'
 import {
@@ -278,12 +280,23 @@ function ToolEntry({ part }: ToolEntryProps) {
   )
 
   const copyAction = useMemo(() => toolCopyPayload(part, view), [part, view])
+  const showTimestamps = useStore($displayTimestamps)
+  const timestampFormat = useStore($timestampFormat)
+  const createdAt = useAuiState(s => s.message.createdAt)
+  const timestampLabel = showTimestamps && createdAt
+    ? formatTimestamp(createdAt instanceof Date ? createdAt.getTime() : Number(createdAt), timestampFormat)
+    : null
 
   const trailing =
     isPending && !embedded ? (
       <ActivityTimerText className={TOOL_HEADER_DURATION_CLASS} seconds={elapsed} />
-    ) : !isPending && copyAction.text ? (
-      <CopyButton appearance="tool-row" label={copyAction.label} stopPropagation text={copyAction.text} />
+    ) : !isPending && (copyAction.text || timestampLabel) ? (
+      <span className="flex items-center gap-1.5">
+        {timestampLabel && (
+          <span className="text-[0.625rem] tabular-nums text-(--conversation-scaffold-meta)">{timestampLabel}</span>
+        )}
+        {copyAction.text && <CopyButton appearance="tool-row" label={copyAction.label} stopPropagation text={copyAction.text} />}
+      </span>
     ) : undefined
 
   return (

@@ -534,7 +534,9 @@ export function ChatSidebar({
   ])
 
   const showSessionSkeletons = sessionsLoading && sortedSessions.length === 0
-  const showSessionSections = showSessionSkeletons || sortedSessions.length > 0
+  // Only render session sections once real data arrives — avoids the skeleton
+  // bars (styled like real rows) flashing for a second before rows take over.
+  const showSessionSections = sortedSessions.length > 0
   // Pagination is scope-aware. In "All profiles" mode it tracks the global
   // unified set. When scoped to one profile it must compare that profile's own
   // loaded rows against that profile's total — otherwise a huge default profile
