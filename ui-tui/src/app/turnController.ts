@@ -109,6 +109,8 @@ const clear = (t: Timer): null => {
   return null
 }
 
+const isThinkingStatusVerb = (text: string) => /^\([^)]+\)\s+\w+[\w\s]*\.\.\.$/.test(text.trim())
+
 class TurnController {
   bufRef = ''
   interrupted = false
@@ -702,12 +704,11 @@ class TurnController {
       this.flushStreamingSegment()
     }
 
-    // Strip the kaomoji spinner verb sent by the Python gateway as the first
-    // thinking delta (e.g. "(◉) initializing protocols..."). It is a status
-    // indicator, not actual reasoning content.
-    const isFirstDelta = !this.reasoningText.trim()
-    if (isFirstDelta) {
-      // The first delta is always the kaomoji verb — show spinner instead
+    // The gateway normally filters status verbs before this method, but keep
+    // the guard here as a defensive boundary for direct callers. Do not use
+    // "first delta" as the signal: the first chunk can already be real
+    // reasoning text, and dropping it makes the thinking panel disappear.
+    if (isThinkingStatusVerb(text)) {
       patchTurnState({ reasoning: '', thinkingSpinner: true })
       this.pulseReasoningStreaming()
       return

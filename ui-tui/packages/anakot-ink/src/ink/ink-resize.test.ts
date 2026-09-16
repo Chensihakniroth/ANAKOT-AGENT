@@ -47,4 +47,78 @@ describe('Ink resize healing', () => {
 
     ink.unmount()
   })
+
+  it('rebuilds every frame buffer at the new fullscreen dimensions', async () => {
+    const stdout = new FakeTty()
+    const stdin = new FakeTty()
+    const stderr = new FakeTty()
+    const ink = new Ink({
+      exitOnCtrlC: false,
+      patchConsole: false,
+      stderr: stderr as unknown as NodeJS.WriteStream,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as unknown as NodeJS.WriteStream
+    })
+
+    ink.setAltScreenActive(true)
+    ink.render(React.createElement(Text, null, 'hello'))
+    ink.onRender()
+    stdout.chunks = []
+
+    stdout.columns = 80
+    stdout.rows = 30
+    stdout.emit('resize')
+    await tick()
+
+    const state = ink as unknown as {
+      frontFrame: { screen: { height: number; width: number } }
+      terminalColumns: number
+      terminalRows: number
+    }
+
+    expect(state.terminalColumns).toBe(80)
+    expect(state.terminalRows).toBe(30)
+    expect(state.frontFrame.screen.width).toBe(80)
+    expect(state.frontFrame.screen.height).toBe(30)
+    expect(stdout.chunks.join('')).toContain(ERASE_SCREEN + CURSOR_HOME)
+
+    ink.unmount()
+  })
+
+  it('recovers when the PTY reports zero dimensions during maximize', async () => {
+    const stdout = new FakeTty()
+    const stdin = new FakeTty()
+    const stderr = new FakeTty()
+    const ink = new Ink({
+      exitOnCtrlC: false,
+      patchConsole: false,
+      stderr: stderr as unknown as NodeJS.WriteStream,
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      stdout: stdout as unknown as NodeJS.WriteStream
+    })
+
+    ink.setAltScreenActive(true)
+    ink.render(React.createElement(Text, null, 'hello'))
+    ink.onRender()
+
+    stdout.columns = 0
+    stdout.rows = 0
+    stdout.emit('resize')
+    stdout.columns = 120
+    stdout.rows = 40
+    await new Promise(resolve => setTimeout(resolve, 190))
+
+    const state = ink as unknown as {
+      frontFrame: { screen: { height: number; width: number } }
+      terminalColumns: number
+      terminalRows: number
+    }
+
+    expect(state.terminalColumns).toBe(120)
+    expect(state.terminalRows).toBe(40)
+    expect(state.frontFrame.screen.width).toBe(120)
+    expect(state.frontFrame.screen.height).toBe(40)
+
+    ink.unmount()
+  })
 })

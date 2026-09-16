@@ -1,4 +1,4 @@
-import { type ScrollBoxHandle, useApp, useHasSelection, useSelection, useStdout, useTerminalTitle } from '@anakot/ink'
+import { type ScrollBoxHandle, useApp, useHasSelection, useSelection, useStdout, useTerminalSize, useTerminalTitle } from '@anakot/ink'
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -139,24 +139,22 @@ export async function startPromptLiveSession({
 export function useMainApp(gw: GatewayClient) {
   const { exit } = useApp()
   const { stdout } = useStdout()
-  const [termCols, setTermCols] = useState(stdout?.columns ?? 80)
+  // Ink owns the authoritative dimensions. Reading stdout directly during a
+  // Windows maximize can observe the PTY halfway through its resize, while
+  // the renderer has already committed the new layout.
+  const terminalSize = useTerminalSize()
+  const termCols = terminalSize?.columns ?? stdout?.columns ?? 80
 
   useEffect(() => {
     if (!stdout) {
       return
     }
 
-    const sync = () => setTermCols(stdout.columns ?? 80)
-
-    stdout.on('resize', sync)
-
     if (stdout.isTTY) {
       stdout.write(BRACKET_PASTE_ON)
     }
 
     return () => {
-      stdout.off('resize', sync)
-
       if (stdout.isTTY) {
         stdout.write(BRACKET_PASTE_OFF)
       }
@@ -560,10 +558,14 @@ export function useMainApp(gw: GatewayClient) {
 
   useTerminalTitle(model ? `${marker} ${model}${tabCwd ? ` · ${shortCwd(tabCwd, 24)}` : ''}` : 'Anakot')
 
+  const previousTermColsRef = useRef(termCols)
+
   useEffect(() => {
-    if (!ui.sid || !stdout) {
+    if (!ui.sid || !stdout || previousTermColsRef.current === termCols) {
       return
     }
+
+    previousTermColsRef.current = termCols
 
     let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -572,29 +574,23 @@ export function useMainApp(gw: GatewayClient) {
     // cols so every column change forces a fresh measurement pass before
     // this timer fires. Re-check isSticky() inside the timeout — a manual
     // scroll during the 100ms window otherwise yanks the user back to tail.
-    const onResize = () => {
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        timer = undefined
+    timer = setTimeout(() => {
+      timer = undefined
 
-        if (scrollRef.current?.isSticky()) {
-          scrollRef.current.scrollToBottom()
-        }
+      if (scrollRef.current?.isSticky()) {
+        scrollRef.current.scrollToBottom()
+      }
 
-        void rpc<TerminalResizeResponse>('terminal.resize', {
-          cols: effectiveChatCols(stdout.columns ?? 80, isSidebarVisible(getUiState().sidebar, stdout.columns ?? 80)),
-          session_id: ui.sid
-        })
-      }, 100)
-    }
-
-    stdout.on('resize', onResize)
+      void rpc<TerminalResizeResponse>('terminal.resize', {
+        cols: effectiveChatCols(termCols, isSidebarVisible(getUiState().sidebar, termCols)),
+        session_id: ui.sid
+      })
+    }, 100)
 
     return () => {
       clearTimeout(timer)
-      stdout.off('resize', onResize)
     }
-  }, [rpc, stdout, ui.sid])
+  }, [rpc, stdout, termCols, ui.sid])
 
   const answerClarify = useCallback(
     (answer: string) => {

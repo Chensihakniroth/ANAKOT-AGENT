@@ -1,4 +1,4 @@
-import { Box, Text, useStdout } from '@anakot/ink'
+import { Box, Text, useTerminalSize } from '@anakot/ink'
 import { useEffect, useState } from 'react'
 import unicodeSpinners from 'unicode-animations'
 
@@ -64,7 +64,7 @@ function CompactBanner({ cols, t }: { cols: number; t: Theme }) {
 }
 
 export function Banner({ maxWidth, t }: { maxWidth?: number; t: Theme }) {
-  const term = useStdout().stdout?.columns ?? 80
+  const term = useTerminalSize()?.columns ?? 80
   const cols = Math.max(1, Math.min(term, maxWidth ?? term))
 
   if (cols < HIDE_BELOW) {
@@ -139,7 +139,7 @@ const SKILLS_MAX = 8
 const TOOLSETS_MAX = 8
 
 export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
-  const term = useStdout().stdout?.columns ?? 100
+  const term = useTerminalSize()?.columns ?? 100
   const cols = Math.max(20, Math.min(term, maxWidth ?? term))
   const w = Math.max(20, cols - 12)
   const lineBudget = Math.max(12, w - 2)

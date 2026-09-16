@@ -136,6 +136,21 @@ const DEEP_ERASE_THEN_HOME_PATCH = Object.freeze({
   content: ERASE_SCREEN + ERASE_SCROLLBACK + CURSOR_HOME
 })
 
+type TerminalDimensions = {
+  columns: number
+  rows: number
+}
+
+function readTerminalDimensions(stdout: NodeJS.WriteStream, fallback: TerminalDimensions): TerminalDimensions {
+  const columns = Number(stdout.columns)
+  const rows = Number(stdout.rows)
+
+  return {
+    columns: Number.isInteger(columns) && columns > 0 ? columns : fallback.columns,
+    rows: Number.isInteger(rows) && rows > 0 ? rows : fallback.rows
+  }
+}
+
 // Cached per-Ink-instance, invalidated on resize. frame.cursor.y for
 // alt-screen is always terminalRows - 1 (renderer.ts).
 function makeAltScreenParkPatch(terminalRows: number) {
@@ -332,8 +347,9 @@ export default class Ink {
       stdout: options.stdout,
       stderr: options.stderr
     }
-    this.terminalColumns = options.stdout.columns || 80
-    this.terminalRows = options.stdout.rows || 24
+    const initialDimensions = readTerminalDimensions(options.stdout, { columns: 80, rows: 24 })
+    this.terminalColumns = initialDimensions.columns
+    this.terminalRows = initialDimensions.rows
     this.altScreenParkPatch = makeAltScreenParkPatch(this.terminalRows)
     this.stylePool = new StylePool()
     this.charPool = new CharPool()
@@ -486,8 +502,14 @@ export default class Ink {
   // one microtask per burst: vscode fires many SIGWINCHes per panel
   // drag, each ~80ms uncoalesced = event loop visibly locks up.
   private handleResize = () => {
-    const cols = this.options.stdout.columns || 80
-    const rows = this.options.stdout.rows || 24
+    // Windows Terminal can emit the resize event before the PTY has published
+    // the final size (occasionally exposing 0 for one of the dimensions).
+    // Keep the last valid size until the terminal settles instead of snapping
+    // the whole TUI back to the 80×24 fallback for one frame.
+    const { columns: cols, rows } = readTerminalDimensions(this.options.stdout, {
+      columns: this.terminalColumns,
+      rows: this.terminalRows
+    })
     const dimsChanged = cols !== this.terminalColumns || rows !== this.terminalRows
 
     // Terminals often emit 2+ resize events for one user action
@@ -587,6 +609,21 @@ export default class Ink {
 
       if (!this.canAltScreenRepaint()) {
         return
+      }
+
+      // A maximize can deliver the resize notification before the PTY's
+      // columns/rows properties have caught up. Re-read at the end of the
+      // burst so the React layout and both frame buffers converge on the same
+      // dimensions even when no second resize event is emitted.
+      const settled = readTerminalDimensions(this.options.stdout, {
+        columns: this.terminalColumns,
+        rows: this.terminalRows
+      })
+
+      if (settled.columns !== this.terminalColumns || settled.rows !== this.terminalRows) {
+        this.terminalColumns = settled.columns
+        this.terminalRows = settled.rows
+        this.altScreenParkPatch = makeAltScreenParkPatch(this.terminalRows)
       }
 
       this.resetFramesForAltScreen()
@@ -709,8 +746,11 @@ export default class Ink {
     // an extra React re-render cycle.
     flushInteractionTime()
     const renderStart = performance.now()
-    const terminalWidth = this.options.stdout.columns || 80
-    const terminalRows = this.options.stdout.rows || 24
+    // Use the same dimensions that drove Yoga and TerminalSizeContext. Reading
+    // stdout again here can observe a half-applied Windows resize and produce
+    // a frame whose layout, viewport, and diff buffer disagree.
+    const terminalWidth = this.terminalColumns
+    const terminalRows = this.terminalRows
 
     const frame = this.renderer({
       frontFrame: this.frontFrame,
