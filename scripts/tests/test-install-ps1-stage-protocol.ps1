@@ -75,17 +75,33 @@ if ($manifest) {
         -Label "manifest.protocol_version is an integer"
     Assert-True ($manifest.stages.Count -gt 0) -Label "manifest.stages is non-empty"
 
-    # Every stage has the four required fields
+    # Every stage has the five required fields
     $allValid = $true
     foreach ($stage in $manifest.stages) {
-        foreach ($field in @("name", "title", "category", "needs_user_input")) {
+        foreach ($field in @("name", "title", "category", "needs_user_input", "estimated_duration_ms")) {
             if (-not ($stage.PSObject.Properties.Name -contains $field)) {
                 Write-Host "  stage missing field '$field': $($stage | ConvertTo-Json -Compress)" -ForegroundColor Red
                 $allValid = $false
             }
         }
     }
-    Assert-True $allValid -Label "every stage has name/title/category/needs_user_input"
+    Assert-True $allValid -Label "every stage has name/title/category/needs_user_input/estimated_duration_ms"
+
+    # estimated_duration_ms is a positive integer for every stage
+    $allHaveEstimate = $true
+    foreach ($stage in $manifest.stages) {
+        $est = $stage.estimated_duration_ms
+        if ($null -eq $est -or -not ($est -is [int] -or $est -is [long]) -or $est -le 0) {
+            Write-Host "  stage '$($stage.name)' has bad estimated_duration_ms: $est" -ForegroundColor Red
+            $allHaveEstimate = $false
+        }
+    }
+    Assert-True $allHaveEstimate -Label "every stage has a positive integer estimated_duration_ms"
+
+    # Summing prereq + install categories gives a sensible lower bound (>60s)
+    $installTotalMs = ($manifest.stages | Where-Object { $_.category -in @("prereqs","install") } |
+        Measure-Object -Property estimated_duration_ms -Sum).Sum
+    Assert-True ($installTotalMs -gt 60000) -Label "install-category estimates sum to >60s (got ${installTotalMs}ms)"
 
     # Specific stage names that the GUI driver will rely on
     $names = $manifest.stages | ForEach-Object { $_.name }

@@ -5,22 +5,17 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "WEB_VERSION",
-    "web",
     "ui-tui",
     "ui-tui/packages/*"
   ],
   "scripts": {
     "postinstall": "node scripts/postinstall.cjs",
     "install:root": "npm install --workspaces=false",
-    "install:web": "npm install --workspace web",
     "install:tui": "npm install --workspace ui-tui",
     "install:desktop": "npm install --workspace apps/desktop",
     "audit:root": "npm audit --workspaces=false",
-    "audit:web": "npm audit --workspace web",
     "audit:tui": "npm audit --workspace ui-tui",
     "audit:fix:root": "npm audit fix --workspaces=false",
-    "audit:fix:web": "npm audit fix --workspace web",
     "type-check": "npm run type-check --workspaces --if-present",
     "audit:fix:tui": "npm audit fix --workspace ui-tui",
     "dedupe-shiki": "node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/shiki',{recursive:true,force:true})}catch(e){}\" && node -e \"try{require('fs').rmSync('node_modules/@streamdown/code/node_modules/@shikijs',{recursive:true,force:true})}catch(e){}\""

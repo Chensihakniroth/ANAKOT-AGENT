@@ -20,9 +20,19 @@ powershell -ExecutionPolicy ByPass -NoProfile -Command "iex (irm https://raw.git
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo  Installation failed. Please try running PowerShell directly:
+    echo  Installation failed with exit code %ERRORLEVEL%.
+    echo.
+    echo  Please try running PowerShell directly:
     echo    powershell -ExecutionPolicy ByPass -c "iex (irm https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1)"
     echo.
+    echo  If the error persists, download the script and run it manually:
+    echo    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Chensihakniroth/ANAKOT-AGENT/main/scripts/install.ps1' -OutFile install.ps1
+    echo    .\install.ps1
+    echo.
     pause
-    exit /b 1
+    exit /b %ERRORLEVEL%
 )
+
+echo.
+echo  Installation complete.
+echo.

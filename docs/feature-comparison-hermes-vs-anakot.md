@@ -29,7 +29,7 @@ Anakot is a fork of Hermes Agent. It shares ~90% of the core (agent loop, tools,
 6. **Platform adapters** — missing `a2a`, `buzz`, `raft`, `photon`, `whatsapp_cloud`.
 7. **RPC surface** — no `billing.*`, `learning.*`, `verification.*`, `wake.*`, `usage.bars`, `llm.oneshot`, `system.battery`, `pdf.attach`, `file.attach`, `handoff.*`, `terminal.read.respond`. (`projects.*` and `message.react` are PRESENT — corrected 2026-08-06.)
 
-**Anakot-only (superset):** Web dashboard (181 routes) + full WEB_VERSION web app, NotebookLLM, Discord Rich Presence, multi-user admin/grants, `gquota`, `obsidian_graph_scan` tool, Windows-native installers/bootstrap, Railway/docker-compose.windows, mobile responsive web, `auto-read-aloud`/haptics/mobile shell in desktop, ponytail agent kit, callmemo provider + account/subscription.
+**Anakot-only (superset):** Web dashboard (181 routes), NotebookLLM, Discord Rich Presence, multi-user admin/grants, `gquota`, `obsidian_graph_scan` tool, Windows-native installers/bootstrap, Railway/docker-compose.windows, mobile responsive web, `auto-read-aloud`/haptics/mobile shell in desktop, ponytail agent kit, callmemo provider + account/subscription.
 
 ---
 
@@ -221,7 +221,6 @@ Anakot is a fork of Hermes Agent. It shares ~90% of the core (agent loop, tools,
 | Feature | Where |
 |---|---|
 | **Web dashboard** (FastAPI, **181 routes**) | `anakot_cli/web_server.py` — sessions CRUD/search/export/bulk-delete, config/env, models, providers/OAuth, messaging, telegram onboarding, cron jobs, MCP servers+catalog, pairing, webhooks, credentials pool, memory, ops (doctor/security-audit/backup/import/hooks/checkpoints), skills hub, profiles+soul, tools/toolsets, admin users/grants, analytics, dashboard themes/plugins, audio (transcribe/ElevenLabs/speak), learning graph, `/v1/chat/completions` proxy |
-| **WEB_VERSION** full web app | `WEB_VERSION/` — chat, agents, artifacts, command-center, cron, messaging, notebookllm, plugins, profiles, settings, shell, skills, starmap, i18n, themes — mirrors the desktop UI in the browser, mobile-responsive |
 | **NotebookLLM** | Research notebooks: CRUD, source upload/url/text, context, chat + streaming, chat-history, summarize; desktop `/notebook` route + `anakot:notebook:*` IPC + `/api/notebooks/*` |
 | **Multi-user admin system** | `auth/me` profiles, admin users/grants, `_require_admin` endpoints, disable/enable users, per-user grants |
 | **Discord Rich Presence** | `discord-rpc.cjs` + `discord-rpc-settings.tsx` + `anakot:discord-rpc:*` IPC |
@@ -469,8 +468,6 @@ _See `skills/hermes-feature-port` for the worked porting procedure (pet system a
 | apps/desktop/electron | 153 | 21 | **14%** |
 | ui-tui/src | 279 | 204 | 73% |
 | ui-tui/packages | 153 | 145 | 95% |
-| web/src | 142 | 87 | 61% |
-| WEB_VERSION/src | 0 | 455 | n/a (Anakot-only) |
 | agent | 180 | 123 | 68% |
 | tools | 130 | 100 | 77% |
 | gateway | 89 | 63 | 71% |
@@ -501,7 +498,7 @@ Anakot's desktop is ~39% of Hermes' by file count (and only 14% of the Electron 
 
 ### A.4 Anakot-only files (833) — highlights
 
-`WEB_VERSION/` (455 files — full web app), `anakot_cli/web_dist/` (128 — compiled dashboard), `anakot_cli/dashboard_auth/` (14 — more auth providers than Hermes), `plugins/anakot-achievements/` (10), `docker/s6-rc.d/` (4), `anakot_bootstrap.py`, `anakot_cli/{auth,auth_commands,backup,banner,browser_connect,build_info,bundles,callbacks,callmemo_account,callmemo_subscription,portal_cli,profiles,notebooks,web_server,pty_bridge,skin_engine,discord_rpc,...}.py`, `.github/actions/`, `apps/desktop` extras (mobile/, notebookllm/, GitSourceControl), `skills/ponytail/`, `anakot-already-has-routines.md`
+`anakot_cli/web_dist/` (compiled dashboard), `anakot_cli/dashboard_auth/` (14 — more auth providers than Hermes), `plugins/anakot-achievements/` (10), `docker/s6-rc.d/` (4), `anakot_bootstrap.py`, `anakot_cli/{auth,auth_commands,backup,banner,browser_connect,build_info,bundles,callbacks,callmemo_account,callmemo_subscription,portal_cli,profiles,notebooks,web_server,pty_bridge,skin_engine,discord_rpc,...}.py`, `.github/actions/`, `apps/desktop` extras (mobile/, notebookllm/, GitSourceControl), `skills/ponytail/`, `anakot-already-has-routines.md`
 
 ### A.5 Test coverage
 

@@ -2724,6 +2724,21 @@ function Write-Completion {
 #     "duration_ms": 1234
 #   }
 #
+# Manifest stage entry (each element of the `stages` array from -Manifest):
+#
+#   {
+#     "name": "uv",
+#     "title": "Installing uv package manager",
+#     "category": "prereqs",
+#     "needs_user_input": false,
+#     "estimated_duration_ms": 30000
+#   }
+#
+# `estimated_duration_ms` is a conservative wall-clock estimate for the stage
+# under median network/disk conditions. UIs can sum per-category for a
+# time-remaining estimate. It is NOT a guarantee; fast machines finish early,
+# slow ones exceed it.
+#
 # Exit codes:
 #
 #   0 -- success (stage ran, or stage was deliberately skipped).
@@ -2748,31 +2763,31 @@ function Write-Completion {
 # stages; ``NeedsUserInput`` tells UIs "this stage prompts -- either skip it
 # or arrange to provide answers another way."
 $InstallStages = @(
-    @{ Name = "uv";               Title = "Installing uv package manager";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Uv" }
-    @{ Name = "python";           Title = "Verifying Python $PythonVersion";      Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Python" }
-    @{ Name = "git";              Title = "Installing Git";                       Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Git" }
-    @{ Name = "node";             Title = "Detecting Node.js";                    Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Node" }
-    @{ Name = "system-packages";  Title = "Installing ripgrep and ffmpeg";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-SystemPackages" }
-    @{ Name = "repository";       Title = "Cloning Anakot repository";            Category = "install";      NeedsUserInput = $false; Worker = "Stage-Repository" }
-    @{ Name = "venv";             Title = "Creating Python virtual environment";  Category = "install";      NeedsUserInput = $false; Worker = "Stage-Venv" }
-    @{ Name = "dependencies";     Title = "Installing Python dependencies";       Category = "install";      NeedsUserInput = $false; Worker = "Stage-Dependencies" }
-    @{ Name = "node-deps";        Title = "Installing Node.js dependencies";      Category = "install";      NeedsUserInput = $false; Worker = "Stage-NodeDeps" }
+    @{ Name = "uv";               Title = "Installing uv package manager";        Category = "prereqs";      NeedsUserInput = $false; EstimatedMs = 30000;   Worker = "Stage-Uv" }
+    @{ Name = "python";           Title = "Verifying Python $PythonVersion";      Category = "prereqs";      NeedsUserInput = $false; EstimatedMs = 60000;   Worker = "Stage-Python" }
+    @{ Name = "git";              Title = "Installing Git";                       Category = "prereqs";      NeedsUserInput = $false; EstimatedMs = 90000;   Worker = "Stage-Git" }
+    @{ Name = "node";             Title = "Detecting Node.js";                    Category = "prereqs";      NeedsUserInput = $false; EstimatedMs = 60000;   Worker = "Stage-Node" }
+    @{ Name = "system-packages";  Title = "Installing ripgrep and ffmpeg";        Category = "prereqs";      NeedsUserInput = $false; EstimatedMs = 60000;   Worker = "Stage-SystemPackages" }
+    @{ Name = "repository";       Title = "Cloning Anakot repository";            Category = "install";      NeedsUserInput = $false; EstimatedMs = 30000;   Worker = "Stage-Repository" }
+    @{ Name = "venv";             Title = "Creating Python virtual environment";  Category = "install";      NeedsUserInput = $false; EstimatedMs = 15000;   Worker = "Stage-Venv" }
+    @{ Name = "dependencies";     Title = "Installing Python dependencies";       Category = "install";      NeedsUserInput = $false; EstimatedMs = 180000;  Worker = "Stage-Dependencies" }
+    @{ Name = "node-deps";        Title = "Installing Node.js dependencies";      Category = "install";      NeedsUserInput = $false; EstimatedMs = 120000;  Worker = "Stage-NodeDeps" }
 )
 if ($IncludeDesktop) {
     # Insert AFTER node-deps so workspace npm is already installed when
     # the desktop build runs. Inserted only when explicitly requested
     # (Anakot-Setup.exe), never via the irm|iex CLI one-liner.
-    $InstallStages += @{ Name = "desktop"; Title = "Building desktop app"; Category = "install"; NeedsUserInput = $false; Worker = "Stage-Desktop" }
+    $InstallStages += @{ Name = "desktop"; Title = "Building desktop app"; Category = "install"; NeedsUserInput = $false; EstimatedMs = 300000; Worker = "Stage-Desktop" }
 }
 $InstallStages += @(
-    @{ Name = "path";             Title = "Adding Anakot to PATH";                Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-Path" }
-    @{ Name = "config-templates"; Title = "Writing configuration templates";      Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-ConfigTemplates" }
-    @{ Name = "platform-sdks";    Title = "Installing messaging platform SDKs";   Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-PlatformSdks" }
-    @{ Name = "bootstrap-marker"; Title = "Marking install complete";              Category = "finalize";     NeedsUserInput = $false; Worker = "Stage-BootstrapMarker" }
+    @{ Name = "path";             Title = "Adding Anakot to PATH";                Category = "finalize";     NeedsUserInput = $false; EstimatedMs = 5000;    Worker = "Stage-Path" }
+    @{ Name = "config-templates"; Title = "Writing configuration templates";      Category = "finalize";     NeedsUserInput = $false; EstimatedMs = 5000;    Worker = "Stage-ConfigTemplates" }
+    @{ Name = "platform-sdks";    Title = "Installing messaging platform SDKs";   Category = "finalize";     NeedsUserInput = $false; EstimatedMs = 30000;   Worker = "Stage-PlatformSdks" }
+    @{ Name = "bootstrap-marker"; Title = "Marking install complete";              Category = "finalize";     NeedsUserInput = $false; EstimatedMs = 2000;    Worker = "Stage-BootstrapMarker" }
     # Interactive stages.  In non-interactive mode these become no-ops; the
     # caller (GUI / CI) handles the equivalent UX themselves.
-    @{ Name = "configure";        Title = "Configuring API keys and models";      Category = "post-install"; NeedsUserInput = $true;  Worker = "Stage-Configure" }
-    @{ Name = "gateway";          Title = "Starting messaging gateway";           Category = "post-install"; NeedsUserInput = $true;  Worker = "Stage-Gateway" }
+    @{ Name = "configure";        Title = "Configuring API keys and models";      Category = "post-install"; NeedsUserInput = $true;  EstimatedMs = 60000;   Worker = "Stage-Configure" }
+    @{ Name = "gateway";          Title = "Starting messaging gateway";           Category = "post-install"; NeedsUserInput = $true;  EstimatedMs = 10000;   Worker = "Stage-Gateway" }
 )
 
 # Stage workers -- thin wrappers that delegate to the existing Install-* /
@@ -2992,10 +3007,11 @@ try {
             protocol_version = $InstallStageProtocolVersion
             stages = @($InstallStages | ForEach-Object {
                 @{
-                    name             = $_.Name
-                    title            = $_.Title
-                    category         = $_.Category
-                    needs_user_input = $_.NeedsUserInput
+                    name                = $_.Name
+                    title               = $_.Title
+                    category            = $_.Category
+                    needs_user_input    = $_.NeedsUserInput
+                    estimated_duration_ms = $_.EstimatedMs
                 }
             })
         }

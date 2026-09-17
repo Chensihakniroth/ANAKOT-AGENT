@@ -320,12 +320,7 @@ docs/plans/2026-05-22-rebrand-anakot-to-anakot.md
 install-anakot.bat
 install-anakot.ps1
 install-anakot.sh
-installers/install-anakot.bat
-installers/install-anakot.ps1
-installers/install-anakot.sh
-installers/repair-anakot.bat
-installers/uninstall-anakot.bat
-installers/update-anakot.bat
+
 optional-skills/devops/anakot-s6-container-supervision/SKILL.md
 optional-skills/migration/openclaw-migration/scripts/openclaw_to_anakot.py
 packaging/homebrew/anakot-agent.rb

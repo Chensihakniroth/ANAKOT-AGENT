@@ -386,7 +386,7 @@ export async function reorderSources(
 // The desktop has no renderer-side SSE transport: the backend stream is
 // consumed in the Electron main process, which forwards raw response chunks
 // over IPC to the renderer. This helper wraps that event channel in a
-// reader-shaped API so the UI can keep the WEB_VERSION parse loop (line
+// reader-shaped API so the UI can keep the parse loop (line
 // buffer, `data: ` lines, [DONE] marker) unchanged.
 
 export interface NotebookStreamReadResult {

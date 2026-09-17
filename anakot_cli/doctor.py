@@ -1461,7 +1461,6 @@ def run_doctor(args):
         # audited separately via --workspace flags. See #38772.
         npm_audit_targets = [
             (PROJECT_ROOT, "Browser tools (agent-browser)", ["--workspaces=false"]),
-            (PROJECT_ROOT, "web workspace", ["--workspace", "web"]),
             (PROJECT_ROOT, "ui-tui workspace", ["--workspace", "ui-tui"]),
             (PROJECT_ROOT / "scripts" / "whatsapp-bridge", "WhatsApp bridge", []),
         ]

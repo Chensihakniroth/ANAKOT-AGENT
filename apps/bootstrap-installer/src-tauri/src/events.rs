@@ -19,6 +19,10 @@ pub struct StageInfo {
     /// skipped=true; the post-install wizard takes over for those.
     #[serde(rename = "needs_user_input", alias = "needsUserInput")]
     pub needs_user_input: bool,
+    /// Estimated stage duration in milliseconds (from install.ps1). Lets the
+    /// UI show time-remaining progress instead of an indeterminate spinner.
+    #[serde(rename = "estimated_duration_ms", alias = "estimatedDurationMs", default)]
+    pub estimated_duration_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

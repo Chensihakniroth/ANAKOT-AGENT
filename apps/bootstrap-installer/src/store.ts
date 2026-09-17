@@ -23,6 +23,7 @@ export interface StageInfo {
   title: string
   category: string
   needs_user_input: boolean
+  estimated_duration_ms?: number
 }
 
 export type StageState = 'running' | 'succeeded' | 'skipped' | 'failed'

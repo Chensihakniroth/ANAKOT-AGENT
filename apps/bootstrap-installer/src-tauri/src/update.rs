@@ -818,6 +818,7 @@ fn stage_info(name: &str, title: &str) -> StageInfo {
         title: title.to_string(),
         category: "update".to_string(),
         needs_user_input: false,
+        estimated_duration_ms: None,
     }
 }
 

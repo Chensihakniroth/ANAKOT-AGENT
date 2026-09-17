@@ -18,10 +18,10 @@ echo        ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝�
 echo.
 echo              A G E N T   -   I n s t a l l e r
 echo.
-echo        ┌─────────────────────────────────────────────┐
-echo        │  Backend + TUI  ^|  No web, no desktop GUI   │
-echo        │  Auto-installs: Python, Node.js, Git, uv   │
-echo        └─────────────────────────────────────────────┘
+echo        +---------------------------------------------+
+echo        |  Backend + TUI  |  No web, no desktop GUI   |
+echo        |  Auto-installs: Python, Node.js, Git, uv   |
+echo        +---------------------------------------------+
 echo.
 echo.
 
@@ -71,7 +71,7 @@ if exist "%TEMP%\python-3.11.exe" (
 )
 
 echo.
-echo          ✘ Could not install Python automatically.
+echo         - Could not install Python automatically.
 echo            Install from: https://www.python.org/downloads/
 pause
 exit /b 1
@@ -84,12 +84,12 @@ for /f "tokens=1,2 delims=." %%a in ("%PY_VER%") do (
 )
 if %PY_MAJOR% GEQ 3 (
     if %PY_MINOR% GEQ 11 (
-        echo          ✔ Python %PY_VER% found.
+        echo          + Python %PY_VER% found.
         echo.
         goto :STEP2
     )
 )
-echo          ✘ Python %PY_VER% is too old. Need 3.11+.
+echo         - Python %PY_VER% is too old. Need 3.11+.
 pause
 exit /b 1
 
@@ -129,7 +129,7 @@ if exist "%TEMP%\node-v22-x64.msi" (
 )
 
 echo.
-echo          ✘ Could not install Node.js automatically.
+echo         - Could not install Node.js automatically.
 echo            Install from: https://nodejs.org/
 pause
 exit /b 1
@@ -138,11 +138,11 @@ exit /b 1
 for /f "tokens=1 delims=v" %%v in ('node --version') do set "NODE_VER=%%v"
 for /f "tokens=1 delims=." %%a in ("%NODE_VER%") do set "NODE_MAJOR=%%a"
 if %NODE_MAJOR% GEQ 20 (
-    echo          ✔ Node.js %NODE_VER% found.
+    echo          + Node.js %NODE_VER% found.
     echo.
     goto :STEP3
 )
-echo          ✘ Node.js %NODE_VER% is too old. Need 20+.
+echo         - Node.js %NODE_VER% is too old. Need 20+.
 pause
 exit /b 1
 
@@ -182,13 +182,13 @@ if exist "%TEMP%\git-installer.exe" (
 )
 
 echo.
-echo          ✘ Could not install Git automatically.
+echo         - Could not install Git automatically.
 echo            Install from: https://git-scm.com/download/win
 pause
 exit /b 1
 
 :GIT_OK
-for /f "tokens=3" %%v in ('git --version') do echo          ✔ Git %%v
+for /f "tokens=3" %%v in ('git --version') do echo          + Git %%v
 echo.
 
 :: ═══════════════════════════════════════════════════════════════
@@ -220,14 +220,14 @@ set "PATH=%USERPROFILE%\.local\bin;%USERPROFILE%\.cargo\bin;%PATH%"
 
 uv --version >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo          ✘ uv install failed.
+    echo         - uv install failed.
     echo            Install from: https://docs.astral.sh/uv/
     pause
     exit /b 1
 )
 
 :UV_OK
-for /f "tokens=*" %%v in ('uv --version') do echo          ✔ %%v
+for /f "tokens=*" %%v in ('uv --version') do echo          + %%v
 echo.
 
 :: ═══════════════════════════════════════════════════════════════
@@ -251,7 +251,7 @@ if "%INSTALL_CHOICE%"=="1" (
     echo.
     set /p "INSTALL_DIR=    Enter full path: "
     if "%INSTALL_DIR%"=="" (
-        echo    ✘ No path entered.
+        echo     - No path entered.
         pause
         exit /b 1
     )
@@ -266,9 +266,21 @@ set "INSTALL_DIR=%INSTALL_DIR:"=%"
 echo.
 echo    → Install directory: %INSTALL_DIR%
 echo.
+:: Check Windows long path support (260 char limit breaks npm)
+reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    for /f "tokens=3" %%v in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled 2^>nul ^| findstr /i "LongPathsEnabled"') do (
+        if "%%v" NEQ "0x1" (
+            echo    ~ Windows long path support is DISABLED.
+            echo      Paths over 260 chars may break npm install.
+            echo      Enable: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
+        )
+    )
+)
+echo.
 
 if exist "%INSTALL_DIR%" (
-    echo    ⚠ Directory already exists!
+    echo    ~ Directory already exists!
     set /p "OVERWRITE=    Delete and reinstall? [y/N]: "
     if /i not "%OVERWRITE%"=="y" (
         echo    Cancelled.
@@ -278,7 +290,7 @@ if exist "%INSTALL_DIR%" (
     echo    → Cleaning old install...
     rmdir /s /q "%INSTALL_DIR%" 2>nul
     if exist "%INSTALL_DIR%" (
-        echo    ✘ Could not remove %INSTALL_DIR%
+        echo     - Could not remove %INSTALL_DIR%
         pause
         exit /b 1
     )
@@ -301,13 +313,13 @@ if %ERRORLEVEL% EQU 0 goto :CLONE_OK
 
 :: Private repo → prompt for credentials
 echo.
-echo    ✘ Anonymous clone failed.
+echo     - Anonymous clone failed.
 echo      This repository is PRIVATE. You need a GitHub account
 echo      that Chensihakniroth has granted access to.
 echo.
 set /p "GH_USER=    GitHub username: "
 if "%GH_USER%"=="" (
-    echo    ✘ No username entered. Cannot install.
+    echo     - No username entered. Cannot install.
     pause
     exit /b 1
 )
@@ -320,7 +332,7 @@ echo      Create one at:  https://github.com/settings/tokens
 echo.
 for /f "delims=" %%t in ('powershell -NoProfile -Command "$c=Read-Host -AsSecureString 'GitHub token'; [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($c))"') do set "GH_TOKEN=%%t"
 if "%GH_TOKEN%"=="" (
-    echo    ✘ No token entered. Cannot install.
+    echo     - No token entered. Cannot install.
     pause
     exit /b 1
 )
@@ -328,7 +340,7 @@ if "%GH_TOKEN%"=="" (
 echo    → Retrying with authentication...
 git clone --depth 1 --filter=blob:none --sparse "https://%GH_USER%:%GH_TOKEN%@github.com/Chensihakniroth/ANAKOT-AGENT.git" "%TEMP_DIR%" 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo    ✘ Authenticated clone failed.
+    echo     - Authenticated clone failed.
     echo      Check the username/token and that your account has access.
     pause
     exit /b 1
@@ -343,43 +355,46 @@ echo https://%GH_USER%:%GH_TOKEN%@github.com>> "%USERPROFILE%\.git-credentials"
 :CLONE_OK
 
 cd /d "%TEMP_DIR%"
-git sparse-checkout set --no-cone ^
-    anakot_cli/ ^
-    agent/ ^
-    cli.py ^
-    run_agent.py ^
-    model_tools.py ^
-    toolsets.py ^
-    toolset_distributions.py ^
-    batch_runner.py ^
-    trajectory_compressor.py ^
-    anakot_bootstrap.py ^
-    anakot_constants.py ^
-    anakot_state.py ^
-    anakot_time.py ^
-    anakot_logging.py ^
-    utils.py ^
-    mcp_serve.py ^
-    acp_adapter/ ^
-    acp_registry/ ^
-    cron/ ^
-    gateway/ ^
-    providers/ ^
-    tools/ ^
-    skills/ ^
-    optional-skills/ ^
-    plugins/ ^
-    locales/ ^
-    tui_gateway/ ^
-    ui-tui/ ^
-    pyproject.toml ^
-    uv.lock ^
-    setup.py ^
-    MANIFEST.in ^
-    LICENSE ^
-    README.md ^
-    cli-config.yaml.example ^
-    constraints-termux.txt
+(
+echo anakot_cli/
+echo agent/
+echo cli.py
+echo run_agent.py
+echo model_tools.py
+echo toolsets.py
+echo toolset_distributions.py
+echo batch_runner.py
+echo trajectory_compressor.py
+echo anakot_bootstrap.py
+echo anakot_constants.py
+echo anakot_state.py
+echo anakot_time.py
+echo anakot_logging.py
+echo utils.py
+echo mcp_serve.py
+echo acp_adapter/
+echo acp_registry/
+echo cron/
+echo gateway/
+echo providers/
+echo tools/
+echo skills/
+echo optional-skills/
+echo plugins/
+echo locales/
+echo tui_gateway/
+echo ui-tui/
+echo pyproject.toml
+echo uv.lock
+echo setup.py
+echo MANIFEST.in
+echo LICENSE
+echo README.md
+echo cli-config.yaml.example
+echo constraints-termux.txt
+) > "%TEMP%\sparse-patterns.txt"
+git sparse-checkout set --no-cone < "%TEMP%\sparse-patterns.txt"
+del "%TEMP%\sparse-patterns.txt" 2>nul
 
 move "%TEMP_DIR%" "%INSTALL_DIR%" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
@@ -388,8 +403,12 @@ if %ERRORLEVEL% NEQ 0 (
 )
 cd /d "%INSTALL_DIR%"
 
-echo    ✔ Repository cloned.
+echo    + Repository cloned.
 echo.
+echo    dir="%INSTALL_DIR%"> "%USERPROFILE%\.anakot\.install_manifest"
+echo    branch=main>> "%USERPROFILE%\.anakot\.install_manifest"
+echo    commit=latest>> "%USERPROFILE%\.anakot\.install_manifest"
+echo    timestamp=%DATE% %TIME%>> "%USERPROFILE%\.anakot\.install_manifest"
 
 :: ═══════════════════════════════════════════════════════════════
 ::  CREATE VENV
@@ -401,11 +420,11 @@ echo.
 
 uv venv venv --python 3.11
 if %ERRORLEVEL% NEQ 0 (
-    echo    ✘ venv creation failed.
+    echo     - venv creation failed.
     pause
     exit /b 1
 )
-echo    ✔ venv created.
+echo    + venv created.
 echo.
 
 :: ═══════════════════════════════════════════════════════════════
@@ -420,7 +439,7 @@ set "UV_PROJECT_ENVIRONMENT=%INSTALL_DIR%\venv"
 
 if exist "uv.lock" (
     echo    → Using uv.lock for verified install...
-    uv sync --extra all --locked
+    uv sync --extra cron --extra cli --extra pty --extra mcp --locked
     if %ERRORLEVEL% NEQ 0 (
         echo    → Lockfile sync failed, trying without lock...
         uv pip install -e ".[cron,cli,pty,mcp]"
@@ -430,10 +449,10 @@ if exist "uv.lock" (
 )
 
 if %ERRORLEVEL% NEQ 0 (
-    echo    ⚠ Some optional deps failed. Core should still work.
+    echo    ~ Some optional deps failed. Core should still work.
 )
 
-echo    ✔ Dependencies installed.
+echo    + Dependencies installed.
 echo.
 
 :: ═══════════════════════════════════════════════════════════════
@@ -454,9 +473,9 @@ if %ERRORLEVEL% NEQ 0 (
 
 call npm run build
 if %ERRORLEVEL% NEQ 0 (
-    echo    ⚠ TUI build failed. You can still use --cli mode.
+    echo    ~ TUI build failed. You can still use --cli mode.
 ) else (
-    echo    ✔ TUI built.
+    echo    + TUI built.
 )
 
 cd /d "%INSTALL_DIR%"
@@ -484,16 +503,21 @@ echo "%INSTALL_DIR%\venv\Scripts\python.exe" -m anakot_cli.main %%*
 set "USER_PATH="
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul ^| findstr /i "Path"') do set "USER_PATH=%%b"
 
-echo %USER_PATH% | findstr /i "%BIN_DIR%" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
+set "PATH_ALREADY=0"
+if defined USER_PATH (
+    for %%p in ("%USER_PATH:;=" "%") do (
+        if /i "%%~p"=="%BIN_DIR%" set "PATH_ALREADY=1"
+    )
+)
+if "%PATH_ALREADY%"=="0" (
     if defined USER_PATH (
         setx PATH "%BIN_DIR%;%USER_PATH%" >nul 2>&1
     ) else (
         setx PATH "%BIN_DIR%" >nul 2>&1
     )
-    echo    ✔ Added to PATH: %BIN_DIR%
+    echo    + Added to PATH: %BIN_DIR%
 ) else (
-    echo    ✔ Already on PATH.
+    echo    + Already on PATH.
 )
 
 setx ANAKOT_HOME "%USERPROFILE%\.anakot" >nul 2>&1
@@ -508,7 +532,7 @@ if not exist "%USERPROFILE%\.anakot\cron" mkdir "%USERPROFILE%\.anakot\cron"
 :: Copy bundled skills
 if exist "%INSTALL_DIR%\skills" (
     xcopy /E /I /Y "%INSTALL_DIR%\skills\*" "%USERPROFILE%\.anakot\skills\" >nul 2>&1
-    echo    ✔ Bundled skills installed.
+    echo    + Bundled skills installed.
 )
 
 :: Copy config template
@@ -530,15 +554,15 @@ echo.
 
 "%INSTALL_DIR%\venv\Scripts\python.exe" -c "import anakot_cli.main; print('OK')" >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo    ✔ Backend: Working
+    echo    + Backend: Working
 ) else (
-    echo    ⚠ Backend: Import test failed.
+    echo    ~ Backend: Import test failed.
 )
 
 if exist "%INSTALL_DIR%\ui-tui\dist\entry.js" (
-    echo    ✔ TUI: Built
+    echo    + TUI: Built
 ) else (
-    echo    ⚠ TUI: Not built. Use --cli mode.
+    echo    ~ TUI: Not built. Use --cli mode.
 )
 
 :: ═══════════════════════════════════════════════════════════════
@@ -547,20 +571,20 @@ if exist "%INSTALL_DIR%\ui-tui\dist\entry.js" (
 
 echo.
 echo.
-echo         ╔═══════════════════════════════════════════════╗
-echo         ║         I N S T A L L A T I O N   D O N E       ║
-echo         ╚═══════════════════════════════════════════════╝
+echo         +---------------------------------------------+
+echo         |       I N S T A L L A T I O N   D O N E     |
+echo         +---------------------------------------------+
 echo.
 echo              Install:  %INSTALL_DIR%
 echo              Data:     %USERPROFILE%\.anakot
 echo.
-echo         ┌─────────────────────────────────────────────┐
-echo         │  NEXT STEPS:                                │
-echo         │                                             │
-echo         │  1. RESTART your terminal                   │
-echo         │  2. Run:  anakot setup                      │
-echo         │  3. Run:  anakot --tui                      │
-echo         └─────────────────────────────────────────────┘
+echo         +---------------------------------------------+
+echo         |  NEXT STEPS:                                |
+echo         |                                             |
+echo         |  1. RESTART your terminal                   |
+echo         |  2. Run:  anakot setup                      |
+echo         |  3. Run:  anakot --tui                      |
+echo         +---------------------------------------------+
 echo.
 
 set /p "RUN_SETUP=         Run setup wizard now? [Y/n]: "

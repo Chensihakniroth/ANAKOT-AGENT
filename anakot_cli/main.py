@@ -1237,8 +1237,8 @@ def _workspace_root(dir: Path) -> Path:
     Otherwise *dir* itself is the root (standalone project or
     prebuilt-bundle layout).
 
-    Used by ``_tui_need_npm_install``, ``_make_tui_argv``, and
-    ``_build_web_ui`` so that lockfile/node_modules resolution and
+    Used by ``_tui_need_npm_install`` and ``_make_tui_argv`` so that
+    lockfile/node_modules resolution and
     ``npm install`` cwd stay consistent — a single helper prevents
     the checks from diverging if someone accidentally creates a
     sub-package lockfile (e.g. running ``npm install`` in the wrong
@@ -6997,55 +6997,7 @@ def _gateway_prompt(prompt_text: str, default: str = "", timeout: float = 300.0)
     return default
 
 
-def _web_ui_build_needed(web_dir: Path) -> bool:
-    """Return True if the web UI dist is missing or stale.
 
-    Mirrors the staleness logic used by ``_tui_build_needed()`` for the TUI.
-    The dashboard source lives under ``web/``, but the Vite build
-    still outputs to ``anakot_cli/web_dist/`` (per vite.config.ts
-    outDir: "../anakot_cli/web_dist"), NOT to ``web/dist/``, so Python
-    packaging can continue serving the same static asset directory. Uses the
-    Vite manifest as the sentinel because it is written last and therefore
-    has the newest mtime of any build output.
-    """
-    project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-    dist_dir = project_root / "anakot_cli" / "web_dist"
-    sentinel = dist_dir / ".vite" / "manifest.json"
-    if not sentinel.exists():
-        sentinel = dist_dir / "index.html"
-    if not sentinel.exists():
-        return True
-    # A real Vite build always produces hashed assets under assets/.
-    # When the manifest is missing and we fall back to index.html as the
-    # sentinel, verify assets/ is present and non-empty — otherwise the
-    # dist is incomplete (partial/failed build) and must be rebuilt.
-    if sentinel.name == "index.html":
-        assets_dir = dist_dir / "assets"
-        if not assets_dir.is_dir() or not any(assets_dir.iterdir()):
-            return True
-    dist_mtime = sentinel.stat().st_mtime
-    skip = frozenset({"node_modules", "dist"})
-    for dirpath, dirnames, filenames in os.walk(web_dir, topdown=True):
-        dirnames[:] = [d for d in dirnames if d not in skip]
-        for fn in filenames:
-            if fn.endswith((".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".vue")):
-                if os.path.getmtime(os.path.join(dirpath, fn)) > dist_mtime:
-                    return True
-    for meta in (
-        "package.json",
-        "yarn.lock",
-        "pnpm-lock.yaml",
-        "vite.config.ts",
-        "vite.config.js",
-    ):
-        mp = web_dir / meta
-        if mp.exists() and mp.stat().st_mtime > dist_mtime:
-            return True
-    # Workspace root lockfile (single package-lock.json covers all workspaces).
-    root_lock = project_root / "package-lock.json"
-    if root_lock.exists() and root_lock.stat().st_mtime > dist_mtime:
-        return True
-    return False
 
 
 def _run_with_idle_timeout(
@@ -7190,133 +7142,7 @@ def _run_npm_install_deterministic(
     )
 
 
-def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
-    """Build the web UI frontend if npm is available.
 
-    Args:
-        web_dir: Path to the dashboard frontend source directory.
-        fatal: If True, print error guidance and return False on failure
-               instead of a soft warning (used by ``anakot web``).
-
-    Returns True if the build succeeded or was skipped (no package.json).
-    """
-    if not (web_dir / "package.json").exists():
-        return True
-
-    if not _web_ui_build_needed(web_dir):
-        return True
-
-    # Console-encoding-safe print: Windows consoles default to cp1252
-    # (or similar) and will raise UnicodeEncodeError on arrow / check
-    # glyphs unless PYTHONIOENCODING=utf-8 is set. Routing every print
-    # in this function through _say() with errors="replace" keeps the
-    # build path usable on a stock `py -m anakot_cli.main web` invocation.
-    def _say(text: str) -> None:
-        try:
-            print(text)
-        except UnicodeEncodeError:
-            encoding = getattr(sys.stdout, "encoding", None) or "ascii"
-            print(text.encode(encoding, errors="replace").decode(encoding, errors="replace"))
-
-    npm = shutil.which("npm")
-    if not npm:
-        if fatal:
-            _say("Web UI frontend not built and npm is not available.")
-            _say("Install Node.js, then run:  cd web && npm install && npm run build")
-        return not fatal
-    _say("→ Building web UI...")
-
-    def _relay(result: "subprocess.CompletedProcess") -> None:
-        """Print captured npm output so users can see *why* a step failed.
-
-        Windows users hitting `rm -rf` / `cp -r` errors (or any other
-        sync-assets / Vite failure) would otherwise see only ``Web UI
-        build failed`` with no hint of the underlying cause, because
-        the npm calls run with ``capture_output=True``.
-        """
-        for blob in (result.stdout, result.stderr):
-            if not blob:
-                continue
-            text = blob.decode("utf-8", errors="replace").rstrip() if isinstance(blob, bytes) else blob.rstrip()
-            if text:
-                _say(text)
-
-    npm_cwd = _workspace_root(web_dir)
-    # Scope the install to the web workspace only so that the full workspace
-    # graph (including apps/desktop with its Electron + node-pty deps) is never
-    # resolved here.  Without --workspace the root package.json's apps/* glob
-    # would pull in desktop on every web build. See #38772.
-    # CRITICAL: only pass --workspace when running from the repo root.
-    # When web_dir has its own package-lock.json, _workspace_root returns
-    # web_dir itself — and `npm ci --workspace WEB_VERSION` from inside the
-    # workspace directory silently fails (exits 1, --silent hides output).
-    # See issue #39291.
-    if npm_cwd == web_dir:
-        npm_workspace_args: tuple[str, ...] = ()
-    else:
-        npm_workspace_args: tuple[str, ...] = ("--workspace", "WEB_VERSION")
-    if _is_termux_startup_environment():
-        npm_cwd, npm_workspace_args = _termux_workspace_install_context(web_dir)
-    r1 = _run_npm_install_deterministic(
-        npm,
-        npm_cwd,
-        extra_args=(*npm_workspace_args, "--silent"),
-    )
-    if r1.returncode != 0:
-        _say(
-            f"  {'✗' if fatal else '⚠'} Web UI npm install failed"
-            + ("" if fatal else " (anakot web will not be available)")
-        )
-        _relay(r1)
-        if fatal:
-            _say("  Run manually:  npm install --workspace WEB_VERSION && npm run build -w WEB_VERSION")
-        return False
-    # Post-install: verify critical hoisted packages before Vite build
-    _verify_critical_packages(npm_cwd, npm)
-    # First attempt — stream output via idle-timeout helper (issue #33788).
-    # capture_output=True on a long Vite build looks identical to a hang;
-    # users react by rebooting, which leaves the editable install in a
-    # half-state. Streaming + idle-kill makes failures observable AND
-    # recoverable (the stale-dist fallback below handles the kill path).
-    r2 = _run_with_idle_timeout([npm, "run", "build"], cwd=web_dir)
-    if r2.returncode != 0:
-        # Retry once after a short delay — covers boot-time races on Windows
-        # (antivirus scanning Node.js binaries, npm cache not ready, transient
-        # I/O when launched via Scheduled Task at logon). See issue #23817.
-        _time.sleep(3)
-        r2 = _run_with_idle_timeout([npm, "run", "build"], cwd=web_dir)
-
-    if r2.returncode != 0:
-        # _run_with_idle_timeout merges stderr into stdout; older callers
-        # using subprocess.run kept them split. Pull from whichever has
-        # content so the error surfaces regardless of which path produced
-        # the CompletedProcess.
-        build_output = (r2.stderr or "") + (r2.stdout or "")
-        stderr_preview = build_output.strip()
-        stderr_tail = "\n  ".join(stderr_preview.splitlines()[-10:]) if stderr_preview else ""
-        project_root = web_dir.parent.parent if web_dir.parent.name == "apps" else web_dir.parent
-        dist_dir = project_root / "anakot_cli" / "web_dist"
-        dist_index = dist_dir / "index.html"
-
-        # If a stale dist exists, serve it as a fallback instead of failing.
-        # A stale UI is far better than no UI for non-interactive callers
-        # (Windows Scheduled Tasks, CI) — issue #23817.
-        if dist_index.exists():
-            _say("  ⚠ Web UI build failed — serving stale dist as fallback")
-            if stderr_tail:
-                _say(f"  Build error:\n  {stderr_tail}")
-            return True
-
-        _say(
-            f"  {'✗' if fatal else '⚠'} Web UI build failed"
-            + ("" if fatal else " (anakot web will not be available)")
-        )
-        _relay(r2)
-        if fatal:
-            _say("  Run manually:  npm install --workspace web && npm run build -w web")
-        return False
-    _say("  ✓ Web UI built")
-    return True
 
 
 def _desktop_dist_exists(desktop_dir: Path) -> bool:
@@ -8321,7 +8147,6 @@ def _update_via_zip(args):
         _install_python_dependencies_with_optional_fallback(pip_cmd)
 
     _update_node_dependencies()
-    _build_web_ui(PROJECT_ROOT / "web")
 
     # Sync skills
     try:
@@ -9750,9 +9575,9 @@ def _update_node_dependencies() -> None:
             print(f"    {stderr.splitlines()[-1]}")
         return
 
-    # Step 2: install only the workspaces update needs (ui-tui, web).
-    # --workspace selects specific workspaces; the rest (desktop) are skipped.
-    ws_args = [*extra_args, "--workspace", "ui-tui", "--workspace", "web"]
+    # Step 2: install only the workspaces update needs (ui-tui).
+    # --workspace selects specific workspaces; the rest (desktop, web) are skipped.
+    ws_args = [*extra_args, "--workspace", "ui-tui"]
     ws_result = _run_npm_install_deterministic(
         npm,
         PROJECT_ROOT,
@@ -9760,7 +9585,7 @@ def _update_node_dependencies() -> None:
         capture_output=False,
     )
     if ws_result.returncode == 0:
-        print("  ✓ repo root + ui-tui, web workspaces (desktop skipped)")
+        print("  ✓ repo root + ui-tui workspace (desktop skipped)")
     else:
         print("  ⚠ npm workspace install failed")
         stderr = (ws_result.stderr or "").strip() if ws_result.stderr else ""
@@ -10850,7 +10675,6 @@ def _cmd_update_impl(args, gateway_mode: bool):
         _refresh_active_lazy_features()
 
         _update_node_dependencies()
-        _build_web_ui(PROJECT_ROOT / "web")
 
         # Rebuild the desktop app if the source tree changed since the last
         # build.  ``anakot desktop --build-only`` uses the content-hash stamp
@@ -12542,38 +12366,18 @@ def cmd_dashboard(args):
     # backend is the desktop's primary entrypoint and needs the same.
     _sync_bundled_skills_quietly()
 
-    # Build the web UI if needed. In a dev checkout the source is at
-    # PROJECT_ROOT/web and we run npm. In a system-wide install the dist
-    # should already be pre-built; skip the npm step and just verify.
-    if "ANAKOT_WEB_DIST" not in os.environ and not getattr(args, "skip_build", False):
-        _web_src = PROJECT_ROOT / "WEB_VERSION"
-        if _web_src.exists():
-            if not _build_web_ui(_web_src, fatal=True):
-                sys.exit(1)
-        else:
-            # System-wide install: no source tree, dist should be pre-built.
-            _dist_root = PROJECT_ROOT / "anakot_cli" / "web_dist"
-            if not (_dist_root / "index.html").exists():
-                print("✗ Web UI dist not found and no web source to build from.")
-                print(f"  Expected dist at: {_dist_root}")
-                print("  Reinstall with web_dist included, or run from a dev checkout.")
-                sys.exit(1)
-            print(f"→ Using pre-built web dist at {_dist_root}")
-    elif getattr(args, "skip_build", False):
-        # --build-mode skip trusts the caller to have pre-built the web UI.
-        # Verify the dist actually exists; otherwise the server will start
-        # and serve 404s with no obvious cause (issue #23817).
-        _dist_root = (
-            Path(os.environ["ANAKOT_WEB_DIST"])
-            if "ANAKOT_WEB_DIST" in os.environ
-            else PROJECT_ROOT / "anakot_cli" / "web_dist"
-        )
-        if not (_dist_root / "index.html").exists():
-            print(f"✗ --skip-build was passed but no web dist found at: {_dist_root}")
-            print("  Pre-build first:  npm install --workspace web && npm run build -w web")
-            print("  Or drop --skip-build to build automatically.")
-            sys.exit(1)
-        print(f"→ Skipping web UI build (--skip-build); using dist at {_dist_root}")
+    # Verify the pre-built web dist is present. The dashboard serves
+    # anakot_cli/web_dist/ which is shipped pre-built with the package.
+    _dist_root = (
+        Path(os.environ["ANAKOT_WEB_DIST"])
+        if "ANAKOT_WEB_DIST" in os.environ
+        else PROJECT_ROOT / "anakot_cli" / "web_dist"
+    )
+    if not (_dist_root / "index.html").exists():
+        print(f"✗ Web UI dist not found at: {_dist_root}")
+        print("  Reinstall with web_dist included.")
+        sys.exit(1)
+    print(f"→ Using pre-built web dist at {_dist_root}")
 
     # Discover and load plugins so any DashboardAuthProvider plugin
     # (e.g. plugins/dashboard_auth/nous) registers BEFORE start_server's
