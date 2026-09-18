@@ -102,7 +102,7 @@ const TranscriptPane = memo(function TranscriptPane({
         ref={transcript.scrollRef}
         stickyScroll
       >
-        <Box flexDirection="column" paddingX={1} width="100%">
+        <Box flexDirection="column" minWidth={0} paddingX={1}>
           {transcript.virtualHistory.topSpacer > 0 ? <Box height={transcript.virtualHistory.topSpacer} /> : null}
 
           {transcript.virtualRows.slice(transcript.virtualHistory.start, transcript.virtualHistory.end).map(row => (
@@ -436,7 +436,7 @@ export const AppLayout = memo(function AppLayout({
     <Shell {...shellProps}>
       <Box flexDirection="column" flexGrow={1}>
         <Box flexDirection="row" flexGrow={1}>
-          <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
             {overlay.agents ? (
               <PerfPane id="agents">
                 <AgentsOverlayPane />
