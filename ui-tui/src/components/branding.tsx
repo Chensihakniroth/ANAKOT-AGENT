@@ -76,7 +76,7 @@ export function Banner({ maxWidth, t }: { maxWidth?: number; t: Theme }) {
 
   if (cols >= logoW + 2) {
     return (
-      <Box flexDirection="column" marginBottom={1}>
+      <Box flexDirection="column" marginBottom={1} width={cols}>
         <ArtLines lines={logoLines} />
         <Text color={t.color.muted} wrap="truncate-end">
           {t.brand.icon} {TAG_FULL}
@@ -93,7 +93,7 @@ export function Banner({ maxWidth, t }: { maxWidth?: number; t: Theme }) {
   const tag = cols >= 64 ? TAG_FULL : TAG_TINY
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" marginBottom={1} width={cols}>
       <Text bold color={t.color.primary} wrap="truncate-end">{t.brand.icon} {name}</Text>
       <Text color={t.color.muted} wrap="truncate-end">{t.brand.icon} {tag}</Text>
     </Box>
@@ -256,8 +256,8 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
   }
 
   return (
-    <Box borderColor={t.color.border} borderStyle="round" marginBottom={1} paddingX={2} paddingY={1}>
-      <Box flexDirection="column" width={w}>
+    <Box borderColor={t.color.border} borderStyle="round" flexShrink={0} marginBottom={1} paddingX={2} paddingY={1} width={cols}>
+      <Box flexDirection="column" width={Math.max(20, cols - 6)}>
         {/* Header: name + version */}
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color={t.color.primary}>{t.brand.name}</Text>
