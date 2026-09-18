@@ -1,6 +1,6 @@
 """Provider module registry.
 
-Provider profiles can live in two places:
+Provider profiles live in plugin directories:
 
 1. Bundled plugins: ``plugins/model-providers/<name>/`` (shipped with anakot-agent)
 2. User plugins: ``$ANAKOT_HOME/plugins/model-providers/<name>/``
@@ -14,12 +14,6 @@ Discovery is lazy: the first call to ``get_provider_profile()`` or
 plugins override bundled plugins on name collision (last-writer-wins), so
 third parties can monkey-patch or replace any built-in profile without
 editing the repo.
-
-For backward compatibility, ``providers/*.py`` files (other than ``base.py``
-and ``__init__.py``) are still discovered via ``pkgutil.iter_modules``.
-This lets out-of-tree users drop a single-file profile into an editable
-install without the plugin dir structure. New profiles should prefer the
-plugin layout.
 
 Usage::
 
@@ -170,22 +164,4 @@ def _discover_providers() -> None:
                 continue
             _import_plugin_dir(child, "user")
 
-    # 3. Legacy single-file profiles at providers/<name>.py. Kept for
-    #    back-compat — if someone drops a ``providers/foo.py`` into an
-    #    editable install, it still works without the plugin layout.
-    try:
-        import pkgutil
 
-        import providers as _pkg
-
-        for _importer, modname, _ispkg in pkgutil.iter_modules(_pkg.__path__):
-            if modname.startswith("_") or modname == "base":
-                continue
-            try:
-                importlib.import_module(f"providers.{modname}")
-            except ImportError as exc:
-                logger.warning(
-                    "Failed to import legacy provider module %s: %s", modname, exc
-                )
-    except Exception:
-        pass
