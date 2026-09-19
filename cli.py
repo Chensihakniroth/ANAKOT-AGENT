@@ -717,12 +717,7 @@ try:
 except Exception:
     pass
 
-# Initialize the skin engine from config
-try:
-    from anakot_cli.skin_engine import init_skin_from_config
-    init_skin_from_config(CLI_CONFIG)
-except Exception:
-    pass  # Skin engine is optional — default skin used if unavailable
+# Hermes Agent CLI theme — no skin engine, no light-mode hook needed
 
 # Initialize tool preview length from config
 try:
@@ -1840,94 +1835,25 @@ def _maybe_remap_for_light_mode(hex_color: str) -> str:
 _LIGHT_MODE_REMAP_UPPER = {k.upper(): v for k, v in _LIGHT_MODE_REMAP.items()}
 
 
-def _install_skin_light_mode_hook() -> None:
-    """Wrap SkinConfig.get_color at import time so EVERY skin color read goes
-    through the light-mode remap.  Idempotent."""
-    try:
-        from anakot_cli.skin_engine import SkinConfig  # type: ignore[import]
-    except Exception:
-        return
-    if getattr(SkinConfig, "_anakot_light_mode_hook_installed", False):
-        return
-    _orig_get_color = SkinConfig.get_color
-
-    def _wrapped_get_color(self, key, fallback=""):
-        value = _orig_get_color(self, key, fallback)
-        try:
-            return _maybe_remap_for_light_mode(value)
-        except Exception:
-            return value
-
-    SkinConfig.get_color = _wrapped_get_color  # type: ignore[method-assign]
-    SkinConfig._anakot_light_mode_hook_installed = True  # type: ignore[attr-defined]
+# Hermes Agent CLI — no light-mode hook needed
 
 
-_install_skin_light_mode_hook()
-
-
-# Prime the light-mode detection cache early (at module load) when
-# we're running interactively so OSC 11 happens before pt grabs the
-# tty.  Skip for non-tty contexts (subagents, gateway, tests).
-try:
-    if sys.stdin.isatty() and sys.stdout.isatty():
-        _detect_light_mode()
-except Exception:
-    pass
+# Hermes Agent CLI theme — no skin engine, no light-mode hook needed
+_INSTALL_SKIPPED = True  # backward compat for any external callers
 
 
 
-class _SkinAwareAnsi:
-    """Lazy ANSI escape that resolves from the skin engine on first use.
-
-    Acts as a string in f-strings and concatenation.  Call ``.reset()`` to
-    force re-resolution after a ``/skin`` switch.
-    """
-
-    def __init__(self, skin_key: str, fallback_hex: str = "#FFD700", *, bold: bool = False):
-        self._skin_key = skin_key
-        self._fallback_hex = fallback_hex
-        self._bold = bold
-        self._cached: str | None = None
-
-    def __str__(self) -> str:
-        if self._cached is None:
-            try:
-                from anakot_cli.skin_engine import get_active_skin
-                self._cached = _hex_to_ansi(
-                    get_active_skin().get_color(self._skin_key, self._fallback_hex),
-                    bold=self._bold,
-                )
-            except Exception:
-                self._cached = _hex_to_ansi(self._fallback_hex, bold=self._bold)
-        return self._cached
-
-    def __add__(self, other: str) -> str:
-        return str(self) + other
-
-    def __radd__(self, other: str) -> str:
-        return other + str(self)
-
-    def reset(self) -> None:
-        """Clear cache so the next access re-reads the skin."""
-        self._cached = None
 
 
-_ACCENT = _SkinAwareAnsi("response_border", "#FFD700", bold=True)
-# Use ANSI dim+italic attributes (\x1b[2;3m) instead of a hardcoded
-# hex color so dim/thinking text inherits the terminal's default
-# foreground color and stays readable in both light and dark
-# Terminal.app modes.  Hardcoded skin colors like #B8860B
-# (dark goldenrod) become invisible against light cream backgrounds.
+# Hermes Agent CLI colors (hardcoded — no light-mode hook needed)
+_ACCENT_HEX = "#58a6ff"
+_ACCENT = "\033[38;2;88;166;255m"  # ANSI for #58a6ff
 _DIM = "\x1b[2;3m"
+_RST = "\x1b[0m"
 
 
 def _accent_hex() -> str:
-    """Return the active skin accent color for legacy CLI output lines."""
-    try:
-        from anakot_cli.skin_engine import get_active_skin
-        return get_active_skin().get_color("ui_accent", "#FFBF00")
-    except Exception:
-        return "#FFBF00"
+    return _ACCENT_HEX
 
 
 def _rich_text_from_ansi(text: str) -> _RichText:
@@ -5447,87 +5373,17 @@ class AnakotCLI:
             pass
 
     def show_banner(self):
-        """Display the welcome banner in Claude Code style."""
-        self.console.clear()
-        ctx_len = None
-        if hasattr(self, 'agent') and self.agent and hasattr(self.agent, 'context_compressor'):
-            ctx_len = self.agent.context_compressor.context_length
-        
-        # Auto-compact for narrow terminals — the full banner with caduceus
-        # + tool list needs ~80 columns minimum to render without wrapping.
-        term_width = shutil.get_terminal_size().columns
-        use_compact = self.compact or term_width < 80
-        
-        if use_compact:
-            self._console_print(_build_compact_banner())
-            self._show_status()
-        else:
-            # Get tools for display
-            tools = get_tool_definitions(enabled_toolsets=self.enabled_toolsets, quiet_mode=True)
-            
-            # Get terminal working directory (where commands will execute)
-            cwd = os.getenv("TERMINAL_CWD", os.getcwd())
-            
-            # Build and display the banner
-            build_welcome_banner(
-                console=self.console,
-                model=self.model,
-                cwd=cwd,
-                tools=tools,
-                enabled_toolsets=self.enabled_toolsets,
-                session_id=self.session_id,
-                context_length=ctx_len,
-            )
-        
-        # Tool discovery is intentionally deferred on the Termux bare prompt
-        # path; availability warnings are shown once tools are initialized.
-        if os.environ.get("ANAKOT_DEFER_AGENT_STARTUP") != "1":
-            self._show_tool_availability_warnings()
-
-        # Warn about low context lengths (common with local servers). Keep
-        # this tied to the runtime guard so guidance cannot drift again.
-        from agent.model_metadata import MINIMUM_CONTEXT_LENGTH
-        if ctx_len and ctx_len < MINIMUM_CONTEXT_LENGTH:
-            self._console_print()
-            self._console_print(
-                f"[yellow]⚠️  Context length is only {ctx_len:,} tokens — "
-                f"this is likely too low for agent use with tools.[/]"
-            )
-            self._console_print(
-                f"[dim]   Anakot needs at least {MINIMUM_CONTEXT_LENGTH:,} tokens. Tool schemas + system prompt use a large fixed prefix.[/]"
-            )
-            base_url = getattr(self, "base_url", "") or ""
-            if "11434" in base_url or "ollama" in base_url.lower():
-                self._console_print(
-                    f"[dim]   Ollama fix: OLLAMA_CONTEXT_LENGTH={MINIMUM_CONTEXT_LENGTH} ollama serve[/]"
-                )
-            elif "1234" in base_url:
-                self._console_print(
-                    "[dim]   LM Studio fix: Set context length in model settings → reload model[/]"
-                )
-            else:
-                self._console_print(
-                    "[dim]   Fix: Set model.context_length in config.yaml, or increase your server's context setting[/]"
-                )
-
-        # Warn if the configured model is a callmemo Anakot LLM (not agentic)
-        from anakot_cli.model_switch import is_nous_anakot_non_agentic
-
-        model_name = getattr(self, "model", "") or ""
-        if is_nous_anakot_non_agentic(model_name):
-            self._console_print()
-            self._console_print(
-                "[bold yellow]⚠  callmemo Anakot 3 & 4 models are NOT agentic and are not "
-                "designed for use with Anakot Agent.[/]"
-            )
-            self._console_print(
-                "[dim]   They lack tool-calling capabilities required for agent workflows. "
-                "Consider using an agentic model (Claude, GPT, Gemini, DeepSeek, etc.).[/]"
-            )
-            self._console_print(
-                "[dim]   Switch with: /model sonnet  or  /model gpt5[/]"
-            )
-
+        """Display a minimal Hermes Agent CLI welcome line."""
+        try:
+            from anakot_cli.skin_engine import get_active_skin
+            _welcome_text = get_active_skin().get_branding("welcome", "Anakot Agent — type your message or /help for commands.")
+            _welcome_color = get_active_skin().get_color("banner_text", "#c9d1d9")
+        except Exception:
+            _welcome_text = "Anakot Agent — type your message or /help for commands."
+            _welcome_color = "#c9d1d9"
+        self._console_print(f"\n[{_welcome_color}]{_welcome_text}[/]\n")
+        self._show_status()
+        self._show_tool_availability_warnings()
         self._console_print()
 
     def _restore_session_cwd(self, session_meta: dict, *, quiet: bool = False) -> None:
@@ -10268,24 +10124,9 @@ class AnakotCLI:
             print(f"  Custom skins: drop a YAML file in {display_anakot_home()}/skins/\n")
             return
 
-        new_skin = parts[1].strip().lower()
-        available = {s["name"] for s in list_skins()}
-        if new_skin not in available:
-            print(f"  Unknown skin: {new_skin}")
-            print(f"  Available: {', '.join(sorted(available))}")
-            return
-
-        set_active_skin(new_skin)
-        _ACCENT.reset()  # Re-resolve ANSI color for the new skin
-        # _DIM is now a fixed dim+italic ANSI escape (terminal-default fg)
-        # so it doesn't need re-resolving on skin switch.
-        if save_config_value("display.skin", new_skin):
-            print(f"  Skin set to: {new_skin} (saved)")
-        else:
-            print(f"  Skin set to: {new_skin}")
-        print("  Note: banner colors will update on next session start.")
-        if self._apply_tui_skin_style():
-            print("  Prompt + TUI colors updated.")
+        # /skin is now a no-op — Hermes Agent CLI has a single style
+        print("  Skin switching is no longer available (Hermes Agent CLI style).")
+        return
 
     def _handle_footer_command(self, cmd_original: str) -> None:
         """Toggle or inspect ``display.runtime_footer.enabled`` from the CLI.

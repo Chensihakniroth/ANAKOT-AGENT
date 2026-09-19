@@ -178,10 +178,8 @@ export function useMainApp(gw: GatewayClient) {
   const ui = useStore($uiState)
   const overlay = useStore($overlayState)
 
-  // Sidebar chevron on wide terminals. Every width consumer (composer wrap,
-  // message body width, virtual-height keys, backend session cols) agrees on
-  // the effective chat width so toggling the rail reflows coherently.
-  const sidebarVisible = isSidebarVisible(ui.sidebar, termCols)
+  // Sidebar is permanently hidden — Hermes Agent CLI layout has no side rail.
+  const sidebarVisible = false
   const chatCols = effectiveChatCols(termCols, sidebarVisible)
 
   const turnLiveTailActive = useTurnSelector(state =>
@@ -582,7 +580,7 @@ export function useMainApp(gw: GatewayClient) {
       }
 
       void rpc<TerminalResizeResponse>('terminal.resize', {
-        cols: effectiveChatCols(termCols, isSidebarVisible(getUiState().sidebar, termCols)),
+        cols: effectiveChatCols(termCols, false),
         session_id: ui.sid
       })
     }, 100)

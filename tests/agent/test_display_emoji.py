@@ -108,16 +108,12 @@ class TestSkinConfigToolEmojis:
         assert skin.tool_emojis == emojis
 
     def test_build_skin_config_includes_tool_emojis(self):
-        from anakot_cli.skin_engine import _build_skin_config
-        data = {
-            "name": "custom",
-            "tool_emojis": {"terminal": "🗡️", "patch": "⚒️"},
-        }
-        skin = _build_skin_config(data)
-        assert skin.tool_emojis == {"terminal": "🗡️", "patch": "⚒️"}
+        from anakot_cli.skin_engine import SkinConfig
+        data = {"terminal": "🗡️", "patch": "⚒️"}
+        skin = SkinConfig(name="custom", tool_emojis=data)
+        assert skin.tool_emojis == data
 
     def test_build_skin_config_empty_tool_emojis_default(self):
-        from anakot_cli.skin_engine import _build_skin_config
-        data = {"name": "minimal"}
-        skin = _build_skin_config(data)
+        from anakot_cli.skin_engine import SkinConfig
+        skin = SkinConfig(name="minimal")
         assert skin.tool_emojis == {}

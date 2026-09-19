@@ -49,14 +49,7 @@ export function parseRichMarkup(markup: string): Line[] {
 // glyphs, which makes Ink repaint the logo with visible offsets.
 // "ANAKOT" in compact block letters using only single-cell ASCII characters.
 
-const LOGO_ART = [
-  ' ###  ## ##   ##  ##  ##  ##  #  # ',
-  ' #    # # #  #  # #  # #  # ## #  ',
-  ' #### # # #  #### #### #### # ##   ',
-  '    # # # #  #  # # ##  # ## #  #  ',
-  ' ###  #  ##  #  # #  # #  # #   # ',
-]
-
+const LOGO_ART: string[] = []
 const LOGO_GRADIENT = [0, 0, 1, 1, 2, 2] as const
 
 const colorize = (art: string[], gradient: readonly number[], c: ThemeColors): Line[] => {
@@ -65,7 +58,7 @@ const colorize = (art: string[], gradient: readonly number[], c: ThemeColors): L
   return art.map((text, i) => [p[gradient[i]!] ?? c.muted, text])
 }
 
-export const LOGO_WIDTH = Math.max(...LOGO_ART.map(line => line.length))
+export const LOGO_WIDTH = 0
 export const CADUCEUS_WIDTH = 0
 
 export const logo = (c: ThemeColors, customLogo?: string): Line[] =>

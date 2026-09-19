@@ -35,22 +35,18 @@ export function setupGracefulExit({ cleanups = [], failsafeMs = 4000, onError, o
       onSignal?.(signal)
     }
 
-    // For Ctrl+C: Ink's input handler calls die() which sets shuttingDown=true
-    // and shows the goodbye screen. The goodbye screen calls process.exit(0).
-    // For other signals (SIGHUP, SIGTERM): show goodbye and exit.
+    // Set shuttingDown to trigger clean terminal reset + exit in App useEffect
     patchUiState({ shuttingDown: true })
 
-    // Run cleanups after goodbye animation completes
-    setTimeout(() => {
-      void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).then(() => {
-        process.exit(code)
-      })
-    }, 9000).unref?.()
+    // Run cleanups immediately — no goodbye animation to wait for
+    void Promise.allSettled(cleanups.map(fn => Promise.resolve().then(fn))).then(() => {
+      process.exit(code)
+    })
 
-    // Hard failsafe
+    // Hard failsafe in case cleanups hang
     setTimeout(() => {
       process.exit(code)
-    }, 12000).unref?.()
+    }, failsafeMs).unref?.()
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {

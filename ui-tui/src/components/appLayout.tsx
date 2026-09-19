@@ -20,14 +20,13 @@ import { PerfPane } from '../lib/perfPane.js'
 import { composerPromptText } from '../lib/prompt.js'
 
 import { AgentsOverlay } from './agentsOverlay.js'
-import { GoodVibesHeart, StatusRule, StickyPromptTracker, TranscriptScrollbar } from './appChrome.js'
+import { GoodVibesHeart, StatusRule, StickyPromptTracker } from './appChrome.js'
 import { OverlaysInline, PromptZone } from './appOverlays.js'
-import { Banner, Panel, SessionPanel } from './branding.js'
+import { Banner, Panel } from './branding.js'
 import { FpsOverlay } from './fpsOverlay.js'
 import { HelpHint } from './helpHint.js'
 import { MessageLine } from './messageLine.js'
 import { QueuedMessages } from './queuedMessages.js'
-import { SessionSidebar } from './sessionSidebar.js'
 import { LiveTodoPanel, StreamingAssistant } from './streamingAssistant.js'
 import { TextInput, type TextInputMouseApi } from './textInput.js'
 
@@ -115,9 +114,12 @@ const TranscriptPane = memo(function TranscriptPane({
 
               {row.msg.kind === 'intro' ? (
                 <Box flexDirection="column" paddingTop={1}>
-                  <Banner maxWidth={Math.max(1, composer.cols - 2)} t={ui.theme} />
-
-                  {row.msg.info && <SessionPanel info={row.msg.info} maxWidth={Math.max(1, composer.cols - 2)} sid={ui.sid} t={ui.theme} />}
+                  <Text bold color={ui.theme.color.primary} wrap="truncate-end">
+                    {ui.theme.brand.name}
+                  </Text>
+                  <Text color={ui.theme.color.textMuted} wrap="truncate-end">
+                    Type your message or /help for commands.
+                  </Text>
                 </Box>
               ) : row.msg.kind === 'panel' && row.msg.panelData ? (
                 <Panel sections={row.msg.panelData.sections} t={ui.theme} title={row.msg.panelData.title} />
@@ -155,10 +157,6 @@ const TranscriptPane = memo(function TranscriptPane({
           />
         </Box>
       </ScrollBox>
-
-      <NoSelect flexShrink={0} marginLeft={1}>
-        <TranscriptScrollbar scrollRef={transcript.scrollRef} t={ui.theme} />
-      </NoSelect>
 
       <StickyPromptTracker
         messages={transcript.historyItems}
@@ -480,10 +478,6 @@ export const AppLayout = memo(function AppLayout({
               </>
             )}
           </Box>
-
-          {composer.sidebarVisible && (
-            <SessionSidebar onNew={actions.newLiveSession} onSelect={actions.activateLiveSession} t={ui.theme} />
-          )}
         </Box>
       </Box>
     </Shell>

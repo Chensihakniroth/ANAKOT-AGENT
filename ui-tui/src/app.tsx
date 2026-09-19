@@ -1,52 +1,29 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
 import { GatewayProvider } from './app/gatewayContext.js'
 import { $uiState } from './app/uiStore.js'
 import { useMainApp } from './app/useMainApp.js'
 import { AppLayout } from './components/appLayout.js'
-import { JARVISGoodbye } from './components/jarvisGoodbye.js'
 import type { GatewayClient } from './gatewayClient.js'
 
 export function App({ gw }: { gw: GatewayClient }) {
   const { appActions, appComposer, appProgress, appStatus, appTranscript, gateway } = useMainApp(gw)
   const ui = useStore($uiState)
 
-  // Keep a ref to the latest transcript data for shutdown capture
-  const snapshotRef = useRef({ messages: 0, tools: 0, ctxUsed: 0, ctxMax: 0, cost: 0 })
-  
-  // Update the snapshot whenever transcript changes (but not during shutdown)
+  // Clean exit: reset terminal and exit immediately on shutdown
   useEffect(() => {
-    if (!ui.shuttingDown) {
-      const history = appTranscript.historyItems
-      snapshotRef.current = {
-        messages: history.length,
-        tools: history.filter(m => m.role === 'tool').length,
-        ctxUsed: ui.usage?.context_used ?? 0,
-        ctxMax: ui.usage?.context_max ?? 0,
-        cost: (ui.usage as any)?.cost ?? 0,
-      }
+    if (ui.shuttingDown) {
+      process.stdout.write('\x1b[?25h')   // Show cursor
+      process.stdout.write('\x1b[2J')     // Clear AlternateScreen
+      process.stdout.write('\x1b[H')      // Cursor to top-left
+      process.stdout.write('\x1b[?1049l')  // Exit AlternateScreen buffer
+      process.stdout.write('\x1b[2J')     // Clear visible area
+      process.stdout.write('\x1b[H')      // Cursor to top-left
+      process.stdout.write('\x1b[3J')     // Clear scrollback buffer
+      process.exit(0)
     }
-  }, [appTranscript.historyItems, ui.usage, ui.shuttingDown])
-
-  if (ui.shuttingDown) {
-    const data = snapshotRef.current
-
-    return (
-      <GatewayProvider value={gateway}>
-        <JARVISGoodbye
-          messages={data.messages}
-          toolsUsed={data.tools}
-          contextUsed={data.ctxUsed}
-          contextMax={data.ctxMax}
-          duration="—"
-          cost={data.cost}
-          reason="SIGINT"
-          t={ui.theme}
-        />
-      </GatewayProvider>
-    )
-  }
+  }, [ui.shuttingDown])
 
   return (
     <GatewayProvider value={gateway}>
