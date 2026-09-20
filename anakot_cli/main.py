@@ -12374,7 +12374,12 @@ def cmd_dashboard(args):
         else PROJECT_ROOT / "anakot_cli" / "web_dist"
     )
     if not (_dist_root / "index.html").exists():
-        print(f"✗ Web UI dist not found at: {_dist_root}")
+        _default_dist = PROJECT_ROOT / "anakot_cli" / "web_dist"
+        if (_default_dist / "index.html").exists():
+            _dist_root = _default_dist
+            os.environ["ANAKOT_WEB_DIST"] = str(_dist_root)
+        else:
+            print(f"✗ Web UI dist not found at: {_dist_root}")
         print("  Reinstall with web_dist included.")
         sys.exit(1)
     print(f"→ Using pre-built web dist at {_dist_root}")
